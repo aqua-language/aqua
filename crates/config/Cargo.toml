@@ -1,0 +1,10 @@
+[package]
+name = "config"
+version.workspace = true
+edition.workspace = true
+
+[features]
+parse = ["clap"]
+
+[dependencies]
+clap = { version = "4.4.16", features = ["derive", "string"], optional = true }

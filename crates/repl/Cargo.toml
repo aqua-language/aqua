@@ -1,0 +1,12 @@
+[package]
+name = "repl"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+compiler = { path = "../compiler" }
+
+anyhow = { version = "1.0.75" }
+regex = { version = "1.10.3" }
+rustyline = { version = "13.0.0", features = ["derive", "custom-bindings"] }
+colored = { version = "2.0.4" }

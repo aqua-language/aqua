@@ -1,0 +1,89 @@
+[package]
+name = "runtime"
+version.workspace = true
+edition.workspace = true
+
+[features]
+opt = ["itoa", "atoi", "ryu", "lexical-parse-float", "rustc-hash", "jemalloc", "btree-slab"]
+# model = ["ort"]
+default = ["opt"]
+
+[dependencies]
+macros = { path = "../macros" }
+
+# rdkafka = { version = "0.36.2" }
+tokio = { version = "1.36.0", features = ["full"] }
+tracing = { version = "0.1.40" }
+num = { version = "0.4.1" }
+derive_more = { version = "0.99.17", features = ["deref", "deref_mut"], default-features = false }
+
+serde = { version = "1.0.197", features = ["derive", "rc"] }
+serde_derive = { version = "1.0.197" }
+
+serde_json = { version = "1.0.114" }
+tokio-stream = { version = "0.1.14" }
+tokio-util = { version = "0.7.10", features  = ["full"] }
+futures = { version = "0.3.30" }
+
+csv-core = { version = "0.1.11" }
+
+time = { version = "0.3.34", features = ["serde-human-readable", "std", "macros"] }
+# tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+
+# Optimisations 
+
+# Smol
+arrayvec = { version = "0.7.4" }
+halfbrown = { version = "0.2.4" }
+smallvec = "1.13.1"
+smol_str = { version = "0.2.1", features = ["serde"] }
+
+# raw-cpuid = { version = "11.0.1", features = ["serde"] }
+rustc-hash = { version = "1.1.0", optional = true }
+ryu = { version = "1.0.17", optional = true }
+itoa = { version = "1.0.10", optional = true }
+lexical-parse-float = { version = "0.8.5", optional = true, default-features = false, features = ["compact"] }
+atoi = { version = "2.0.0", optional = true, default-features = false }
+smartstring = { version = "1.0.1", optional = true, features = ["serde"] }
+btree-slab = { version = "0.6.1", optional = true }
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+jemalloc = { version = "0.5.4", optional = true, package = "tikv-jemallocator" }
+
+# TODO: Extensions
+
+# url = { version = "2.5.0", features = ["serde"] }
+# sled                  = { version = "0.34.7" }
+# hyper                 = { version = "1.1.0" }
+# once_cell             = { version = "1.19.0" }
+# ort                   = { version = "1.16.3" , optional = true }
+# num-traits            = { version = "0.2.17" }
+# ndarray               = { version = "0.15.6", features = ["serde"] }
+# image                 = { version = "0.24.8" }
+
+[dev-dependencies]
+criterion = "0.5.1" 
+
+# String
+smartstring = "1.0.1"
+smol_str = "0.2.1"
+smallstr = "0.3.0"
+lasso = "0.7.2"
+
+# Serialisation
+serde = { version = "1.0.197", features = ["derive", "rc"] }
+ciborium = "0.2.2" # CBOR
+rmp = "0.8.12" # MessagePack
+flexbuffers = "2.0.0" # FlexBuffers
+
+# HashMap
+halfbrown = "0.2.4"
+
+# Vec
+arrayvec = "0.7.4"
+
+rand = "0.8.5"
+
+[[bench]]
+name = "vec"
+harness = false

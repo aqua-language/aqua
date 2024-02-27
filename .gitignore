@@ -1,0 +1,6 @@
+target/
+output/
+**/__pycache__/
+**/*.wasm
+**/.DS_Store
+node_modules/
