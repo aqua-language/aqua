@@ -1,12 +1,10 @@
 # Nexmark Benchmark
 
-This directory contains the Nexmark benchmark implemented for Aqua.
+This directory contains the Nexmark benchmark implemented for Aqua, targeting Shark and Flink.
 
 The benchmark contains 2 experiments:
-* Experiment 1: The 8 standard Nexmark Queries. Each query:
-* Experiment 2: A custom Sliding Window Aggregation query evaluated for different window sizes using bid data provided in the Nexmark dataset
-
-All queries process a total of 1M events. Queries target Rust and Flink, with and without optimisations.
+* Experiment 1: The 8 standard Nexmark Queries.
+* Experiment 2: A custom Sliding Window Aggregation query evaluated for different window sizes using bid data provided by Nexmark.
 
 ## Running
 
