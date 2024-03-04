@@ -1,6 +1,6 @@
 # Nexmark Benchmark
 
-This directory contains the Nexmark benchmark implemented for Aqua, targeting Shark and Flink.
+This directory contains the Nexmark benchmark implemented for Aqua, targeting Flink and Rust.
 
 The benchmark contains 2 experiments:
 * Experiment 1: The 8 standard Nexmark Queries.

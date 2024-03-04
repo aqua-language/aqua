@@ -655,6 +655,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rust-nexmark"
+version = "0.0.0"
+dependencies = [
+ "csv",
+ "memmap2",
+ "nexmark",
+ "runtime",
+ "smartstring",
+ "smol_str",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -707,18 +719,6 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
-]
-
-[[package]]
-name = "shark-nexmark"
-version = "0.0.0"
-dependencies = [
- "csv",
- "memmap2",
- "nexmark",
- "runtime",
- "smartstring",
- "smol_str",
 ]
 
 [[package]]

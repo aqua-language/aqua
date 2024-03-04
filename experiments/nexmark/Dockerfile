@@ -18,7 +18,7 @@ RUN wget https://downloads.apache.org/flink/flink-1.18.1/flink-1.18.1-bin-scala_
 ENV PATH="/opt/flink/bin:${PATH}"
 
 # Set the environment variable for JAVA_HOME
-RUN JAVA_HOME="$(dirname $(dirname $(update-alternatives --list | head -n 1)) | tail -1)"
+RUN JAVA_HOME="$(dirname $(dirname $(update-alternatives --list java | head -n 1)) | tail -1)"
 
 # Install Python dependencies
 RUN pip install matplotlib numpy
@@ -26,7 +26,7 @@ RUN pip install matplotlib numpy
 # Cleanup
 RUN apt-get clean
 
-# Copy the Flink and Shark source code into the image
+# Copy the Flink and Rust source code into the image
 COPY . .
 
 # Copy Flink configuration

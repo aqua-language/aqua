@@ -14,7 +14,7 @@ num_warmups = 5
 num_iterations = 10
 
 flink = ['flink', 'run', 'queries/flink/target/flink-nexmark-1.0-SNAPSHOT.jar']
-shark = ['./queries/shark/target/release/shark-nexmark']
+rust = ['./queries/rust/target/release/rust-nexmark']
 
 
 def json_path(n):
@@ -52,7 +52,7 @@ def setup():
 
     # Build Rust project
     subprocess.run(['cargo', 'build', '--release',
-                    '--manifest-path=queries/shark/Cargo.toml'])
+                    '--manifest-path=queries/rust/Cargo.toml'])
 
     # Build Java project
     subprocess.run(['mvn', 'clean', 'package', '-f', 'queries/flink/pom.xml'])
@@ -141,47 +141,47 @@ def run_experiment1():
     obj = {
         'Q1': {
             'Flink': f(flink, 'q1', generate('b')),
-            'Shark': f(shark, 'q1', generate('b'))
+            'Rust': f(rust, 'q1', generate('b'))
         },
         'Q2': {
             'Flink': f(flink, 'q2', generate('b')),
-            'Shark': f(shark, 'q2', generate('b')),
+            'Rust': f(rust, 'q2', generate('b')),
         },
         'Q3': {
             'Flink': f(flink, 'q3', generate('ap')),
-            'Shark': f(shark, 'q3', generate('ap')),
+            'Rust': f(rust, 'q3', generate('ap')),
             'FlinkOpt': f(flink, 'q3-opt', generate('ap')),
-            'SharkOpt': f(shark, 'q3-opt', generate('ap'))
+            'RustOpt': f(rust, 'q3-opt', generate('ap'))
         },
         'Q4': {
             'Flink': f(flink, 'q4', generate('ab')),
-            'Shark': f(shark, 'q4', generate('ab')),
+            'Rust': f(rust, 'q4', generate('ab')),
             'FlinkOpt': f(flink, 'q4-opt', generate('ab')),
-            'SharkOpt': f(shark, 'q4-opt', generate('ab'))
+            'RustOpt': f(rust, 'q4-opt', generate('ab'))
         },
         'Q5': {
             'Flink': f(flink, 'q5', generate('b')),
-            'Shark': f(shark, 'q5', generate('b')),
+            'Rust': f(rust, 'q5', generate('b')),
             'FlinkOpt': f(flink, 'q5-opt', generate('b')),
-            'SharkOpt': f(shark, 'q5-opt', generate('b'))
+            'RustOpt': f(rust, 'q5-opt', generate('b'))
         },
         'Q6': {
             'Flink': f(flink, 'q6', generate('ab')),
-            'Shark': f(shark, 'q6', generate('ab')),
+            'Rust': f(rust, 'q6', generate('ab')),
             'FlinkOpt': f(flink, 'q6-opt', generate('ab')),
-            'SharkOpt': f(shark, 'q6-opt', generate('ab'))
+            'RustOpt': f(rust, 'q6-opt', generate('ab'))
         },
         'Q7': {
             'Flink': f(flink, 'q7', generate('b')),
-            'Shark': f(shark, 'q7', generate('b')),
+            'Rust': f(rust, 'q7', generate('b')),
             'FlinkOpt': f(flink, 'q7-opt', generate('b')),
-            'SharkOpt': f(shark, 'q7-opt', generate('b'))
+            'RustOpt': f(rust, 'q7-opt', generate('b'))
         },
         'Q8': {
             'Flink': f(flink, 'q8', generate('ap')),
-            'Shark': f(shark, 'q8', generate('ap')),
+            'Rust': f(rust, 'q8', generate('ap')),
             'FlinkOpt': f(flink, 'q8-opt', generate('ap')),
-            'SharkOpt': f(shark, 'q8-opt', generate('ap'))
+            'RustOpt': f(rust, 'q8-opt', generate('ap'))
         }
     }
     write(json_path(1), obj)
@@ -197,25 +197,25 @@ def run_experiment2():
     obj = {
         'Size 100': {
             'Flink': f(flink, '100', 'qw'),
-            'Shark': f(shark, '100', 'qw'),
+            'Rust': f(rust, '100', 'qw'),
             'FlinkOpt': f(flink, '100', 'qw-opt'),
-            'SharkOpt': f(shark, '100', 'qw-opt'),
+            'RustOpt': f(rust, '100', 'qw-opt'),
         },
         'Size 1000': {
             'Flink': f(flink, '1000', 'qw'),
-            'Shark': f(shark, '1000', 'qw'),
+            'Rust': f(rust, '1000', 'qw'),
             'FlinkOpt': f(flink, '1000', 'qw-opt'),
-            'SharkOpt': f(shark, '1000', 'qw-opt'),
+            'RustOpt': f(rust, '1000', 'qw-opt'),
         },
         'Size 10000': {
             'Flink': f(flink, '10000', 'qw'),
-            'Shark': f(shark, '10000', 'qw'),
+            'Rust': f(rust, '10000', 'qw'),
             'FlinkOpt': f(flink, '10000', 'qw-opt'),
-            'SharkOpt': f(shark, '10000', 'qw-opt'),
+            'RustOpt': f(rust, '10000', 'qw-opt'),
         },
         'Size 100000': {
-            'Shark': f(shark, '100000', 'qw'),
-            'SharkOpt': f(shark, '100000', 'qw-opt'),
+            'Rust': f(rust, '100000', 'qw'),
+            'RustOpt': f(rust, '100000', 'qw-opt'),
         }
     }
     write(json_path(2), obj)
@@ -228,7 +228,7 @@ def plot(result_json_path, plot_path, tex=False, io=False):
 
     SMALL_SIZE = 8
     MEDIUM_SIZE = 10
-    BIGGER_SIZE = 12
+    BIGGER_SIZE = 10
 
     plt.rc('font', size=SMALL_SIZE)
     plt.rc('axes', titlesize=SMALL_SIZE)
@@ -244,14 +244,14 @@ def plot(result_json_path, plot_path, tex=False, io=False):
     plt.rcParams["font.family"] = "serif"
     plt.rcParams["font.size"] = "8"
 
-    fig, ax = plt.subplots(figsize=(10/3, 2.5))
+    fig, ax = plt.subplots(figsize=(10/3, 1.8))
 
     ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
     ax.set_ylim([0, ymax * 1.1])
 
     bar_width = 0.2
 
-    system_names = ['Flink', 'Shark', 'FlinkOpt', 'SharkOpt']
+    system_names = ['Flink', 'Rust', 'FlinkOpt', 'RustOpt']
 
     colors = plt.cm.Accent(np.linspace(0, 0.5, len(system_names)))
     color_map = dict(zip(system_names, colors))
@@ -284,7 +284,7 @@ def plot(result_json_path, plot_path, tex=False, io=False):
     ax.set_xticks(np.arange(len(obj)))
     ax.set_xticklabels(obj.keys())
 
-    ax.set_ylabel('Execution Time (seconds)')
+    ax.set_ylabel('Execution Time (s)')
 
     handles = [Patch(
         label=system,
@@ -318,6 +318,7 @@ def plot_experiment1(tex=False):
 
 
 def plot_experiment2(twocolumn=False, tex=False):
+    plot(json_path(2), pdf_path(2, io=True), tex=tex, io=True)
     plot(json_path(2), pdf_path(2, io=False), tex=tex, io=False)
 
 
