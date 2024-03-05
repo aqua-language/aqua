@@ -9,7 +9,7 @@ from matplotlib.patches import Patch
 from matplotlib.ticker import FormatStrFormatter
 
 
-num_events = 10_000_000
+num_events = 5_000_000
 num_warmups = 5
 num_iterations = 10
 
