@@ -1,4 +1,6 @@
 #![allow(unused)]
+use crate::ast::Arm;
+use crate::ast::Block;
 use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Expr;
@@ -6,7 +8,7 @@ use crate::ast::Index;
 use crate::ast::Name;
 use crate::ast::Param;
 use crate::ast::Pat;
-use crate::ast::PatArg;
+use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Query;
 use crate::ast::Stmt;
@@ -20,7 +22,7 @@ use crate::ast::StmtVar;
 use crate::ast::TraitDef;
 use crate::ast::TraitType;
 use crate::ast::Type;
-use crate::ast::UnresolvedPath;
+use crate::ast::UnresolvedPatField;
 use crate::print::Print;
 
 pub struct Wrapper<T>(T);
@@ -73,6 +75,12 @@ impl std::fmt::Display for Expr {
     }
 }
 
+impl std::fmt::Display for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Pretty::new(f).block(self)
+    }
+}
+
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Pretty::new(f).program(self)
@@ -112,6 +120,12 @@ impl std::fmt::Display for Pat {
 impl std::fmt::Display for Bound {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Pretty::new(f).bound(self)
+    }
+}
+
+impl std::fmt::Display for Query {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).query_stmt(self)
     }
 }
 
@@ -191,7 +205,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Stmt::Enum(s) => self.stmt_enum(s),
             Stmt::Type(s) => self.stmt_type(s),
             Stmt::Trait(s) => self.stmt_trait(s),
-            Stmt::Err(_) => todo!(),
+            Stmt::Err(_) => self.kw("<err>"),
         }
     }
 
@@ -363,8 +377,12 @@ impl<'a, 'b> Pretty<'a, 'b> {
         Ok(())
     }
 
-    fn _expr(&mut self, expr: &Expr) -> std::fmt::Result {
-        match expr {
+    fn expr_args(&mut self, es: &[Expr]) -> std::fmt::Result {
+        self.paren(|this| this.comma_sep(es, Self::expr))
+    }
+
+    fn _expr(&mut self, e: &Expr) -> std::fmt::Result {
+        match e {
             Expr::Unresolved(_, _, p) => {
                 self.unresolved_path(p)?;
             }
@@ -411,16 +429,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.expr(e)?;
                 self.paren(|this| this.comma_sep(es, Self::expr))?;
             }
-            Expr::Block(_, _, ss, e) => {
-                self.brace(|this| {
-                    this.indented(|this| {
-                        this.newline_sep(ss, |this, s| this.stmt(s))?;
-                        this.newline()?;
-                        this.expr(e)
-                    })?;
-                    this.newline()
-                })?;
-            }
+            Expr::Block(_, _, b) => {}
             Expr::Query(_, _, qs) => {
                 self.newline_sep(qs, Self::query_stmt)?;
             }
@@ -476,19 +485,21 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.space()?;
                 self.expr(e)?;
                 self.space()?;
-                self.scope(arms, Self::arm)?;
+                self.comma_scope(arms, Self::arm)?;
             }
-            Expr::While(_, _, e0, e1) => {
+            Expr::While(_, _, e0, b) => {
                 self.kw("while")?;
                 self.space()?;
                 self.expr(e0)?;
                 self.space()?;
-                self.expr(e1)?;
+                self.block(b)?;
             }
             Expr::Record(_, _, xts) => {
                 self.fields(xts, Self::assign)?;
             }
-            Expr::Value(_, _) => todo!(),
+            Expr::Value(_, _) => {
+                self.kw("<value>")?;
+            }
             Expr::Infix(_, _, t, e0, e1) => {
                 self.expr(e0)?;
                 self.space()?;
@@ -506,16 +517,54 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.space()?;
                 self.expr(e)?;
             }
+            Expr::If(_, _, e, b0, b1) => {
+                self.kw("if")?;
+                self.space()?;
+                self.expr(e)?;
+                self.space()?;
+                self.block(b0)?;
+                self.space()?;
+                self.kw("else")?;
+                self.space()?;
+                self.block(b1)?;
+            }
+            Expr::For(_, _, x, e, b) => {
+                self.kw("for")?;
+                self.space()?;
+                self.name(x)?;
+                self.space()?;
+                self.kw("in")?;
+                self.space()?;
+                self.expr(e)?;
+                self.space()?;
+                self.block(b)?;
+            }
+            Expr::Char(_, _, c) => {
+                self.lit("'")?;
+                self.lit(c)?;
+                self.lit("'")?;
+            }
         }
         Ok(())
     }
 
-    fn arm(&mut self, (p, e): &(Pat, Expr)) -> std::fmt::Result {
-        self.pat(p)?;
+    fn block(&mut self, b: &Block) -> std::fmt::Result {
+        self.brace(|this| {
+            this.indented(|this| {
+                this.newline_sep(&b.stmts, |this, s| this.stmt(s))?;
+                this.newline()?;
+                this.expr(&b.expr)
+            })?;
+            this.newline()
+        })
+    }
+
+    fn arm(&mut self, arm: &Arm) -> std::fmt::Result {
+        self.pat(&arm.p)?;
         self.space()?;
         self.punct("=>")?;
         self.space()?;
-        self.expr(e)
+        self.expr(&arm.e)
     }
 
     fn expr(&mut self, expr: &Expr) -> std::fmt::Result {
@@ -557,10 +606,14 @@ impl<'a, 'b> Pretty<'a, 'b> {
 
     fn query_stmt(&mut self, q: &Query) -> std::fmt::Result {
         match q {
-            Query::From(_, _, xes) => {
+            Query::From(_, _, x, e) => {
                 self.kw("from")?;
                 self.space()?;
-                self.comma_scope(xes, Self::scan)?;
+                self.name(x)?;
+                self.space()?;
+                self.kw("in")?;
+                self.space()?;
+                self.expr(e)?;
             }
             Query::Where(_, _, e) => {
                 self.kw("where")?;
@@ -572,55 +625,78 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.space()?;
                 self.comma_scope(xes, Self::assign)?;
             }
-            Query::Join(_, _, xes, e) => {
+            Query::Join(_, _, x, e0, e1) => {
                 self.kw("join")?;
                 self.space()?;
-                self.comma_scope(xes, Self::scan)?;
+                self.name(x)?;
+                self.space()?;
+                self.kw("in")?;
+                self.space()?;
+                self.expr(e0)?;
                 self.space()?;
                 self.punct("on")?;
                 self.space()?;
-                self.expr(e)?;
+                self.expr(e1)?;
             }
-            Query::Group(_, _, xs, qs) => {
+            Query::Group(_, _, e, qs) => {
                 self.kw("group")?;
                 self.space()?;
-                self.comma_sep(xs, Self::name)?;
+                self.expr(e)?;
                 self.space()?;
-                self.comma_scope(qs, Self::query_stmt)?;
+                self.scope(qs, Self::query_stmt)?;
             }
             Query::Over(_, _, e, qs) => {
                 self.kw("over")?;
                 self.space()?;
                 self.expr(e)?;
-                self.comma_scope(qs, Self::query_stmt)?;
+                self.space()?;
+                self.scope(qs, Self::query_stmt)?;
             }
-            Query::Order(_, _, os) => {
+            Query::Order(_, _, e, o) => {
                 self.kw("order")?;
                 self.space()?;
-                self.comma_sep(os, Self::ordering)?;
-            }
-            Query::With(_, _, xes) => {
-                self.kw("with")?;
+                self.expr(e)?;
                 self.space()?;
-                self.comma_scope(xes, Self::assign)?;
+                self.ordering(o)?;
             }
-            Query::Into(_, _, e) => {
+            Query::Var(_, _, x, e) => {
+                self.kw("val")?;
+                self.space()?;
+                self.name(x)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.expr(e)?;
+            }
+            Query::Into(_, _, x, ts, es) => {
                 self.kw("into")?;
                 self.space()?;
-                self.comma_sep(e, Self::expr)?;
+                self.name(x)?;
+                self.type_args(ts)?;
+                self.expr_args(es)?;
             }
-            Query::Compute(_, _, aggs) => {
+            Query::Compute(_, _, x, e0, e1) => {
                 self.kw("compute")?;
                 self.space()?;
-                self.comma_scope(aggs, Self::agg)?;
+                self.name(x)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.expr(e0)?;
+                self.space()?;
+                self.kw("of")?;
+                self.space()?;
+                self.expr(e1)?;
+            }
+            Query::Err(_, _) => {
+                self.kw("<err>")?;
             }
         }
         Ok(())
     }
 
-    fn ordering(&mut self, (x, d): &(Name, bool)) -> std::fmt::Result {
-        self.name(x)?;
-        if *d {
+    fn ordering(&mut self, o: &bool) -> std::fmt::Result {
+        if *o {
             self.space()?;
             self.kw("desc")?;
         }
@@ -734,12 +810,12 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 if let Some(args) = &args {
                     self.paren(|this| {
                         this.sep(",", true, args, |this, p| match p {
-                            PatArg::Named(x, p) => {
+                            UnresolvedPatField::Named(x, p) => {
                                 this.name(x)?;
                                 this.punct("=")?;
                                 this.pat(p)
                             }
-                            PatArg::Unnamed(p) => this.pat(p),
+                            UnresolvedPatField::Unnamed(p) => this.pat(p),
                         })
                     })?;
                 }
@@ -777,11 +853,20 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Pat::Err(_, _) => {
                 self.kw("<err>")?;
             }
+            Pat::Record(_, _, xps) => {
+                self.fields(xps, Self::bind)?;
+            }
+            Pat::Or(_, _, p0, p1) => {
+                self.pat(p0)?;
+                self.punct(" or ")?;
+                self.pat(p1)?;
+            }
+            Pat::Char(_, _, _) => todo!(),
         }
         Ok(())
     }
 
-    fn unresolved_path(&mut self, p: &UnresolvedPath) -> std::fmt::Result {
+    fn unresolved_path(&mut self, p: &Path) -> std::fmt::Result {
         self.sep("::", false, &p.segments, Self::segment)
     }
 

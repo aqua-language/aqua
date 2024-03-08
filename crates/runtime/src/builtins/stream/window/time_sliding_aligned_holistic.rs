@@ -1,5 +1,3 @@
-use derive_more::Deref;
-use derive_more::DerefMut;
 use std::collections::BTreeMap;
 
 use crate::builtins::duration::Duration;
@@ -32,7 +30,7 @@ impl<T: Data> Stream<T> {
                 match self.recv().await {
                     Event::Data(time, data) => {
                         let t0 = align(time, step);
-                        s.get_mut(t0).push((time, data));
+                        s.get_mut(t0).0.push((time, data));
                     }
                     Event::Watermark(time) => {
                         while let Some(entry) = s.0.first_entry() {
@@ -61,7 +59,7 @@ impl<T: Data> Stream<T> {
     }
 }
 
-#[derive(Debug, Default, Deref, DerefMut)]
+#[derive(Debug, Default)]
 struct WindowState<T>(BTreeMap<Time, Slice<T>>);
 
 impl<T> WindowState<T> {
@@ -97,7 +95,7 @@ impl<'a, T> IntoIterator for &'a Window<'a, T> {
     }
 }
 
-#[derive(Debug, Deref, DerefMut)]
+#[derive(Debug)]
 struct Slice<T>(Vec<(Time, T)>);
 
 impl<T> Default for Slice<T> {

@@ -1,7 +1,7 @@
 use crate::builtins::duration::Duration;
 use crate::traits::DeepClone;
 
-use num::Integer;
+use num_integer::Integer;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::Serialize;
@@ -14,14 +14,6 @@ use super::string::String;
 #[repr(C)]
 pub struct Time(pub time::OffsetDateTime);
 
-const EU: &[time::format_description::FormatItem<'_>] =
-    time::macros::format_description!(version = 2, "[year]-[month]-[day] [hour]:[minute]:[second]");
-
-const US: &[time::format_description::FormatItem<'_>] = time::macros::format_description!(
-    version = 2,
-    "[month]/[day]/[year] [hour]:[minute]:[second] [period case:upper]"
-);
-
 impl Serialize for Time {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         let v = time::OffsetDateTime::format(self.0, &well_known::Iso8601::DEFAULT)
@@ -33,22 +25,16 @@ impl Serialize for Time {
 impl<'de> Deserialize<'de> for Time {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Time, D::Error> {
         let s: std::string::String = Deserialize::deserialize(d)?;
-        match time::PrimitiveDateTime::parse(s.as_ref(), &well_known::Iso8601::DEFAULT)
-            .or_else(|_| time::PrimitiveDateTime::parse(s.as_ref(), &well_known::Rfc2822))
-            .or_else(|_| time::PrimitiveDateTime::parse(s.as_ref(), &well_known::Rfc3339))
-            .or_else(|_| time::PrimitiveDateTime::parse(s.as_ref(), &EU))
-            .or_else(|_| time::PrimitiveDateTime::parse(s.as_ref(), &US))
-            .map_err(serde::de::Error::custom)
-        {
-            Ok(v) => Ok(Time(v.assume_utc())),
-            Err(e) => s
-                .as_str()
-                .parse()
-                .ok()
-                .and_then(|v| time::OffsetDateTime::from_unix_timestamp(v).ok())
-                .map(Time)
-                .ok_or(e),
-        }
+        time::PrimitiveDateTime::parse(s.as_ref(), &well_known::Iso8601::DEFAULT)
+            .map(|v| Time(v.assume_utc()))
+            .or_else(|e| {
+                s.as_str()
+                    .parse()
+                    .ok()
+                    .and_then(|v| time::OffsetDateTime::from_unix_timestamp(v).ok())
+                    .map(Time)
+                    .ok_or_else(|| serde::de::Error::custom(e))
+            })
     }
 }
 

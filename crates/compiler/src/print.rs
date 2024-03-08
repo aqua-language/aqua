@@ -123,7 +123,16 @@ pub trait Print<'b> {
         iter: impl IntoIterator<Item = &'c T>,
         f: impl Fn(&mut Self, &'c T) -> std::fmt::Result,
     ) -> std::fmt::Result {
-        self.sep("\n", false, iter, f)
+        let mut iter = iter.into_iter();
+        if let Some(x) = iter.next() {
+            self.newline()?;
+            f(self, x)?;
+            for x in iter {
+                self.newline()?;
+                f(self, x)?;
+            }
+        }
+        Ok(())
     }
 
     fn group(
@@ -184,10 +193,7 @@ pub trait Print<'b> {
             if items.is_empty() {
                 Ok(())
             } else {
-                this.indented(|this| {
-                    this.newline()?;
-                    this.newline_sep(items, |this, item| f(this, item))
-                })?;
+                this.indented(|this| this.newline_sep(items, |this, item| f(this, item)))?;
                 this.newline()
             }
         })
@@ -202,12 +208,7 @@ pub trait Print<'b> {
             if items.is_empty() {
                 Ok(())
             } else {
-                this.indented(|this| {
-                    this.newline_sep(items, |this, item| {
-                        f(this, item)?;
-                        this.punct(",")
-                    })
-                })?;
+                this.indented(|this| this.newline_comma_sep(items, &f))?;
                 this.newline()
             }
         })

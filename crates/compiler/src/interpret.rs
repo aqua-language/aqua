@@ -1,7 +1,7 @@
+use crate::ast::Block;
 use crate::ast::Body;
 use crate::ast::Expr;
 use crate::ast::Name;
-use crate::ast::Pat;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
@@ -65,8 +65,11 @@ impl Scope {
 enum Binding {
     Var(Value),
     Def(Vec<Name>, Body),
+    #[allow(dead_code)]
     Struct(Vec<(Name, Type)>),
+    #[allow(dead_code)]
     Enum(Vec<(Name, Type)>),
+    #[allow(dead_code)]
     Impl(Vec<(Name, Type)>, Vec<(Name, Body)>),
 }
 
@@ -133,6 +136,13 @@ impl Context {
 
     fn stmt_expr(&mut self, _: &Expr) {
         todo!()
+    }
+
+    fn block(&mut self, b: &Block) -> Value {
+        self.scoped(|this| {
+            b.stmts.iter().for_each(|s| this.stmt(s));
+            this.expr(&b.expr)
+        })
     }
 
     fn expr(&mut self, e: &Expr) -> Value {
@@ -219,47 +229,45 @@ impl Context {
                     Body::Builtin => todo!(),
                 }
             }
-            Expr::Block(_, _, ss, e) => self.scoped(|this| {
-                ss.iter().for_each(|s| this.stmt(s));
-                this.expr(e)
-            }),
+            Expr::Block(_, _, b) => self.block(b),
             Expr::Query(_, _, _) => todo!(),
             Expr::Assoc(_, _, _, _, _, _) => todo!(),
-            Expr::Match(_, _, e, pes) => {
-                let mut iter = pes.iter();
-                let (Pat::Enum(_, _, _, _, x_then, p), e_then) = iter.next().unwrap() else {
-                    unreachable!();
-                };
-                let Pat::Var(_, _, x_var) = p.as_ref() else {
-                    unreachable!();
-                };
-                let (Pat::Wildcard(_, _), e_else) = iter.next().unwrap() else {
-                    unreachable!()
-                };
-                let Value::Variant(v) = self.expr(e) else {
-                    unreachable!();
-                };
-                if *x_then == v.name {
-                    let v = v.value.as_ref().clone();
-                    self.stack.bind(x_var.clone(), Binding::Var(v));
-                    self.expr(e_then)
-                } else {
-                    self.expr(e_else)
-                }
+            Expr::Match(_, _, _e, _pes) => {
+                todo!()
+                // let mut iter = pes.iter();
+                // let (Pat::Enum(_, _, _, _, x_then, p), e_then) = iter.next().unwrap() else {
+                //     unreachable!();
+                // };
+                // let Pat::Var(_, _, x_var) = p.as_ref() else {
+                //     unreachable!();
+                // };
+                // let (Pat::Wildcard(_, _), e_else) = iter.next().unwrap() else {
+                //     unreachable!()
+                // };
+                // let Value::Variant(v) = self.expr(e) else {
+                //     unreachable!();
+                // };
+                // if *x_then == v.name {
+                //     let v = v.value.as_ref().clone();
+                //     self.stack.bind(x_var.clone(), Binding::Var(v));
+                //     self.expr(e_then)
+                // } else {
+                //     self.expr(e_else)
+                // }
             }
             Expr::Array(_, _, _) => todo!(),
             Expr::Assign(_, _, _, _) => todo!(),
             Expr::Return(_, _, _) => unreachable!(),
             Expr::Continue(_, _) => unreachable!(),
             Expr::Break(_, _) => unreachable!(),
-            Expr::While(_, _, e0, e1) => {
+            Expr::While(_, _, e0, b) => {
                 while {
                     let Value::Bool(v) = self.expr(e0) else {
                         unreachable!()
                     };
                     v
                 } {
-                    self.expr(e1);
+                    self.block(b);
                 }
                 Value::from(Tuple::new(vec![]))
             }
@@ -269,6 +277,9 @@ impl Context {
             Expr::Infix(_, _, _, _, _) => unreachable!(),
             Expr::Postfix(_, _, _, _) => unreachable!(),
             Expr::Prefix(_, _, _, _) => unreachable!(),
+            Expr::If(_, _, _, _, _) => todo!(),
+            Expr::For(_, _, _, _, _) => todo!(),
+            Expr::Char(_, _, _) => todo!(),
         }
     }
 }

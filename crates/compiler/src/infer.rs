@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use crate::ast::Block;
 use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Candidate;
@@ -285,6 +286,13 @@ impl Context {
         })
     }
 
+    fn block(&mut self, b: &Block, sub: &mut Vec<(Name, Type)>, goals: &mut Vec<Bound>) -> Block {
+        let span = b.span;
+        let ss = b.stmts.iter().map(|s| self.stmt(s, sub, goals)).collect();
+        let e = self.expr(&b.expr, sub, goals);
+        Block::new(span, ss, e)
+    }
+
     pub fn expr(&mut self, e: &Expr, sub: &mut Vec<(Name, Type)>, goals: &mut Vec<Bound>) -> Expr {
         let s = e.span();
         match e {
@@ -398,11 +406,10 @@ impl Context {
                 self.recover(s, e.span(), unify(sub, e.ty(), &t2));
                 Expr::Call(s, t0.apply(sub), Rc::new(e), es)
             }
-            Expr::Block(_, t0, ss, e) => {
-                let ss = ss.iter().map(|s| self.stmt(s, sub, goals)).collect();
-                let e = self.expr(e, sub, goals);
-                self.recover(s, e.span(), unify(sub, t0, e.ty()));
-                Expr::Block(s, t0.apply(sub), ss, e.into())
+            Expr::Block(_, t0, b) => {
+                let b = self.block(b, sub, goals);
+                self.recover(s, e.span(), unify(sub, t0, b.expr.ty()));
+                Expr::Block(s, t0.apply(sub), b)
             }
             Expr::Query(..) => todo!(),
             Expr::Field(_, t0, e, x) => {
@@ -506,6 +513,9 @@ impl Context {
             Expr::Infix(_, _, _, _, _) => unreachable!(),
             Expr::Postfix(_, _, _, _) => unreachable!(),
             Expr::Prefix(_, _, _, _) => unreachable!(),
+            Expr::If(_, _, _, _, _) => todo!(),
+            Expr::For(_, _, _, _, _) => todo!(),
+            Expr::Char(_, _, _) => todo!(),
         }
     }
 }

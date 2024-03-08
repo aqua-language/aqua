@@ -19,8 +19,25 @@ pub type BTreeMap<K, V> = std::collections::BTreeMap<K, V>;
 
 pub type HashMap<K, V> = std::collections::HashMap<K, V, Hasher>;
 
+#[cfg(feature = "opt")]
 pub type SmolHashMap<K, V> = halfbrown::HashMap<K, V, Hasher>;
+#[cfg(not(feature = "opt"))]
+pub type SmolHashMap<K, V> = std::collections::HashMap<K, V, Hasher>;
+
+#[cfg(feature = "opt")]
 pub type SmolVec<T> = smallvec::SmallVec<T>;
+#[cfg(not(feature = "opt"))]
+pub type SmolVec<T> = std::vec::Vec<T>;
+
+#[cfg(feature = "opt")]
+pub type SmolStr = smol_str::SmolStr;
+#[cfg(not(feature = "opt"))]
+pub type SmolStr = std::string::String;
+
+#[cfg(feature = "opt")]
+pub type ArrayVec<T, const N: usize> = arrayvec::ArrayVec<T, N>;
+#[cfg(not(feature = "opt"))]
+pub type ArrayVec<T, const N: usize> = std::vec::Vec<T>;
 
 #[cfg(all(not(target_env = "msvc"), feature = "opt"))]
 #[global_allocator]

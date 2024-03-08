@@ -3,19 +3,20 @@ name = "compiler"
 version.workspace = true
 edition.workspace = true
 
-[dependencies]
-config = { path = "../config" }
-runtime = { path = "../runtime" }
+[features]
+default = []
+interpret = ["runtime"]
 
-ariadne = "0.4.0"
+[dependencies]
+config = { path = "../config", default-features = false }
+runtime = { path = "../runtime", default-features = false, optional = true }
+
+ariadne = { version = "0.4.0" }
 smol_str = { version = "0.2.1", features = ["std"] }
-stacker = "0.1.15"
-ena = "0.14.2"
-libffi = "3.2.0"
+# ena = { version = "0.14.2" }
+# libffi = { version = "3.2.0" }
 serde = { version = "1.0.130", features = ["derive"] }
-# chumsky = "1.0.0-alpha.6"
-bitmask-enum = "2.2.3"
-egg = "0.9.5"
+bitmask-enum = { version = "2.2.3" }
 
 [dev-dependencies]
 indoc = "2.0.4"

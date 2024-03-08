@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use crate::ast::Arm;
+use crate::ast::Block;
 use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Expr;
@@ -7,7 +9,7 @@ use crate::ast::Index;
 use crate::ast::Name;
 use crate::ast::Param;
 use crate::ast::Pat;
-use crate::ast::PatArg;
+use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Query;
 use crate::ast::Stmt;
@@ -21,8 +23,9 @@ use crate::ast::StmtVar;
 use crate::ast::TraitDef;
 use crate::ast::TraitType;
 use crate::ast::Type;
-use crate::ast::UnresolvedPath;
+use crate::ast::UnresolvedPatField;
 use crate::lexer::Span;
+use crate::lexer::Token;
 
 pub fn program<const N: usize>(ss: [Stmt; N]) -> Program {
     Program::new(vec(ss))
@@ -94,14 +97,7 @@ pub fn fact<const N: usize, const M: usize, const K: usize>(
     defs: [StmtDef; M],
     types: [StmtType; K],
 ) -> StmtImpl {
-    StmtImpl::new(
-        span(),
-        map(gs, name),
-        head,
-        vec([]),
-        vec(defs),
-        vec(types),
-    )
+    StmtImpl::new(span(), map(gs, name), head, vec([]), vec(defs), vec(types))
 }
 
 // Create a predicate:
@@ -165,20 +161,24 @@ pub fn ty_assoc<const N: usize, const M: usize>(
     Type::Assoc(name(x0), vec(ts0), name(x1), vec(ts1))
 }
 
+pub fn pat_record<const N: usize>(xps: [(&'static str, Pat); N]) -> Pat {
+    Pat::Record(span(), ty_hole(), map(xps, |(x, p)| (name(x), p)))
+}
+
 pub mod unresolved {
     use std::rc::Rc;
 
+    use super::expr_assign;
     use super::parsed_expr_def;
     use super::vec;
     use crate::ast::Bound;
     use crate::ast::Expr;
     use crate::ast::Name;
     use crate::ast::Pat;
-    use crate::ast::PatArg;
+    use crate::ast::Path;
     use crate::ast::Type;
-    use crate::ast::UnresolvedPath;
+    use crate::ast::UnresolvedPatField;
 
-    use super::expr_assign;
     use super::expr_call;
     use super::map;
     use super::name;
@@ -262,7 +262,7 @@ pub mod unresolved {
             span(),
             ty_hole(),
             path([(name(x0), vec(ts)), (name(x1), vec([]))]),
-            Some(vec([PatArg::Unnamed(p)])),
+            Some(vec([UnresolvedPatField::Unnamed(p)])),
         )
     }
 
@@ -275,7 +275,7 @@ pub mod unresolved {
             span(),
             ty_hole(),
             path([(name(x0), vec(ts))]),
-            Some(map(xps, |(x, p)| PatArg::Named(name(x), p))),
+            Some(map(xps, |(x, p)| UnresolvedPatField::Named(name(x), p))),
         )
     }
 
@@ -283,31 +283,18 @@ pub mod unresolved {
         Pat::Unresolved(span(), ty_hole(), path([(name(x), vec(ts))]), None)
     }
 
-    pub fn pat_punned_struct<const N: usize, const M: usize>(
-        x: &'static str,
-        ts: [Type; N],
-        ps: [Pat; M],
-    ) -> Pat {
-        Pat::Unresolved(
-            span(),
-            ty_hole(),
-            path([(name(x), vec(ts))]),
-            Some(map(ps, PatArg::Unnamed)),
-        )
+    pub fn path<const N: usize>(segments: [(Name, Vec<Type>); N]) -> Path {
+        Path::new(vec(segments))
     }
 
-    pub fn path<const N: usize>(segments: [(Name, Vec<Type>); N]) -> UnresolvedPath {
-        UnresolvedPath::new(vec(segments))
-    }
-
-    pub fn unresolved_name<const N: usize>(x: &'static str, ts: [Type; N]) -> UnresolvedPath {
+    pub fn unresolved_name<const N: usize>(x: &'static str, ts: [Type; N]) -> Path {
         let name = Name::from(x);
         let tys = vec(ts);
-        UnresolvedPath::new(vec([(name, tys)]))
+        Path::new(vec([(name, tys)]))
     }
 
     pub fn ty_con<const N: usize>(x: &'static str, ts: [Type; N]) -> Type {
-        Type::Unresolved(UnresolvedPath::new(vec([(name(x), vec(ts))])))
+        Type::Unresolved(Path::new(vec([(name(x), vec(ts))])))
     }
 
     pub fn ty(x: &'static str) -> Type {
@@ -315,10 +302,7 @@ pub mod unresolved {
     }
 
     pub fn ty_assoc<const N: usize>(x0: &'static str, ts: [Type; N], x1: &'static str) -> Type {
-        Type::Unresolved(UnresolvedPath::new(vec([
-            (name(x0), vec(ts)),
-            (name(x1), vec([])),
-        ])))
+        Type::Unresolved(Path::new(vec([(name(x0), vec(ts)), (name(x1), vec([]))])))
     }
     pub fn expr_assoc<const N: usize>(x0: &'static str, ts: [Type; N], x1: &'static str) -> Expr {
         Expr::Unresolved(
@@ -335,18 +319,15 @@ pub fn expr_assoc<const N: usize, const M: usize>(
     x1: &'static str,
     ts1: [Type; M],
 ) -> Expr {
-    Expr::Assoc(
-        span(),
-        ty_hole(),
-        name(x0),
-        vec(ts0),
-        name(x1),
-        vec(ts1),
-    )
+    Expr::Assoc(span(), ty_hole(), name(x0), vec(ts0), name(x1), vec(ts1))
+}
+
+pub fn expr_assign_desugared(e0: Expr, e1: Expr) -> Expr {
+    Expr::Assign(span(), ty_hole(), Rc::new(e0), Rc::new(e1))
 }
 
 pub fn expr_assign(e0: Expr, e1: Expr) -> Expr {
-    Expr::Assign(span(), ty_hole(), Rc::new(e0), Rc::new(e1))
+    Expr::Infix(span(), ty_hole(), Token::Eq, Rc::new(e0), Rc::new(e1))
 }
 
 // pub fn stmt_mod<const N: usize>(x: &'static str, ss: [Stmt; N]) -> Stmt {
@@ -417,14 +398,7 @@ pub fn expr_enum<const N: usize>(
     x1: &'static str,
     e: Expr,
 ) -> Expr {
-    Expr::Enum(
-        span(),
-        ty_hole(),
-        name(x0),
-        vec(ts),
-        name(x1),
-        Rc::new(e),
-    )
+    Expr::Enum(span(), ty_hole(), name(x0), vec(ts), name(x1), Rc::new(e))
 }
 
 pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
@@ -445,6 +419,10 @@ pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
         Body::Expr(e),
     )
     .into()
+}
+
+pub fn stmt_err() -> Stmt {
+    Stmt::Err(span())
 }
 
 pub fn tr_def<const N: usize, const M: usize, const K: usize>(
@@ -500,13 +478,25 @@ pub fn expr_call<const N: usize>(e: Expr, es: [Expr; N]) -> Expr {
     Expr::Call(span(), ty_hole(), Rc::new(e), vec(es))
 }
 
-pub fn parsed_binop(s: Span, tr: &'static str, op: &'static str, e0: Expr, e1: Expr) -> Expr {
+pub fn binop_desugared(s: Span, tr: &'static str, op: &'static str, e0: Expr, e1: Expr) -> Expr {
     Expr::Call(
         s,
         ty_hole(),
         Rc::new(parsed_expr_assoc(span(), tr, op)),
         vec([e0, e1]),
     )
+}
+
+pub fn infix(s: Span, op: Token, e0: Expr, e1: Expr) -> Expr {
+    Expr::Infix(s, ty_hole(), op, Rc::new(e0), Rc::new(e1))
+}
+
+pub fn prefix(s: Span, op: Token, e: Expr) -> Expr {
+    Expr::Prefix(s, ty_hole(), op, Rc::new(e))
+}
+
+pub fn postfix(s: Span, op: Token, e: Expr) -> Expr {
+    Expr::Postfix(s, ty_hole(), op, Rc::new(e))
 }
 
 pub fn parsed_expr_unop(s: Span, tr: &'static str, op: &'static str, e: Expr) -> Expr {
@@ -519,68 +509,124 @@ pub fn parsed_expr_unop(s: Span, tr: &'static str, op: &'static str, e: Expr) ->
 }
 
 pub fn expr_add(e0: Expr, e1: Expr) -> Expr {
-    parsed_binop(span(), "Add", "add", e0, e1)
+    infix(span(), Token::Plus, e0, e1)
 }
 
 pub fn expr_sub(e0: Expr, e1: Expr) -> Expr {
-    parsed_binop(span(), "Sub", "sub", e0, e1)
+    infix(span(), Token::Minus, e0, e1)
 }
 
 pub fn expr_mul(e0: Expr, e1: Expr) -> Expr {
-    parsed_binop(span(), "Mul", "mul", e0, e1)
+    infix(span(), Token::Star, e0, e1)
 }
 
 pub fn expr_div(e0: Expr, e1: Expr) -> Expr {
-    parsed_binop(span(), "Div", "div", e0, e1)
+    infix(span(), Token::Slash, e0, e1)
 }
 
 pub fn expr_eq(e0: Expr, e1: Expr) -> Expr {
-    parsed_binop(span(), "PartialEq", "eq", e0, e1)
+    infix(span(), Token::EqEq, e0, e1)
 }
 
 pub fn expr_ne(e0: Expr, e1: Expr) -> Expr {
-    parsed_binop(span(), "PartialEq", "ne", e0, e1)
+    infix(span(), Token::NotEq, e0, e1)
 }
 
 pub fn expr_lt(e0: Expr, e1: Expr) -> Expr {
-    parsed_binop(span(), "PartialOrd", "lt", e0, e1)
+    infix(span(), Token::Lt, e0, e1)
 }
 
 pub fn expr_le(e0: Expr, e1: Expr) -> Expr {
-    parsed_binop(span(), "PartialOrd", "le", e0, e1)
+    infix(span(), Token::Le, e0, e1)
 }
 
 pub fn expr_gt(e0: Expr, e1: Expr) -> Expr {
-    parsed_binop(span(), "PartialOrd", "gt", e0, e1)
+    infix(span(), Token::Gt, e0, e1)
 }
 
 pub fn expr_ge(e0: Expr, e1: Expr) -> Expr {
-    parsed_binop(span(), "PartialOrd", "ge", e0, e1)
+    infix(span(), Token::Ge, e0, e1)
 }
 
 pub fn expr_and(e0: Expr, e1: Expr) -> Expr {
-    Expr::Match(
-        span(),
-        ty_hole(),
-        Rc::new(e0),
-        vec([(pat_bool(true), e1), (pat_wild(), expr_bool(false))]),
-    )
+    infix(span(), Token::And, e0, e1)
 }
 
 pub fn expr_or(e0: Expr, e1: Expr) -> Expr {
+    infix(span(), Token::Or, e0, e1)
+}
+
+pub fn expr_not(e: Expr) -> Expr {
+    prefix(span(), Token::Not, e)
+}
+
+pub fn expr_neg(e: Expr) -> Expr {
+    prefix(span(), Token::Minus, e)
+}
+
+pub fn expr_add_desugared(e0: Expr, e1: Expr) -> Expr {
+    binop_desugared(span(), "Add", "add", e0, e1)
+}
+
+pub fn expr_sub_desugared(e0: Expr, e1: Expr) -> Expr {
+    binop_desugared(span(), "Sub", "sub", e0, e1)
+}
+
+pub fn expr_mul_desugared(e0: Expr, e1: Expr) -> Expr {
+    binop_desugared(span(), "Mul", "mul", e0, e1)
+}
+
+pub fn expr_div_desugared(e0: Expr, e1: Expr) -> Expr {
+    binop_desugared(span(), "Div", "div", e0, e1)
+}
+
+pub fn expr_eq_desugared(e0: Expr, e1: Expr) -> Expr {
+    binop_desugared(span(), "PartialEq", "eq", e0, e1)
+}
+
+pub fn expr_ne_desugared(e0: Expr, e1: Expr) -> Expr {
+    binop_desugared(span(), "PartialEq", "ne", e0, e1)
+}
+
+pub fn expr_lt_desugared(e0: Expr, e1: Expr) -> Expr {
+    binop_desugared(span(), "PartialOrd", "lt", e0, e1)
+}
+
+pub fn expr_le_desugared(e0: Expr, e1: Expr) -> Expr {
+    binop_desugared(span(), "PartialOrd", "le", e0, e1)
+}
+
+pub fn expr_gt_desugared(e0: Expr, e1: Expr) -> Expr {
+    binop_desugared(span(), "PartialOrd", "gt", e0, e1)
+}
+
+pub fn expr_ge_desugared(e0: Expr, e1: Expr) -> Expr {
+    binop_desugared(span(), "PartialOrd", "ge", e0, e1)
+}
+
+pub fn expr_and_desugared(e0: Expr, e1: Expr) -> Expr {
     Expr::Match(
         span(),
         ty_hole(),
         Rc::new(e0),
-        vec([(pat_bool(true), expr_bool(true)), (pat_wild(), e1)]),
+        arms([(pat_bool(true), e1), (pat_wild(), expr_bool(false))]),
     )
 }
 
-pub fn expr_not(e: Expr) -> Expr {
+pub fn expr_or_desugared(e0: Expr, e1: Expr) -> Expr {
+    Expr::Match(
+        span(),
+        ty_hole(),
+        Rc::new(e0),
+        arms([(pat_bool(true), expr_bool(true)), (pat_wild(), e1)]),
+    )
+}
+
+pub fn expr_not_desugared(e: Expr) -> Expr {
     parsed_expr_unop(span(), "Not", "not", e)
 }
 
-pub fn expr_neg(e: Expr) -> Expr {
+pub fn expr_neg_desugared(e: Expr) -> Expr {
     parsed_expr_unop(span(), "Neg", "neg", e)
 }
 
@@ -608,6 +654,10 @@ pub fn pat_bool(b: bool) -> Pat {
     Pat::Bool(span(), ty_hole(), b)
 }
 
+pub fn pat_char(c: char) -> Pat {
+    Pat::Char(span(), ty_hole(), c)
+}
+
 pub fn pat_wild() -> Pat {
     Pat::Wildcard(span(), ty_hole())
 }
@@ -617,14 +667,7 @@ pub fn pat_tuple<const N: usize>(ps: [Pat; N]) -> Pat {
 }
 
 pub fn pat_enum<const N: usize>(x0: &'static str, ts: [Type; N], x1: &'static str, p: Pat) -> Pat {
-    Pat::Enum(
-        span(),
-        ty_hole(),
-        name(x0),
-        vec(ts),
-        name(x1),
-        Rc::new(p),
-    )
+    Pat::Enum(span(), ty_hole(), name(x0), vec(ts), name(x1), Rc::new(p))
 }
 
 pub fn pat_struct<const N: usize, const M: usize>(
@@ -645,8 +688,22 @@ pub fn pat_annot(t: Type, p: Pat) -> Pat {
     p.with_ty(t)
 }
 
-pub fn expr_match<const N: usize>(e: Expr, arms: [(Pat, Expr); N]) -> Expr {
-    Expr::Match(span(), ty_hole(), Rc::new(e), vec(arms))
+pub fn arms<const N: usize>(arms: [(Pat, Expr); N]) -> Vec<Arm> {
+    arms.into_iter()
+        .map(|(p, e)| Arm::new(span(), p, e))
+        .collect()
+}
+
+pub fn expr_match<const N: usize>(e: Expr, pes: [(Pat, Expr); N]) -> Expr {
+    Expr::Match(span(), ty_hole(), Rc::new(e), arms(pes))
+}
+
+pub fn expr_if(e0: Expr, b1: Block) -> Expr {
+    Expr::If(span(), ty_hole(), Rc::new(e0), b1, block([], expr_unit()))
+}
+
+pub fn expr_if_else(e0: Expr, b1: Block, b2: Block) -> Expr {
+    Expr::If(span(), ty_hole(), Rc::new(e0), b1, b2)
 }
 
 pub fn expr_def<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
@@ -669,12 +726,20 @@ pub fn expr_string(s: &'static str) -> Expr {
     Expr::String(span(), ty_hole(), s.to_owned())
 }
 
+pub fn expr_char(c: char) -> Expr {
+    Expr::Char(span(), ty_hole(), c)
+}
+
+pub fn block<const N: usize>(ss: [Stmt; N], e: Expr) -> Block {
+    Block::new(span(), vec(ss), e)
+}
+
 pub fn expr_block<const N: usize>(ss: [Stmt; N], e: Expr) -> Expr {
-    Expr::Block(span(), ty_hole(), vec(ss), Rc::new(e))
+    Expr::Block(span(), ty_hole(), block(ss, e))
 }
 
 pub fn spanned_expr_block<const N: usize>(span: Span, ss: [Stmt; N], e: Expr) -> Expr {
-    Expr::Block(span, ty_hole(), vec(ss), Rc::new(e))
+    Expr::Block(span, ty_hole(), block(ss, e))
 }
 
 pub fn expr_err() -> Expr {
@@ -725,45 +790,40 @@ pub fn query_where(e: Expr) -> Query {
     Query::Where(span(), ty_hole(), Rc::new(e))
 }
 
-pub fn query_from<const N: usize>(xes: [(&'static str, Expr); N]) -> Query {
-    Query::From(span(), ty_hole(), map(xes, |(s, e)| (name(s), e)))
+pub fn query_from(x: &'static str, e: Expr) -> Query {
+    Query::From(span(), ty_hole(), name(x), Rc::new(e))
 }
 
-pub fn query_into<const N: usize>(es: [Expr; N]) -> Query {
-    Query::Into(span(), ty_hole(), vec(es))
+pub fn query_into<const N: usize, const M: usize>(
+    x: &'static str,
+    ts: [Type; N],
+    es: [Expr; M],
+) -> Query {
+    Query::Into(span(), ty_hole(), name(x), vec(ts), vec(es))
 }
 
-pub fn query_with<const N: usize>(xes: [(&'static str, Expr); N]) -> Query {
-    Query::With(span(), ty_hole(), map(xes, |(s, e)| (name(s), e)))
+pub fn query_var(x: &'static str, e: Expr) -> Query {
+    Query::Var(span(), ty_hole(), name(x), Rc::new(e))
 }
 
-pub fn query_join<const N: usize>(xes: [(&'static str, Expr); N], e: Expr) -> Query {
-    Query::Join(
-        span(),
-        ty_hole(),
-        map(xes, |(s, e)| (name(s), e)),
-        Rc::new(e),
-    )
+pub fn query_join(x: &'static str, e0: Expr, e1: Expr) -> Query {
+    Query::Join(span(), ty_hole(), name(x), Rc::new(e0), Rc::new(e1))
 }
 
-pub fn query_group<const N: usize, const M: usize>(xs: [&'static str; N], qs: [Query; M]) -> Query {
-    Query::Group(span(), ty_hole(), map(xs, name), vec(qs))
+pub fn query_group<const N: usize>(e: Expr, qs: [Query; N]) -> Query {
+    Query::Group(span(), ty_hole(), Rc::new(e), vec(qs))
 }
 
 pub fn query_over<const N: usize>(e: Expr, qs: [Query; N]) -> Query {
     Query::Over(span(), ty_hole(), Rc::new(e), vec(qs))
 }
 
-pub fn query_compute<const N: usize>(aggs: [(&'static str, Expr, Expr); N]) -> Query {
-    Query::Compute(
-        span(),
-        ty_hole(),
-        map(aggs, |(x, e0, e1)| (name(x), e0, e1)),
-    )
+pub fn query_compute(x: &'static str, e0: Expr, e1: Expr) -> Query {
+    Query::Compute(span(), ty_hole(), name(x), Rc::new(e0), Rc::new(e1))
 }
 
-pub fn expr_while(e0: Expr, e1: Expr) -> Expr {
-    Expr::While(span(), ty_hole(), Rc::new(e0), Rc::new(e1))
+pub fn expr_while(e: Expr, b: Block) -> Expr {
+    Expr::While(span(), ty_hole(), Rc::new(e), b)
 }
 
 pub fn span() -> Span {
@@ -787,7 +847,7 @@ pub fn parsed_pat_var(s: Span, x: impl Into<Name>) -> Pat {
     Pat::Unresolved(
         s,
         ty_hole(),
-        UnresolvedPath::new(vec([(x.into(), vec([]))])),
+        Path::new(vec([(x.into(), vec([]))])),
         Some(vec([])),
     )
 }
@@ -796,8 +856,8 @@ pub fn parsed_pat_enum(s: Span, x0: &'static str, x1: &'static str, p: Pat) -> P
     Pat::Unresolved(
         s,
         ty_hole(),
-        UnresolvedPath::new(vec([(name(x0), vec([])), (name(x1), vec([]))])),
-        Some(vec([PatArg::Unnamed(p)])),
+        Path::new(vec([(name(x0), vec([])), (name(x1), vec([]))])),
+        Some(vec([UnresolvedPatField::Unnamed(p)])),
     )
 }
 
@@ -805,27 +865,23 @@ pub fn parsed_expr_enum(s: Span, x0: &'static str, x1: &'static str) -> Expr {
     Expr::Unresolved(
         s,
         ty_hole(),
-        UnresolvedPath::new(vec([(name(x0), vec([])), (name(x1), vec([]))])),
+        Path::new(vec([(name(x0), vec([])), (name(x1), vec([]))])),
     )
 }
 
 pub fn parsed_expr_var(s: Span, x: impl Into<Name>) -> Expr {
-    Expr::Unresolved(
-        s,
-        ty_hole(),
-        UnresolvedPath::new(vec([(x.into(), vec([]))])),
-    )
+    Expr::Unresolved(s, ty_hole(), Path::new(vec([(x.into(), vec([]))])))
 }
 
 pub fn parsed_expr_def(s: Span, x: impl Into<Name>, ts: Vec<Type>) -> Expr {
-    Expr::Unresolved(s, ty_hole(), UnresolvedPath::new(vec([(x.into(), ts)])))
+    Expr::Unresolved(s, ty_hole(), Path::new(vec([(x.into(), ts)])))
 }
 
 pub fn parsed_expr_assoc(s: Span, x0: impl Into<Name>, x1: impl Into<Name>) -> Expr {
     Expr::Unresolved(
         s,
         ty_hole(),
-        UnresolvedPath::new(vec([(x0.into(), vec([])), (x1.into(), vec([]))])),
+        Path::new(vec([(x0.into(), vec([])), (x1.into(), vec([]))])),
     )
 }
 

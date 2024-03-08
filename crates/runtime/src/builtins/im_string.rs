@@ -1,11 +1,11 @@
-use serde_derive::Deserialize;
-use serde_derive::Serialize;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::traits::DeepClone;
-use smol_str::SmolStr;
+use crate::SmolStr;
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub struct String(pub(crate) smol_str::SmolStr);
+pub struct String(pub(crate) SmolStr);
 
 impl PartialEq<str> for String {
     #[inline(always)]

@@ -114,16 +114,17 @@ impl Repl {
                 Ok(input) => {
                     let input: Rc<str> = Rc::from(input);
                     self.editor.add_history_entry(input.as_ref());
-                    match self.compiler.parse(self.count, input, |p| p.parse()) {
-                        Ok(v) => {
-                            println!("{v}");
-                            self.color(Green);
-                        }
-                        Err((_, s)) => {
-                            println!("{s}");
-                            self.color(Red);
-                        }
-                    }
+                    todo!()
+                    // match self.compiler.parse(self.count, input, |p| p.parse()) {
+                    //     Ok(v) => {
+                    //         println!("{v}");
+                    //         self.color(Green);
+                    //     }
+                    //     Err((_, s)) => {
+                    //         println!("{s}");
+                    //         self.color(Red);
+                    //     }
+                    // }
                 }
                 Err(ReadlineError::Interrupted) => {
                     stmts = None;

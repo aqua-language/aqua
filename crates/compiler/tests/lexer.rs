@@ -5,7 +5,7 @@ use compiler::lexer::Token;
 fn next<'a>(lexer: &mut Lexer<'a>) -> Option<(std::ops::Range<u32>, Token, &'a str)> {
     lexer
         .next()
-        .map(|t| ((*t.span.start()..*t.span.end()), t.value, lexer.text(t)))
+        .map(|t| ((*t.s.start()..*t.s.end()), t.v, lexer.text(t)))
 }
 
 #[test]

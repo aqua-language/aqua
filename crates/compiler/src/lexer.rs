@@ -60,6 +60,7 @@ pub enum Token {
     Order,
     Over,
     Return,
+    Record,
     Select,
     Struct,
     Trait,
@@ -83,105 +84,212 @@ pub enum Token {
     Err,
 }
 
+impl Token {
+    pub fn expected(self) -> String {
+        let mut vec = Vec::new();
+        for v in [
+            // Punctuations
+            Token::Bar,
+            Token::Colon,
+            Token::ColonColon,
+            Token::Comma,
+            Token::Dot,
+            Token::DotDot,
+            Token::Eq,
+            Token::EqEq,
+            Token::FatArrow,
+            Token::Ge,
+            Token::Gt,
+            Token::LBrace,
+            Token::LBrack,
+            Token::LParen,
+            Token::Le,
+            Token::Lt,
+            Token::Minus,
+            Token::Not,
+            Token::NotEq,
+            Token::Plus,
+            Token::Question,
+            Token::RBrace,
+            Token::RBrack,
+            Token::RParen,
+            Token::SemiColon,
+            Token::Slash,
+            Token::Star,
+            Token::Underscore,
+            // Keywords
+            Token::And,
+            Token::As,
+            Token::Break,
+            Token::Compute,
+            Token::Continue,
+            Token::Def,
+            Token::Deploy,
+            Token::Desc,
+            Token::Else,
+            Token::Enum,
+            Token::False,
+            Token::For,
+            Token::From,
+            Token::Fun,
+            Token::Group,
+            Token::If,
+            Token::Impl,
+            Token::In,
+            Token::Into,
+            Token::Join,
+            Token::Match,
+            Token::Of,
+            Token::On,
+            Token::Or,
+            Token::Order,
+            Token::Over,
+            Token::Return,
+            Token::Select,
+            Token::Struct,
+            Token::Trait,
+            Token::True,
+            Token::Type,
+            Token::Var,
+            Token::Where,
+            Token::While,
+            Token::With,
+            // Literals
+            Token::Char,
+            Token::Code,
+            Token::Float,
+            Token::FloatSuffix,
+            Token::Int,
+            Token::IntSuffix,
+            Token::Name,
+            Token::String,
+            // Special
+            Token::Eof,
+            Token::Err,
+        ] {
+            if self.contains(v) {
+                if vec.len() > 5 {
+                    break;
+                }
+                vec.push(format!("`{}`", v.as_str()));
+            }
+        }
+        if vec.len() == 1 {
+            format!("Expected {}", vec.pop().unwrap())
+        } else if vec.len() > 5 {
+            format!("Expected one of {}, ...", vec.join(", "))
+        } else {
+            format!("Expected one of {}", vec.join(", "))
+        }
+    }
+}
+
+impl Token {
+    fn as_str(self) -> &'static str {
+        match self {
+            Token::Eq => "=",
+            Token::EqEq => "==",
+            Token::Not => "!",
+            Token::NotEq => "!=",
+            Token::Lt => "<",
+            Token::Le => "<=",
+            Token::Gt => ">",
+            Token::Ge => ">=",
+            Token::Plus => "+",
+            Token::Minus => "-",
+            Token::Star => "*",
+            Token::Slash => "/",
+            Token::Dot => ".",
+            Token::DotDot => "..",
+            Token::Colon => ":",
+            Token::ColonColon => "::",
+            Token::SemiColon => ";",
+            Token::Comma => ",",
+            Token::LParen => "(",
+            Token::RParen => ")",
+            Token::LBrace => "{",
+            Token::RBrace => "}",
+            Token::LBrack => "[",
+            Token::RBrack => "]",
+            Token::Underscore => "_",
+            Token::Question => "?",
+            Token::FatArrow => "=>",
+            Token::Bar => "|",
+            // Keywords
+            Token::And => "and",
+            Token::Break => "break",
+            Token::Continue => "continue",
+            Token::Def => "def",
+            Token::Deploy => "deploy",
+            Token::Desc => "desc",
+            Token::Else => "else",
+            Token::Enum => "enum",
+            Token::False => "false",
+            Token::For => "for",
+            Token::From => "from",
+            Token::Fun => "fun",
+            Token::Group => "group",
+            Token::If => "if",
+            Token::Impl => "impl",
+            Token::In => "in",
+            Token::Into => "into",
+            Token::Join => "join",
+            Token::Match => "match",
+            Token::On => "on",
+            Token::Or => "or",
+            Token::Order => "order",
+            Token::Over => "over",
+            Token::Return => "return",
+            Token::Record => "record",
+            Token::Select => "select",
+            Token::Struct => "struct",
+            Token::True => "true",
+            Token::Type => "type",
+            Token::Var => "var",
+            Token::Where => "where",
+            Token::While => "while",
+            Token::With => "with",
+            // Literals
+            Token::Code => "<code>",
+            Token::Name => "<name>",
+            Token::Int => "<int>",
+            Token::IntSuffix => "<int-suffix>",
+            Token::Float => "<float>",
+            Token::FloatSuffix => "<float-suffix>",
+            Token::String => "<string>",
+            Token::Char => "<char>",
+            Token::Err => "<err>",
+            Token::Eof => "<eof>",
+            Token::Of => "of",
+            Token::As => "as",
+            Token::Compute => "compute",
+            Token::Trait => "trait",
+            _ => "<unknown>",
+        }
+    }
+}
+
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            Token::Eq => write!(f, "="),
-            Token::EqEq => write!(f, "=="),
-            Token::Not => write!(f, "!"),
-            Token::NotEq => write!(f, "!="),
-            Token::Lt => write!(f, "<"),
-            Token::Le => write!(f, "<="),
-            Token::Gt => write!(f, ">"),
-            Token::Ge => write!(f, ">="),
-            Token::Plus => write!(f, "+"),
-            Token::Minus => write!(f, "-"),
-            Token::Star => write!(f, "*"),
-            Token::Slash => write!(f, "/"),
-            Token::Dot => write!(f, "."),
-            Token::DotDot => write!(f, ".."),
-            Token::Colon => write!(f, ":"),
-            Token::ColonColon => write!(f, "::"),
-            Token::SemiColon => write!(f, ";"),
-            Token::Comma => write!(f, ","),
-            Token::LParen => write!(f, "("),
-            Token::RParen => write!(f, ")"),
-            Token::LBrace => write!(f, "{{"),
-            Token::RBrace => write!(f, "}}"),
-            Token::LBrack => write!(f, "["),
-            Token::RBrack => write!(f, "]"),
-            Token::Underscore => write!(f, "_"),
-            Token::Question => write!(f, "?"),
-            Token::FatArrow => write!(f, "=>"),
-            Token::Bar => write!(f, "|"),
-            // Keywords
-            Token::And => write!(f, "and"),
-            Token::Break => write!(f, "break"),
-            Token::Continue => write!(f, "continue"),
-            Token::Def => write!(f, "def"),
-            Token::Deploy => write!(f, "deploy"),
-            Token::Desc => write!(f, "desc"),
-            Token::Else => write!(f, "else"),
-            Token::Enum => write!(f, "enum"),
-            Token::False => write!(f, "false"),
-            Token::For => write!(f, "for"),
-            Token::From => write!(f, "from"),
-            Token::Fun => write!(f, "fun"),
-            Token::Group => write!(f, "group"),
-            Token::If => write!(f, "if"),
-            Token::Impl => write!(f, "impl"),
-            Token::In => write!(f, "in"),
-            Token::Into => write!(f, "into"),
-            Token::Join => write!(f, "join"),
-            Token::Match => write!(f, "match"),
-            Token::On => write!(f, "on"),
-            Token::Or => write!(f, "or"),
-            Token::Order => write!(f, "order"),
-            Token::Over => write!(f, "over"),
-            Token::Return => write!(f, "return"),
-            Token::Select => write!(f, "select"),
-            Token::Struct => write!(f, "struct"),
-            Token::True => write!(f, "true"),
-            Token::Type => write!(f, "type"),
-            Token::Var => write!(f, "var"),
-            Token::Where => write!(f, "where"),
-            Token::While => write!(f, "while"),
-            Token::With => write!(f, "with"),
-            // Literals
-            Token::Code => write!(f, "<code>"),
-            Token::Name => write!(f, "<name>"),
-            Token::Int => write!(f, "<int>"),
-            Token::IntSuffix => write!(f, "<int-suffix>"),
-            Token::Float => write!(f, "<float>"),
-            Token::FloatSuffix => write!(f, "<float-suffix>"),
-            Token::String => write!(f, "<string>"),
-            Token::Char => write!(f, "<char>"),
-            Token::Err => write!(f, "<err>"),
-            Token::Eof => write!(f, "<eof>"),
-            Token::Of => write!(f, "of"),
-            Token::As => write!(f, "as"),
-            Token::Compute => write!(f, "compute"),
-            Token::Trait => write!(f, "trait"),
-            _ => write!(f, "<unknown>"),
-        }
+        write!(f, "{}", self.as_str())
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Spanned<T> {
-    pub span: Span,
-    pub value: T,
+    pub s: Span,
+    pub v: T,
 }
 
 impl<T> Spanned<T> {
-    pub fn new(span: Span, value: T) -> Spanned<T> {
-        Spanned { span, value }
+    pub fn new(span: Span, data: T) -> Spanned<T> {
+        Spanned { s: span, v: data }
     }
 
     pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Spanned<U> {
         Spanned {
-            span: self.span,
-            value: f(self.value),
+            s: self.s,
+            v: f(self.v),
         }
     }
 }
@@ -194,10 +302,10 @@ impl<T> Spanned<Option<Vec<T>>> {
 
 impl<T> Spanned<Option<T>> {
     pub fn transpose(self) -> Option<Spanned<T>> {
-        match self.value {
+        match self.v {
             Some(value) => Some(Spanned {
-                span: self.span,
-                value,
+                s: self.s,
+                v: value,
             }),
             None => None,
         }
@@ -206,8 +314,8 @@ impl<T> Spanned<Option<T>> {
 
 impl Spanned<Token> {
     pub fn text(self, input: &str) -> &str {
-        let span = self.span;
-        match self.value {
+        let span = self.s;
+        match self.v {
             Token::Code => &input[(span.start() + 3) as usize..(span.end() - 3) as usize],
             Token::String => &input[(span.start() + 1) as usize..(span.end() - 1) as usize],
             Token::Char => &input[(span.start() + 1) as usize..(span.end() - 1) as usize],
@@ -410,9 +518,8 @@ impl<'a> Lexer<'a> {
                                         self.pos += 1;
                                     }
                                     break Token::FloatSuffix;
-                                } else {
-                                    break Token::Float;
                                 }
+                                break Token::Float;
                             }
                             _ => {
                                 self.pos += 1;
@@ -428,9 +535,8 @@ impl<'a> Lexer<'a> {
                                     self.pos += 1;
                                 }
                                 break Token::IntSuffix;
-                            } else {
-                                break Token::Int;
                             }
+                            break Token::Int;
                         }
                         None => {
                             break Token::Int;

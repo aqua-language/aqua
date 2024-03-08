@@ -1,5 +1,4 @@
-use derive_more::Deref;
-use derive_more::DerefMut;
+use crate::ArrayVec;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::future::Future;
@@ -9,7 +8,6 @@ use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
 
-use arrayvec::ArrayVec;
 use macros::Send;
 use macros::Sync;
 use macros::Unpin;
@@ -27,7 +25,6 @@ pub struct ChannelInner<T> {
     waker: Option<Waker>,
 }
 
-#[derive(Deref, DerefMut)]
 pub struct Channel<T>(pub(crate) Rc<RefCell<ChannelInner<T>>>);
 
 impl<T> Clone for Channel<T> {
@@ -45,7 +42,7 @@ impl<T> Clone for Sender<T> {
     }
 }
 
-#[derive(Send, Sync, Deref)]
+#[derive(Send, Sync)]
 pub struct Receiver<T>(pub(crate) Channel<T>);
 
 impl<T> Clone for Receiver<T> {
@@ -110,7 +107,7 @@ impl<T> Future for ReceiverFuture<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let mut chan = self.chan.as_ref().borrow_mut();
+        let mut chan = self.chan.0.borrow_mut();
         if let Some(data) = chan.buffer.pop_back() {
             if let Some(waker) = chan.waker.take() {
                 waker.wake();
@@ -128,7 +125,7 @@ impl<T> Future for SenderFuture<T> {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.as_mut().get_mut();
-        let mut chan = this.chan.as_ref().borrow_mut();
+        let mut chan = this.chan.0.borrow_mut();
         if chan.buffer.len() < chan.buffer.capacity() {
             let data = this.data.take().unwrap();
             if let Some(waker) = chan.waker.take() {
@@ -148,7 +145,7 @@ impl<const N: usize, T> Future for BatchReceiverFuture<N, T> {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let this = self.as_mut().get_mut();
-        let mut chan = this.chan.as_ref().borrow_mut();
+        let mut chan = this.chan.0.borrow_mut();
         if !chan.buffer.is_empty() {
             let mut data = ArrayVec::new();
             for _ in 0..N.min(chan.buffer.len()) {
@@ -170,7 +167,7 @@ impl<const N: usize, T> Future for BatchSenderFuture<N, T> {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.as_mut().get_mut();
-        let mut chan = this.chan.as_ref().borrow_mut();
+        let mut chan = this.chan.0.borrow_mut();
         let data = &mut this.data;
         let (len, cap) = { (chan.buffer.len(), chan.buffer.capacity()) };
         if len < cap {

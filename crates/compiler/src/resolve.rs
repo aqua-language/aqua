@@ -1,12 +1,15 @@
 use std::rc::Rc;
 
+use crate::ast::Arm;
+use crate::ast::Block;
 use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Name;
 use crate::ast::Param;
 use crate::ast::Pat;
-use crate::ast::PatArg;
+use crate::ast::UnresolvedPatField;
+use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
@@ -18,7 +21,6 @@ use crate::ast::StmtType;
 use crate::ast::StmtVar;
 use crate::ast::TraitDef;
 use crate::ast::Type;
-use crate::ast::UnresolvedPath;
 use crate::diag::Report;
 use crate::lexer::Span;
 
@@ -50,6 +52,7 @@ enum Binding {
     Enum(usize, Vec<Name>),
     Struct(usize, Vec<Name>),
     BuiltinType(usize),
+    #[allow(dead_code)]
     BuiltinDef(usize),
     Generic,
     TypeAlias(usize),
@@ -261,6 +264,7 @@ impl Context {
         );
     }
 
+    #[allow(dead_code)]
     fn wrong_variant<T>(&mut self, name: &Name, found: &(Name, T), expected: &[Name]) {
         let found = &found.0;
         let expected = names_to_string(expected, |x| format!("{x}"));
@@ -494,13 +498,13 @@ impl Context {
         Param::new(span, name, ty)
     }
 
-    pub fn path(&mut self, p: &UnresolvedPath) -> UnresolvedPath {
+    pub fn path(&mut self, p: &Path) -> Path {
         let segments = p
             .segments
             .iter()
             .map(|(x, ts)| (x.clone(), ts.iter().map(|t| self.ty(t)).collect::<Vec<_>>()))
             .collect();
-        UnresolvedPath::new(segments)
+        Path::new(segments)
     }
 
     pub fn ty(&mut self, t: &Type) -> Type {
@@ -573,10 +577,9 @@ impl Context {
                 let x = x.clone();
                 Expr::Field(s, t, Rc::new(e), x)
             }
-            Expr::Block(_, _, ss, e) => {
-                let ss = ss.iter().map(|s| self.stmt(s)).collect();
-                let e = self.expr(e);
-                Expr::Block(s, t, ss, Rc::new(e))
+            Expr::Block(_, _, b) => {
+                let b = self.block(b);
+                Expr::Block(s, t, b)
             }
             Expr::Query(..) => {
                 todo!()
@@ -612,16 +615,13 @@ impl Context {
             }
             Expr::Match(_, _, e, xps) => {
                 let e = self.expr(e);
-                let xps = xps
-                    .iter()
-                    .map(|(p, e)| (self.pat(p), self.expr(e)))
-                    .collect();
+                let xps = xps.iter().map(|arm| self.arm(arm)).collect();
                 Expr::Match(s, t, Rc::new(e), xps)
             }
-            Expr::While(_, _, e0, e1) => {
-                let e0 = self.expr(e0);
-                let e1 = self.expr(e1);
-                Expr::While(s, t, Rc::new(e0), Rc::new(e1))
+            Expr::While(_, _, e, b) => {
+                let e = self.expr(e);
+                let b = self.block(b);
+                Expr::While(s, t, Rc::new(e), b)
             }
             Expr::Record(_, _, xes) => {
                 let xes = xes.iter().map(|(x, e)| (x.clone(), self.expr(e))).collect();
@@ -631,7 +631,24 @@ impl Context {
             Expr::Infix(_, _, _, _, _) => unreachable!(),
             Expr::Postfix(_, _, _, _) => unreachable!(),
             Expr::Prefix(_, _, _, _) => unreachable!(),
+            Expr::If(_, _, _, _, _) => todo!(),
+            Expr::For(_, _, _, _, _) => todo!(),
+            Expr::Char(_, _, _) => todo!(),
         }
+    }
+
+    fn block(&mut self, b: &Block) -> Block {
+        let span = b.span;
+        let stmts = b.stmts.iter().map(|s| self.stmt(s)).collect();
+        let e = self.expr(&b.expr);
+        Block::new(span, stmts, e)
+    }
+
+    fn arm(&mut self, arm: &Arm) -> Arm {
+        let span = arm.span;
+        let p = self.pat(&arm.p);
+        let e = self.expr(&arm.e);
+        Arm::new(span, p, e)
     }
 
     fn call(&mut self, s: Span, t1: &Type, e: &Expr, es: &[Expr]) -> Expr {
@@ -790,10 +807,20 @@ impl Context {
             Pat::Wildcard(_, _) => Pat::Wildcard(s, t),
             Pat::Bool(_, _, v) => Pat::Bool(s, t, *v),
             Pat::Err(_, _) => Pat::Err(s, t),
+            Pat::Record(_, _, xps) => {
+                let xps = xps.iter().map(|(x, p)| (x.clone(), self.pat(p))).collect();
+                Pat::Record(s, t, xps)
+            }
+            Pat::Or(_, _, p0, p1) => {
+                let p0 = self.pat(p0);
+                let p1 = self.pat(p1);
+                Pat::Or(s, t, Rc::new(p0), Rc::new(p1))
+            }
+            Pat::Char(_, _, _) => todo!(),
         }
     }
 
-    fn unnamed_pat_args(&mut self, args: Option<Vec<PatArg>>, fieldless: bool) -> Option<Vec<Pat>> {
+    fn unnamed_pat_args(&mut self, args: Option<Vec<UnresolvedPatField>>, fieldless: bool) -> Option<Vec<Pat>> {
         if args.is_none() && fieldless {
             return Some(vec![]);
         }
@@ -801,7 +828,7 @@ impl Context {
         let mut ps = Vec::with_capacity(args.len());
         for arg in args {
             match arg {
-                PatArg::Named(x, p) => {
+                UnresolvedPatField::Named(x, p) => {
                     self.report.err(
                         x.span,
                         format!("Expected `<pat>`, found `{x} = {p}`.",),
@@ -809,13 +836,13 @@ impl Context {
                     );
                     return None;
                 }
-                PatArg::Unnamed(p) => ps.push(p.clone()),
+                UnresolvedPatField::Unnamed(p) => ps.push(p.clone()),
             }
         }
         Some(ps)
     }
 
-    fn named_pat_args(&mut self, args: Option<Vec<PatArg>>) -> Option<Vec<(Name, Pat)>> {
+    fn named_pat_args(&mut self, args: Option<Vec<UnresolvedPatField>>) -> Option<Vec<(Name, Pat)>> {
         if args.is_none() {
             return Some(vec![]);
         }
@@ -823,8 +850,8 @@ impl Context {
         let mut xps = Vec::with_capacity(args.len());
         for arg in args {
             match arg {
-                PatArg::Named(x, p) => xps.push((x.clone(), p.clone())),
-                PatArg::Unnamed(p) => {
+                UnresolvedPatField::Named(x, p) => xps.push((x.clone(), p.clone())),
+                UnresolvedPatField::Unnamed(p) => {
                     self.report.err(
                         p.span(),
                         format!("Expected `{p} = <pat>`.",),
@@ -897,7 +924,7 @@ impl Context {
     fn resolve_bound_path(
         &mut self,
         span: Span,
-        path: &UnresolvedPath,
+        path: &Path,
         expected: Option<&(Vec<(Name, usize)>, Vec<(Name, usize)>)>,
     ) -> Bound {
         let path = self.path(path);
@@ -938,7 +965,7 @@ impl Context {
         }
     }
 
-    fn resolve_expr_path(&mut self, s: Span, t: Type, path: &UnresolvedPath) -> Expr {
+    fn resolve_expr_path(&mut self, s: Span, t: Type, path: &Path) -> Expr {
         let path = self.path(path);
         let mut iter = path.segments.into_iter().peekable();
         let (x0, ts0) = iter.next().unwrap();
@@ -1040,7 +1067,7 @@ impl Context {
         }
     }
 
-    fn resolve_type_path(&mut self, p: &UnresolvedPath) -> Type {
+    fn resolve_type_path(&mut self, p: &Path) -> Type {
         let p = self.path(p);
         let mut iter = p.segments.into_iter().peekable();
         let (x0, ts0) = iter.next().unwrap();
@@ -1115,8 +1142,8 @@ impl Context {
         &mut self,
         s: Span,
         t: Type,
-        path: &UnresolvedPath,
-        args: &Option<Vec<PatArg>>,
+        path: &Path,
+        args: &Option<Vec<UnresolvedPatField>>,
     ) -> Pat {
         let path = self.path(path);
         let mut iter = path.segments.into_iter().peekable();

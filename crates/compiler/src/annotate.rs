@@ -1,11 +1,14 @@
 use std::rc::Rc;
 
+use crate::ast::Arm;
+use crate::ast::Block;
 use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Param;
 use crate::ast::Pat;
-use crate::ast::PatArg;
+use crate::ast::UnresolvedPatField;
+use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
@@ -17,7 +20,6 @@ use crate::ast::StmtType;
 use crate::ast::StmtVar;
 use crate::ast::TraitDef;
 use crate::ast::Type;
-use crate::ast::UnresolvedPath;
 use crate::infer::Context;
 
 // Replace all holes with fresh type variables.
@@ -85,14 +87,14 @@ impl Type {
     }
 }
 
-impl UnresolvedPath {
-    pub fn annotate(&self, ctx: &mut Context) -> UnresolvedPath {
+impl Path {
+    pub fn annotate(&self, ctx: &mut Context) -> Path {
         let segments = self
             .segments
             .iter()
             .map(|(x, ts)| (x.clone(), ts.iter().map(|t| t.annotate(ctx)).collect()))
             .collect();
-        UnresolvedPath::new(segments)
+        Path::new(segments)
     }
 }
 
@@ -285,10 +287,10 @@ impl Expr {
                 let es = es.iter().map(|e| e.annotate(ctx)).collect();
                 Expr::Call(s, t, e, es)
             }
-            Expr::Block(_, _, ss, e) => {
-                let ss = ss.iter().map(|s| s.annotate(ctx)).collect();
-                let e = Rc::new(e.annotate(ctx));
-                Expr::Block(s, t, ss, e)
+            Expr::Block(_, _, b) => {
+                let ss = b.stmts.iter().map(|s| s.annotate(ctx)).collect();
+                let e = b.expr.annotate(ctx);
+                Expr::Block(s, t, Block::new(b.span, ss, e))
             }
             Expr::Query(..) => todo!(),
             Expr::Struct(_, _, x, ts, xes) => {
@@ -354,16 +356,13 @@ impl Expr {
             }
             Expr::Match(_, _, e, pes) => {
                 let e = Rc::new(e.annotate(ctx));
-                let pes = pes
-                    .iter()
-                    .map(|(p, e)| (p.annotate(ctx), e.annotate(ctx)))
-                    .collect();
+                let pes = pes.iter().map(|arm| arm.annotate(ctx)).collect();
                 Expr::Match(s, t, e, pes)
             }
-            Expr::While(_, _, e0, e1) => {
-                let e0 = Rc::new(e0.annotate(ctx));
-                let e1 = Rc::new(e1.annotate(ctx));
-                Expr::While(s, t, e0, e1)
+            Expr::While(_, _, e0, b) => {
+                let e = Rc::new(e0.annotate(ctx));
+                let b = b.annotate(ctx);
+                Expr::While(s, t, e, b)
             }
             Expr::Record(_, _, xes) => {
                 let xes = xes
@@ -376,7 +375,26 @@ impl Expr {
             Expr::Infix(_, _, _, _, _) => unreachable!(),
             Expr::Postfix(_, _, _, _) => unreachable!(),
             Expr::Prefix(_, _, _, _) => unreachable!(),
+            Expr::If(_, _, _, _, _) => todo!(),
+            Expr::For(_, _, _, _, _) => todo!(),
+            Expr::Char(_, _, _) => todo!(),
         }
+    }
+}
+
+impl Block {
+    pub fn annotate(&self, ctx: &mut Context) -> Block {
+        let ss = self.stmts.iter().map(|s| s.annotate(ctx)).collect();
+        let expr = self.expr.annotate(ctx);
+        Block::new(self.span, ss, expr)
+    }
+}
+
+impl Arm {
+    pub fn annotate(&self, ctx: &mut Context) -> Arm {
+        let p = self.p.annotate(ctx);
+        let e = self.e.annotate(ctx);
+        Arm::new(self.span, p, e)
     }
 }
 
@@ -385,16 +403,6 @@ impl Pat {
         let s = self.span();
         let t = self.ty().annotate(ctx);
         match self {
-            // Pat::Unresolved(_, _, _, _) => todo!(),
-            // Pat::Var(_, _, _) => todo!(),
-            // Pat::Tuple(_, _, _) => todo!(),
-            // Pat::Struct(_, _, _, _, _) => todo!(),
-            // Pat::Enum(_, _, _, _, _, _) => todo!(),
-            // Pat::Int(_, _, _) => todo!(),
-            // Pat::String(_, _, _) => todo!(),
-            // Pat::Wildcard(_, _) => todo!(),
-            // Pat::Bool(_, _, _) => todo!(),
-            // Pat::Err(_, _) => todo!(),
             Pat::Unresolved(_, _, path, args) => {
                 let path = path.annotate(ctx);
                 let args = args
@@ -436,20 +444,33 @@ impl Pat {
             Pat::Wildcard(_, _) => Pat::Wildcard(s, t),
             Pat::Bool(_, _, v) => Pat::Bool(s, t, *v),
             Pat::Err(_, _) => Pat::Err(s, t),
+            Pat::Record(_, _, xps) => {
+                let xps = xps
+                    .iter()
+                    .map(|(x, p)| (x.clone(), p.annotate(ctx)))
+                    .collect();
+                Pat::Record(s, t, xps)
+            }
+            Pat::Or(_, _, p0, p1) => {
+                let p0 = p0.annotate(ctx);
+                let p1 = p1.annotate(ctx);
+                Pat::Or(s, t, Rc::new(p0), Rc::new(p1))
+            }
+            Pat::Char(_, _, c) => Pat::Char(s, t, *c),
         }
     }
 }
 
-impl PatArg {
-    pub fn annotate(&self, ctx: &mut Context) -> PatArg {
+impl UnresolvedPatField {
+    pub fn annotate(&self, ctx: &mut Context) -> UnresolvedPatField {
         match self {
-            PatArg::Named(x, p) => {
+            UnresolvedPatField::Named(x, p) => {
                 let p = p.annotate(ctx);
-                PatArg::Named(x.clone(), p)
+                UnresolvedPatField::Named(x.clone(), p)
             }
-            PatArg::Unnamed(p) => {
+            UnresolvedPatField::Unnamed(p) => {
                 let p = p.annotate(ctx);
-                PatArg::Unnamed(p)
+                UnresolvedPatField::Unnamed(p)
             }
         }
     }

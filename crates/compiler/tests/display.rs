@@ -1,12 +1,12 @@
-use compiler::util::expr_add;
+use compiler::util::expr_add_desugared;
 use compiler::util::expr_bool;
-use compiler::util::expr_div;
-use compiler::util::expr_eq;
+use compiler::util::expr_div_desugared;
+use compiler::util::expr_eq_desugared;
 use compiler::util::expr_int;
-use compiler::util::expr_mul;
-use compiler::util::expr_ne;
+use compiler::util::expr_mul_desugared;
+use compiler::util::expr_ne_desugared;
 use compiler::util::expr_string;
-use compiler::util::expr_sub;
+use compiler::util::expr_sub_desugared;
 use compiler::util::expr_tuple;
 use compiler::util::stmt_struct;
 use compiler::util::ty;
@@ -57,49 +57,49 @@ fn test_display_bool1() {
 
 #[test]
 fn test_display_binop0() {
-    let a = expr_add(expr_int("1"), expr_int("2")).to_string();
+    let a = expr_add_desugared(expr_int("1"), expr_int("2")).to_string();
     let b = "Add::add(1, 2)";
     assert!(a == b, "{}\n{}", a, b);
 }
 
 #[test]
 fn test_display_binop1() {
-    let a = expr_sub(expr_int("1"), expr_int("2")).to_string();
+    let a = expr_sub_desugared(expr_int("1"), expr_int("2")).to_string();
     let b = "Sub::sub(1, 2)";
     assert!(a == b, "{}\n{}", a, b);
 }
 
 #[test]
 fn test_display_binop2() {
-    let a = expr_mul(expr_int("1"), expr_int("2")).to_string();
+    let a = expr_mul_desugared(expr_int("1"), expr_int("2")).to_string();
     let b = "Mul::mul(1, 2)";
     assert!(a == b, "{}\n{}", a, b);
 }
 
 #[test]
 fn test_display_binop3() {
-    let a = expr_div(expr_int("1"), expr_int("2")).to_string();
+    let a = expr_div_desugared(expr_int("1"), expr_int("2")).to_string();
     let b = "Div::div(1, 2)";
     assert!(a == b, "{}\n{}", a, b);
 }
 
 #[test]
 fn test_display_binop4() {
-    let a = expr_eq(expr_int("1"), expr_int("2")).to_string();
+    let a = expr_eq_desugared(expr_int("1"), expr_int("2")).to_string();
     let b = "PartialEq::eq(1, 2)";
     assert!(a == b, "{}\n{}", a, b);
 }
 
 #[test]
 fn test_display_binop5() {
-    let a = expr_ne(expr_int("1"), expr_int("2")).to_string();
+    let a = expr_ne_desugared(expr_int("1"), expr_int("2")).to_string();
     let b = "PartialEq::ne(1, 2)";
     assert!(a == b, "{}\n{}", a, b);
 }
 
 #[test]
 fn test_display_binop6() {
-    let a = expr_add(expr_int("1"), expr_add(expr_int("2"), expr_int("3"))).to_string();
+    let a = expr_add_desugared(expr_int("1"), expr_add_desugared(expr_int("2"), expr_int("3"))).to_string();
     let b = "Add::add(1, Add::add(2, 3))";
     assert!(a == b, "{}\n{}", a, b);
 }

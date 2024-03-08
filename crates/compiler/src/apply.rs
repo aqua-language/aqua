@@ -1,11 +1,14 @@
 use std::rc::Rc;
 
+use crate::ast::Arm;
+use crate::ast::Block;
 use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Name;
 use crate::ast::Param;
 use crate::ast::Pat;
+use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
@@ -13,7 +16,6 @@ use crate::ast::StmtImpl;
 use crate::ast::StmtType;
 use crate::ast::StmtVar;
 use crate::ast::Type;
-use crate::ast::UnresolvedPath;
 
 impl Program {
     pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Program {
@@ -207,14 +209,14 @@ impl StmtType {
     }
 }
 
-impl UnresolvedPath {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> UnresolvedPath {
+impl Path {
+    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Path {
         let segments = self
             .segments
             .iter()
             .map(|(x, ts)| (x.clone(), ts.iter().map(f).collect()))
             .collect::<Vec<_>>();
-        UnresolvedPath::new(segments)
+        Path::new(segments)
     }
 }
 
@@ -266,10 +268,9 @@ impl Expr {
                 let es = es.iter().map(|e| e.map_type(f)).collect();
                 Expr::Call(s, t, Rc::new(e), es)
             }
-            Expr::Block(_, _, ss, e) => {
-                let ss = ss.iter().map(|s| s.map_type(f)).collect();
-                let e = e.map_type(f);
-                Expr::Block(s, t, ss, Rc::new(e))
+            Expr::Block(_, _, b) => {
+                let b = b.map_type(f);
+                Expr::Block(s, t, b)
             }
             Expr::Query(..) => todo!(),
             Expr::Struct(_, _, x, ts, xts) => {
@@ -332,16 +333,13 @@ impl Expr {
             }
             Expr::Match(_, _, e, pes) => {
                 let e = Rc::new(e.map_type(f));
-                let pes = pes
-                    .iter()
-                    .map(|(p, e)| (p.clone(), e.map_type(f)))
-                    .collect();
+                let pes = pes.iter().map(|arm| arm.map_type(f)).collect();
                 Expr::Match(s, t, e, pes)
             }
-            Expr::While(_, _, e0, e1) => {
-                let e0 = Rc::new(e0.map_type(f));
-                let e1 = Rc::new(e1.map_type(f));
-                Expr::While(s, t, e0, e1)
+            Expr::While(_, _, e, b) => {
+                let e = Rc::new(e.map_type(f));
+                let b = b.map_type(f);
+                Expr::While(s, t, e, b)
             }
             Expr::Record(_, _, xes) => {
                 let xes = xes
@@ -354,7 +352,28 @@ impl Expr {
             Expr::Infix(_, _, _, _, _) => unreachable!(),
             Expr::Postfix(_, _, _, _) => unreachable!(),
             Expr::Prefix(_, _, _, _) => unreachable!(),
+            Expr::If(_, _, _, _, _) => todo!(),
+            Expr::For(_, _, _, _, _) => todo!(),
+            Expr::Char(_, _, _) => todo!(),
         }
+    }
+}
+
+impl Arm {
+    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Arm {
+        let span = self.span;
+        let p = self.p.map_type(f);
+        let e = self.e.map_type(f);
+        Arm::new(span, p, e)
+    }
+}
+
+impl Block {
+    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Block {
+        let span = self.span;
+        let stmts = self.stmts.iter().map(|s| s.map_type(f)).collect();
+        let expr = self.expr.map_type(f);
+        Block::new(span, stmts, expr)
     }
 }
 
@@ -390,6 +409,19 @@ impl Pat {
             Pat::Wildcard(_, _) => Pat::Wildcard(span, t),
             Pat::Bool(_, _, v) => Pat::Bool(span, t, *v),
             Pat::Err(_, _) => Pat::Err(span, t),
+            Pat::Record(_, _, xps) => {
+                let xps = xps
+                    .iter()
+                    .map(|(x, p)| (x.clone(), p.map_type(f)))
+                    .collect();
+                Pat::Record(span, t, xps)
+            }
+            Pat::Or(_, _, p0, p1) => {
+                let p0 = Rc::new(p0.map_type(f));
+                let p1 = Rc::new(p1.map_type(f));
+                Pat::Or(span, t, p0, p1)
+            }
+            Pat::Char(_, _, c) => Pat::Char(span, t, *c),
         }
     }
 }

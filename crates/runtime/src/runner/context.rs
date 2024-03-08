@@ -1,4 +1,4 @@
-use futures::Future;
+use std::future::Future;
 
 use crate::builtins::keyed_stream::KeyedCollector;
 use crate::builtins::keyed_stream::KeyedStream;

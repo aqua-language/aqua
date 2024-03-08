@@ -57,7 +57,7 @@ impl<T> Stream<T> {
 
 #[allow(unused)]
 mod wip_stream {
-    use arrayvec::ArrayVec;
+    use crate::ArrayVec;
 
     use crate::traits::Data;
     use crate::traits::DeepClone;
@@ -78,7 +78,7 @@ mod wip_stream {
             self.0.recv().await
         }
         pub async fn recv_batch<const N: usize>(&mut self) -> ArrayVec<Event<T>, N> {
-            self.0.recv_batch().await
+            self.0.recv_batch::<N>().await
         }
     }
 
@@ -87,7 +87,7 @@ mod wip_stream {
             self.0.send(event).await;
         }
         pub async fn send_batch<const N: usize>(&self, events: ArrayVec<Event<T>, N>) {
-            self.0.send_batch(events).await;
+            self.0.send_batch::<N>(events).await;
         }
     }
 

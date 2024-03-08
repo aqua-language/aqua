@@ -1,4 +1,6 @@
 #![allow(unused)]
+use crate::ast::Arm;
+use crate::ast::Block;
 use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Expr;
@@ -6,6 +8,7 @@ use crate::ast::Index;
 use crate::ast::Name;
 use crate::ast::Param;
 use crate::ast::Pat;
+use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Query;
 use crate::ast::Stmt;
@@ -19,7 +22,6 @@ use crate::ast::StmtVar;
 use crate::ast::TraitDef;
 use crate::ast::TraitType;
 use crate::ast::Type;
-use crate::ast::UnresolvedPath;
 use crate::print::Print;
 
 pub struct Wrapper<T>(T);
@@ -239,8 +241,8 @@ impl<'a, 'b> Rust<'a, 'b> {
         Ok(())
     }
 
-    fn _expr(&mut self, expr: &Expr) -> std::fmt::Result {
-        match expr {
+    fn _expr(&mut self, e: &Expr) -> std::fmt::Result {
+        match e {
             Expr::Unresolved(_, _, p) => unreachable!(),
             Expr::Int(_, _, v) => {
                 self.lit(v)?;
@@ -285,19 +287,10 @@ impl<'a, 'b> Rust<'a, 'b> {
                 self.expr(e)?;
                 self.paren(|this| this.comma_sep(es, Self::expr))?;
             }
-            Expr::Block(_, _, ss, e) => {
-                self.brace(|this| {
-                    this.indented(|this| {
-                        this.newline_sep(ss, |this, s| this.stmt(s))?;
-                        this.newline()?;
-                        this.expr(e)
-                    })?;
-                    this.newline()
-                })?;
+            Expr::Block(_, _, b) => {
+                self.block(b)?;
             }
-            Expr::Query(_, _, qs) => {
-                self.newline_sep(qs, Self::query_stmt)?;
-            }
+            Expr::Query(_, _, qs) => unreachable!(),
             Expr::Assoc(_, _, x0, ts0, x1, ts1) => {
                 self.name(x0)?;
                 self.type_args(ts0)?;
@@ -352,12 +345,12 @@ impl<'a, 'b> Rust<'a, 'b> {
                 self.space()?;
                 self.scope(arms, Self::arm)?;
             }
-            Expr::While(_, _, e0, e1) => {
+            Expr::While(_, _, e, b) => {
                 self.kw("while")?;
                 self.space()?;
-                self.expr(e0)?;
+                self.expr(e)?;
                 self.space()?;
-                self.expr(e1)?;
+                self.block(b)?;
             }
             Expr::Record(_, _, xts) => {
                 self.fields(xts, Self::assign)?;
@@ -366,16 +359,30 @@ impl<'a, 'b> Rust<'a, 'b> {
             Expr::Infix(_, _, _, _, _) => unreachable!(),
             Expr::Postfix(_, _, _, _) => unreachable!(),
             Expr::Prefix(_, _, _, _) => unreachable!(),
+            Expr::If(_, _, _, _, _) => todo!(),
+            Expr::For(_, _, _, _, _) => todo!(),
+            Expr::Char(_, _, _) => todo!(),
         }
         Ok(())
     }
 
-    fn arm(&mut self, (p, e): &(Pat, Expr)) -> std::fmt::Result {
-        self.pat(p)?;
+    fn block(&mut self, b: &Block) -> std::fmt::Result {
+        self.brace(|this| {
+            this.indented(|this| {
+                this.newline_sep(&b.stmts, |this, s| this.stmt(s))?;
+                this.newline()?;
+                this.expr(&b.expr)
+            })?;
+            this.newline()
+        })
+    }
+
+    fn arm(&mut self, arm: &Arm) -> std::fmt::Result {
+        self.pat(&arm.p)?;
         self.space()?;
         self.punct("=>")?;
         self.space()?;
-        self.expr(e)
+        self.expr(&arm.e)
     }
 
     fn expr(&mut self, expr: &Expr) -> std::fmt::Result {
@@ -413,88 +420,6 @@ impl<'a, 'b> Rust<'a, 'b> {
         self.name(x)?;
         self.punct(":")?;
         self.ty(t)
-    }
-
-    fn query_stmt(&mut self, q: &Query) -> std::fmt::Result {
-        match q {
-            Query::From(_, _, xes) => {
-                self.kw("from")?;
-                self.space()?;
-                self.comma_scope(xes, Self::scan)?;
-            }
-            Query::Where(_, _, e) => {
-                self.kw("where")?;
-                self.space()?;
-                self.expr(e)?;
-            }
-            Query::Select(_, _, xes) => {
-                self.kw("select")?;
-                self.space()?;
-                self.comma_scope(xes, Self::assign)?;
-            }
-            Query::Join(_, _, xes, e) => {
-                self.kw("join")?;
-                self.space()?;
-                self.comma_scope(xes, Self::scan)?;
-                self.space()?;
-                self.punct("on")?;
-                self.space()?;
-                self.expr(e)?;
-            }
-            Query::Group(_, _, xs, qs) => {
-                self.kw("group")?;
-                self.space()?;
-                self.comma_sep(xs, Self::name)?;
-                self.space()?;
-                self.comma_scope(qs, Self::query_stmt)?;
-            }
-            Query::Over(_, _, e, qs) => {
-                self.kw("over")?;
-                self.space()?;
-                self.expr(e)?;
-                self.comma_scope(qs, Self::query_stmt)?;
-            }
-            Query::Order(_, _, os) => {
-                self.kw("order")?;
-                self.space()?;
-                self.comma_sep(os, Self::ordering)?;
-            }
-            Query::With(_, _, xes) => {
-                self.kw("with")?;
-                self.space()?;
-                self.comma_scope(xes, Self::assign)?;
-            }
-            Query::Into(_, _, e) => {
-                self.kw("into")?;
-                self.space()?;
-                self.comma_sep(e, Self::expr)?;
-            }
-            Query::Compute(_, _, aggs) => {
-                self.kw("compute")?;
-                self.space()?;
-                self.comma_scope(aggs, Self::agg)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn ordering(&mut self, (x, d): &(Name, bool)) -> std::fmt::Result {
-        self.name(x)?;
-        if *d {
-            self.space()?;
-            self.kw("desc")?;
-        }
-        Ok(())
-    }
-
-    fn agg(&mut self, (x, e0, e1): &(Name, Expr, Expr)) -> std::fmt::Result {
-        self.name(x)?;
-        self.punct("=")?;
-        self.expr(e0)?;
-        self.space()?;
-        self.kw("of")?;
-        self.space()?;
-        self.expr(e1)
     }
 
     fn bound(&mut self, b: &Bound) -> std::fmt::Result {
@@ -614,6 +539,17 @@ impl<'a, 'b> Rust<'a, 'b> {
             }
             Pat::Err(_, _) => {
                 self.kw("<err>")?;
+            }
+            Pat::Record(_, _, xps) => {
+                self.fields(xps, Self::bind)?;
+            }
+            Pat::Or(_, _, p0, p1) => {
+                self.pat(p0)?;
+                self.punct("|")?;
+                self.pat(p1)?;
+            }
+            Pat::Char(_, _, c) => {
+                write!(self.f, "{:?}", c)?;
             }
         }
         Ok(())

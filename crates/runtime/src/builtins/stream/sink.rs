@@ -1,5 +1,4 @@
-#![allow(unused)]
-use futures::SinkExt;
+use futures_util::SinkExt;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
 
