@@ -44,17 +44,17 @@ use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
+use crate::ast::StmtTrait;
 use crate::ast::StmtType;
 use crate::ast::StmtVar;
+use crate::ast::TraitDef;
+use crate::ast::TraitType;
 use crate::ast::Type;
 use crate::ast::UnresolvedPatField;
 use crate::diag::Report;
-use crate::diag::Sources;
-use crate::lexer::Lexer;
 use crate::lexer::Span;
 use crate::lexer::Spanned;
 use crate::lexer::Token;
-use crate::util::trim;
 
 pub struct Parser<'a, I>
 where
@@ -359,13 +359,10 @@ where
             .map(|x| x.flatten())
     }
 
-    pub fn parse<T>(
-        &mut self,
-        f: impl Fn(&mut Self, Token) -> Result<Spanned<T>, Span>,
-    ) -> Option<T> {
+    pub fn parse<T>(&mut self, f: impl Fn(&mut Self, Token) -> Result<Spanned<T>, Span>) -> T {
         let t = f(self, Token::Eof);
         self.expect(Token::Eof, Token::Eof).ok();
-        t.ok().map(|x| x.v)
+        t.ok().unwrap().v
     }
 
     // Terminals
@@ -426,6 +423,10 @@ where
             Token::Enum => {
                 let s = self.stmt_enum(follow | Stmt::FOLLOW)?;
                 Ok(Spanned::new(s.s, Stmt::Enum(s.v)))
+            }
+            Token::Trait => {
+                let s = self.stmt_trait(follow | Stmt::FOLLOW)?;
+                Ok(Spanned::new(s.s, Stmt::Trait(s.v)))
             }
             Token::Impl => {
                 let s = self.stmt_impl(follow | Stmt::FOLLOW)?;
@@ -513,6 +514,49 @@ where
         Ok(Spanned::new(s, StmtVar::new(s, x.v, t, e.v)))
     }
 
+    fn stmt_trait(&mut self, follow: Token) -> Result<Spanned<StmtTrait>, Span> {
+        let t0 = self.expect(Token::Trait, follow)?;
+        let x = self.name(follow)?;
+        let gs = self.generics(follow | Token::LBrace)?;
+        let bs = self.where_clause(follow | Token::LBrace)?;
+        self.expect(Token::LBrace, follow)?;
+        let mut defs = Vec::new();
+        let mut tys = Vec::new();
+        loop {
+            let t = self.start(Token::RBrace | Token::Def | Token::Type, follow)?;
+            match t.v {
+                Token::Def => defs.push(self.stmt_def_decl(follow)?.v),
+                Token::Type => tys.push(self.stmt_type_decl(follow)?.v),
+                _ => break,
+            }
+        }
+        let s1 = self.expect(Token::RBrace, follow)?;
+        let s = t0.s + s1.s;
+        Ok(Spanned::new(s, StmtTrait::new(s, x.v, gs, bs, defs, tys)))
+    }
+
+    fn stmt_def_decl(&mut self, follow: Token) -> Result<Spanned<TraitDef>, Span> {
+        let t0 = self.expect(Token::Def, follow)?;
+        let x = self.name(follow)?;
+        let gs = self.generics(follow | Token::LParen)?;
+        let ts = self.paren_seq(Self::ty, Type::FIRST, follow | Token::Colon)?;
+        self.expect(Token::Colon, follow)?;
+        let t = self.ty(follow | Token::Where | Token::SemiColon)?;
+        let bs = self.where_clause(follow | Token::SemiColon)?;
+        let t1 = self.expect(Token::SemiColon, follow)?;
+        let s = t0.s + t1.s;
+        Ok(Spanned::new(s, TraitDef::new(s, x.v, gs, bs, ts.v, t.v)))
+    }
+
+    fn stmt_type_decl(&mut self, follow: Token) -> Result<Spanned<TraitType>, Span> {
+        let t0 = self.expect(Token::Type, follow)?;
+        let x = self.name(follow)?;
+        let gs = self.generics(follow | Token::Eq | Token::SemiColon)?;
+        let t1 = self.expect(Token::SemiColon, follow)?;
+        let s = t0.s + t1.s;
+        Ok(Spanned::new(s, TraitType::new(s, x.v, gs)))
+    }
+
     fn stmt_impl(&mut self, follow: Token) -> Result<Spanned<StmtImpl>, Span> {
         let t0 = self.expect(Token::Impl, follow)?;
         let gs = self.generics(follow | Token::Name)?;
@@ -535,12 +579,13 @@ where
     }
 
     fn stmt_expr(&mut self, follow: Token) -> Result<Spanned<Expr>, Span> {
-        let expr = self.expr(follow)?;
-        if expr.v.is_braced() {
-            Ok(Spanned::new(expr.s, expr.v))
+        let e = self.expr(follow)?;
+        println!("Expected a braced expression");
+        if e.v.is_braced() {
+            Ok(Spanned::new(e.s, e.v))
         } else {
-            self.expect(Token::SemiColon, follow)?;
-            Ok(Spanned::new(expr.s, expr.v))
+            let t = self.expect(Token::SemiColon, follow)?;
+            Ok(Spanned::new(e.s + t.s, e.v))
         }
     }
 
@@ -681,7 +726,7 @@ where
         }
     }
 
-    fn ty(&mut self, follow: Token) -> Result<Spanned<Type>, Span> {
+    pub(crate) fn ty(&mut self, follow: Token) -> Result<Spanned<Type>, Span> {
         self.ty_fallible(follow)
             .or_else(|s| Ok(Spanned::new(s, Type::Err)))
     }
@@ -726,7 +771,7 @@ where
         Ok(Spanned::new(t.s, lhs))
     }
 
-    fn pat(&mut self, follow: Token) -> Result<Spanned<Pat>, Span> {
+    pub(crate) fn pat(&mut self, follow: Token) -> Result<Spanned<Pat>, Span> {
         self.pat_fallible(follow)
             .or_else(|s| Ok(Spanned::new(s, Pat::Err(s, Type::Hole))))
     }
@@ -975,7 +1020,7 @@ where
         }
     }
 
-    fn expr(&mut self, follow: Token) -> Result<Spanned<Expr>, Span> {
+    pub(crate) fn expr(&mut self, follow: Token) -> Result<Spanned<Expr>, Span> {
         self.expr_fallible(follow)
             .or_else(|s| Ok(Spanned::new(s, Expr::Err(s, Type::Hole))))
     }
@@ -995,10 +1040,16 @@ where
                     break;
                 }
                 let e = match op.v {
+                    // a?
+                    //
+                    // becomes
+                    //
+                    // match a { Some(x) => x, None => return None }
                     Token::Question => {
-                        self.skip();
-                        let s = lhs.s + op.s;
-                        Expr::Postfix(s, Type::Hole, op.v, Rc::new(lhs.v))
+                        todo!()
+                        // self.skip();
+                        // let s = lhs.s + op.s;
+                        // Expr::Postfix(s, Type::Hole, op.v, Rc::new(lhs.v))
                     }
                     Token::LParen => {
                         let args = self.expr_args(follow)?;
@@ -1055,11 +1106,62 @@ where
                 }
                 self.skip();
                 let rhs = self.expr_bp(follow, rbp)?;
+                fn infix(
+                    s: Span,
+                    x0: &'static str,
+                    x1: &'static str,
+                    lhs: Expr,
+                    rhs: Expr,
+                ) -> Expr {
+                    let path =
+                        Path::new(vec![(Name::new(s, x0), vec![]), (Name::new(s, x1), vec![])]);
+                    let fun = Expr::Unresolved(s, Type::Hole, path);
+                    Expr::Call(s, Type::Hole, Rc::new(fun), vec![lhs, rhs])
+                }
                 let s = lhs.s + rhs.s;
-                lhs = Spanned::new(
-                    s,
-                    Expr::Infix(s, Type::Hole, op.v, Rc::new(lhs.v), Rc::new(rhs.v)),
-                );
+                let e = match op.v {
+                    Token::Plus => infix(s, "Add", "add", lhs.v, rhs.v),
+                    Token::Minus => infix(s, "Sub", "sub", lhs.v, rhs.v),
+                    Token::Star => infix(s, "Mul", "mul", lhs.v, rhs.v),
+                    Token::Slash => infix(s, "Div", "div", lhs.v, rhs.v),
+                    Token::Gt => infix(s, "PartialOrd", "gt", lhs.v, rhs.v),
+                    Token::Ge => infix(s, "PartialOrd", "ge", lhs.v, rhs.v),
+                    Token::Lt => infix(s, "PartialOrd", "lt", lhs.v, rhs.v),
+                    Token::Le => infix(s, "PartialOrd", "le", lhs.v, rhs.v),
+                    Token::EqEq => infix(s, "PartialEq", "eq", lhs.v, rhs.v),
+                    Token::NotEq => infix(s, "PartialEq", "ne", lhs.v, rhs.v),
+                    Token::Eq => Expr::Assign(s, Type::Hole, Rc::new(lhs.v), Rc::new(rhs.v)),
+                    // a and b => match a { true => b, _ => false }
+                    Token::And => Expr::Match(
+                        s,
+                        Type::Hole,
+                        Rc::new(lhs.v),
+                        vec![
+                            Arm::new(s, Pat::Bool(s, Type::Hole, true), rhs.v),
+                            Arm::new(
+                                s,
+                                Pat::Wildcard(s, Type::Hole),
+                                Expr::Bool(s, Type::Hole, false),
+                            ),
+                        ],
+                    ),
+                    // a or b => match a { true => true, _ => b }
+                    Token::Or => Expr::Match(
+                        s,
+                        Type::Hole,
+                        Rc::new(lhs.v),
+                        vec![
+                            Arm::new(
+                                s,
+                                Pat::Bool(s, Type::Hole, true),
+                                Expr::Bool(s, Type::Hole, true),
+                            ),
+                            Arm::new(s, Pat::Wildcard(s, Type::Hole), rhs.v),
+                        ],
+                    ),
+                    _ => unreachable!(),
+                };
+                lhs = Spanned::new(s, e);
             } else {
                 break;
             }
@@ -1069,6 +1171,7 @@ where
 
     fn expr_lhs(&mut self, follow: Token) -> Result<Spanned<Expr>, Span> {
         let t0 = self.start(Expr::FIRST, follow)?;
+
         match t0.v {
             Token::True | Token::False => {
                 self.skip();
@@ -1114,25 +1217,25 @@ where
                     Ok(Spanned::new(s, Expr::Tuple(t.s, Type::Hole, t.v)))
                 }
             }
-            Token::Minus => {
+            Token::Minus | Token::Not => {
                 let op = self.next();
                 let ((), rbp) = op.v.prefix_bp().unwrap();
                 let rhs = self.expr_bp(follow, rbp)?;
                 let s = op.s + rhs.s;
-                Ok(Spanned::new(
-                    s,
-                    Expr::Prefix(op.s, Type::Hole, op.v, Rc::new(rhs.v)),
-                ))
-            }
-            Token::Not => {
-                let op = self.next();
-                let ((), rbp) = op.v.prefix_bp().unwrap();
-                let rhs = self.expr_bp(follow, rbp)?;
-                let s = op.s + rhs.s;
-                Ok(Spanned::new(
-                    s,
-                    Expr::Prefix(op.s, Type::Hole, op.v, Rc::new(rhs.v)),
-                ))
+
+                fn unop(s: Span, x0: &'static str, x1: &'static str, e: Expr) -> Expr {
+                    let path =
+                        Path::new(vec![(Name::new(s, x0), vec![]), (Name::new(s, x1), vec![])]);
+                    let fun = Expr::Unresolved(s, Type::Hole, path);
+                    Expr::Call(s, Type::Hole, Rc::new(fun), vec![e])
+                }
+
+                let e = match op.v {
+                    Token::Minus => unop(op.s, "Neg", "neg", rhs.v),
+                    Token::Not => unop(op.s, "Not", "not", rhs.v),
+                    _ => unreachable!(),
+                };
+                Ok(Spanned::new(s, e))
             }
             Token::Break => {
                 self.skip();
@@ -1183,22 +1286,32 @@ where
                 let t = self.next();
                 let e = self.expr(follow | Token::LBrace)?;
                 let b0 = self.block(follow | Token::Else | Stmt::FIRST)?;
-                if self.start(follow | Token::Else | Stmt::FIRST, follow)?.v == Token::Else {
-                    self.skip();
-                    let b1 = self.block(follow)?;
-                    let s = t.s + b1.s;
-                    Ok(Spanned::new(
+                let e0 = Expr::Block(b0.s, Type::Hole, b0.v);
+                let (s, e1, s1) =
+                    if self.start(follow | Token::Else | Stmt::FIRST, follow)?.v == Token::Else {
+                        self.skip();
+                        let b1 = self.block(follow)?;
+                        let s = t.s + b1.s;
+                        let e1 = Expr::Block(b1.s, Type::Hole, b1.v);
+                        (s, e1, b1.s)
+                    } else {
+                        let s = t.s + b0.s;
+                        let e1 = Expr::Tuple(s, Type::Hole, vec![]);
+                        (s, e1, b0.s)
+                    };
+                let p0 = Pat::Bool(b0.s, Type::Hole, true);
+                let p1 = Pat::Wildcard(s1, Type::Hole);
+                // if a { b } else { c } => match a { true => b, _ => c }
+                // if a { b } => match a { true => b, _ => () }
+                Ok(Spanned::new(
+                    s,
+                    Expr::Match(
                         s,
-                        Expr::If(s, Type::Hole, Rc::new(e.v), b0.v, b1.v),
-                    ))
-                } else {
-                    let s = t.s + b0.s;
-                    let b1 = Block::new(s, vec![], Expr::Tuple(s, Type::Hole, vec![]));
-                    Ok(Spanned::new(
-                        s,
-                        Expr::If(s, Type::Hole, Rc::new(e.v), b0.v, b1),
-                    ))
-                }
+                        Type::Hole,
+                        Rc::new(e.v),
+                        vec![Arm::new(s, p0, e0), Arm::new(s, p1, e1)],
+                    ),
+                ))
             }
             Token::Match => {
                 let t = self.next();
@@ -1367,82 +1480,11 @@ where
     }
 }
 
-impl Stmt {
-    pub fn parse_ok(input: &str) -> Stmt {
-        ok(parse(input, |a, b| Parser::stmt(a, b)))
-    }
-
-    pub fn parse_err(input: &str) -> (Stmt, String) {
-        parse(input, |a, b| Parser::stmt(a, b)).unwrap_err()
-    }
-}
-
-impl Expr {
-    pub fn parse_ok(input: &str) -> Expr {
-        ok(parse(input, |a, b| Parser::expr(a, b)))
-    }
-    pub fn parse_err(input: &str) -> (Expr, String) {
-        parse(input, |a, b| Parser::expr(a, b)).unwrap_err()
-    }
-}
-
-impl Type {
-    pub fn parse_ok(input: &str) -> Type {
-        ok(parse(input, |a, b| Parser::ty(a, b)))
-    }
-    pub fn parse_err(input: &str) -> (Type, String) {
-        parse(input, |a, b| Parser::ty(a, b)).unwrap_err()
-    }
-}
-
-impl Pat {
-    pub fn parse_ok(input: &str) -> Pat {
-        ok(parse(input, |a, b| Parser::pat(a, b)))
-    }
-    pub fn parse_err(input: &str) -> (Pat, String) {
-        parse(input, |a, b| Parser::pat(a, b)).unwrap_err()
-    }
-}
-
-impl Program {
-    pub fn parse_ok(input: &str) -> Program {
-        ok(parse(input, |a, b| Parser::program(a, b)))
-    }
-    pub fn parse_err(input: &str) -> (Program, String) {
-        parse(input, |a, b| Parser::program(a, b)).unwrap_err()
-    }
-}
-
-fn ok<T>(t: Result<T, (T, String)>) -> T {
-    match t {
-        Ok(t) => t,
-        Err((_, e)) => panic!("{}", e),
-    }
-}
-
-fn parse<'a, T>(
-    input: &'a str,
-    f: impl for<'b> FnOnce(&mut Parser<'a, &'b mut Lexer<'a>>, Token) -> Result<Spanned<T>, Span>,
-) -> Result<T, (T, String)> {
-    let mut sources = Sources::new();
-    let id = sources.add("test", input);
-    let mut lexer = Lexer::new(id, input);
-    let mut parser = Parser::new(input, &mut lexer);
-    let output = f(&mut parser, Token::Eof).unwrap();
-    let mut report = parser.report;
-    report.merge(&mut lexer.report);
-    if report.is_empty() {
-        Ok(output.v)
-    } else {
-        Err((output.v, trim(report.string(&mut sources).unwrap())))
-    }
-}
-
 impl Expr {
     fn is_braced(&self) -> bool {
         matches!(
             self,
-            Expr::Block(..) | Expr::If(..) | Expr::Match(..) | Expr::While(..) | Expr::For(..)
+            Expr::Block(..) | Expr::Match(..) | Expr::While(..) | Expr::For(..)
         ) || matches!(self, Expr::Query(_, _, qs) if qs.last().is_some_and(|x| x.is_braced()))
     }
 }
@@ -1451,7 +1493,7 @@ impl Query {
     fn is_braced(&self) -> bool {
         matches!(
             self,
-            Query::Group(..) | Query::Over(..) | Query::Into(..) | Query::Compute(..)
+            Query::Group(..) | Query::Over(..) | Query::Compute(..)
         )
     }
 }

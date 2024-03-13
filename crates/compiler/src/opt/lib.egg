@@ -1,0 +1,514 @@
+(datatype Expr
+  ;; Operators
+  (Nullary Expr)
+  (Unary String Expr)
+  (Binary String Expr Expr)
+  ;; Data
+  (I64 i64)
+  (F64 f64)
+  (Str String)
+  (Bool bool)
+  (Pair Expr Expr)
+  (Some Expr)
+  (None)
+  ;; Unary
+  (Neg Expr)
+  (Not Expr)
+  (Sqrt Expr)
+  (Abs Expr)
+  (Fst Expr)
+  (Snd Expr)
+  ;; Binary
+  (Add Expr Expr)
+  (Sub Expr Expr)
+  (Mul Expr Expr)
+  (Div Expr Expr)
+  (Eq Expr Expr)
+  (Ne Expr Expr)
+  (Lt Expr Expr)
+  (Le Expr Expr)
+  (Gt Expr Expr)
+  (Ge Expr Expr)
+  (Pow Expr Expr)
+  (Log Expr Expr)
+  (Mod Expr Expr)
+  (And Expr Expr)
+  (Or Expr Expr)
+  (LShift Expr Expr)
+  (RShift Expr Expr)
+  (BitAnd Expr Expr)
+  (BitOr Expr Expr)
+  (BitXor Expr Expr)
+  (Min Expr Expr)
+  (Max Expr Expr)
+  ;; Functions
+  (Var String)
+  (Let String Expr Expr)
+  (Fun String Expr)
+  (Fun2 String String Expr)
+  (App Expr Expr)
+  (App2 Expr Expr Expr)
+  (Compose Expr Expr)
+  ;; Control-Flow
+  (If Expr Expr Expr)
+  ;; Dataflow (Streams)
+  (Map Expr Expr) ;; S.map(f)
+  (Filter Expr Expr) ;; S.filter(f)
+  (Merge Expr Expr) ;; merge(S, S)
+  (Fork Expr) ;; S.fork()
+  (KeyBy Expr Expr) ;; S.keyBy(f)
+  (Unkey Expr) ;; S.unkey()
+  (Window Expr Expr Expr) ;; S.window(A, f)
+  (WindowIncr Expr Expr Expr Expr) ;; S.windowIncr(A, f, g, h)
+  (WindowJoin Expr Expr Expr Expr);; S0.windowJoin(S1, A, f)
+  (AssignerTumbling Expr) ;; tumbling(10s)
+  (AssignerSliding Expr Expr) ;; sliding(10s, 5s)
+  ;; Dataflow (Batch)
+  (Fold Expr Expr Expr) ;; W.fold(id, f)
+  (FoldMap Expr Expr Expr Expr Expr) ;; W.map(id, f_lift, f_merge, f_lower)
+  ;; Blackbox UDF
+  (Blackbox)
+)
+
+(datatype Env
+  (EnvNil)
+  (EnvCons String Expr Env))
+
+(ruleset desugar)
+
+(rewrite (I64 a) (Nullary (I64 a)))
+(rewrite (F64 a) (Nullary (F64 a)))
+(rewrite (Str a) (Nullary (Str a)))
+(rewrite (Bool a) (Nullary (Bool a)))
+(rewrite (None) (Nullary (None)))
+(rewrite (Blackbox) (Nullary (Blackbox)))
+
+(rewrite (Neg a) (Unary "neg" a))
+(rewrite (Not a) (Unary "not" a))
+(rewrite (Sqrt a) (Unary "sqrt" a))
+(rewrite (Abs a) (Unary "abs" a))
+(rewrite (Fst a) (Unary "fst" a))
+(rewrite (Snd a) (Unary "snd" a))
+(rewrite (Some a) (Unary "some" a))
+
+(rewrite (Add a b) (Binary "add" a b))
+(rewrite (Sub a b) (Binary "sub" a b))
+(rewrite (Mul a b) (Binary "mul" a b))
+(rewrite (Div a b) (Binary "div" a b))
+(rewrite (Eq a b) (Binary "eq" a b))
+(rewrite (Ne a b) (Binary "ne" a b))
+(rewrite (Lt a b) (Binary "lt" a b))
+(rewrite (Le a b) (Binary "le" a b))
+(rewrite (Gt a b) (Binary "gt" a b))
+(rewrite (Ge a b) (Binary "ge" a b))
+(rewrite (Pow a b) (Binary "pow" a b))
+(rewrite (Log a b) (Binary "log" a b))
+(rewrite (Mod a b) (Binary "mod" a b))
+(rewrite (LShift a b) (Binary "lshift" a b))
+(rewrite (RShift a b) (Binary "rshift" a b))
+(rewrite (BitAnd a b) (Binary "bitand" a b))
+(rewrite (BitOr a b) (Binary "bitor" a b))
+(rewrite (BitXor a b) (Binary "bitxor" a b))
+(rewrite (Min a b) (Binary "min" a b))
+(rewrite (Max a b) (Binary "max" a b))
+(rewrite (Pair a b) (Binary "pair" a b))
+
+;; a and b => if a then b else false
+(rewrite (Or a b) (If a (Bool true) b))
+;; a or b => if a then true else b
+(rewrite (And a b) (If a b (Bool false))
+;; not a => if a then false else true
+(rewrite (Not a) (If a (Bool false) (Bool true)))
+
+;; Compose: (fun(x1) = e1) . (fun(x2) = e2) => fun(x1) = (fun(x2) = e2)(e1)
+(rewrite (Compose (Fun x1 e1) (Fun x2 e2)) (Fun x1 (App (Fun x2 e2) e1)))
+
+;; fun(a,b) = e => fun(a) = fun(b) = e
+(rewrite (Fun2 x y e) (Fun x (Fun y e)))
+;; f(a,b) => f(a)(b)
+(rewrite (App2 f a b) (App (App f a) b))
+;; let x = a in b => (fun(x) = b)(a)
+(rewrite (Let x a b) (App (Fun x b) a))
+
+;; ----------------------------------------------------------------------------
+
+(ruleset arith)
+
+;; 0.0 => 0
+(rewrite (F64 0.0) (I64 0) :ruleset arith)
+;; 1.0 => 1
+(rewrite (F64 1.0) (I64 1) :ruleset arith)
+
+;; x is non-zero if x != 0
+(relation non-zero (Expr))
+(rule ((I64 a) (!= a 0))
+      ((non-zero (I64 a))))
+
+;; x is positive if x > 0
+(relation positive (Expr))
+(rule ((I64 a) (bool-< 0 a))
+      ((positive (I64 a))))
+
+;; x is negative if x < 0
+(relation negative (Expr))
+(rule ((I64 a) (bool-< a 0))
+      ((negative (I64 a))))
+
+;; f is commutative if f(a, b) = f(b, a)
+(relation commutative (Expr))
+(rule ((= (App2 f b a)
+          (App2 f a b)))
+      ((commutative f)) :ruleset arith)
+
+;; f is associative if f(a, f(b, c)) = f(f(a, b), c)
+(relation associative (Expr))
+(rule ((= (App2 f (App2 f a b) c)
+          (App2 f a (App2 f b c))))
+      ((associative f)) :ruleset arith)
+
+;; Add-Identity: a+0 => a
+(rewrite (Add a (I64 0)) a :ruleset arith)
+;; Add-Commutativity: a+b => b+a
+(rewrite (Add a b) (Add b a) :ruleset arith)
+;; Add-Associativity: (a+b)+c => a+(b+c)
+(rewrite (Add (Add a b) c) (Add a (Add b c)) :ruleset arith)
+
+;; Sub-Cancel: a-a => 0
+(rewrite (Sub a a) (I64 0) :ruleset arith)
+;; Sub-Identity: a-0 => a
+(rewrite (Sub a (I64 0)) a :ruleset arith)
+;; Sub-Semi-Assocativity: (a-b)-c => a-(b+c)
+(rewrite (Sub (Sub a b) c) (Sub a (Add b c)) :ruleset arith)
+
+; Sub-Add Cancel: a+b-a => b
+(rewrite (Sub (Add a b) a) b :ruleset arith)
+; Add-Sub Cancel: a-b+a => b
+(rewrite (Add (Sub a b) a) b :ruleset arith)
+
+;; Mul-Cancel: a*0 = 0
+(rewrite (Mul a (I64 0)) (I64 0) :ruleset arith)
+;; Mul-Identity: a*1 => a
+(rewrite (Mul a (I64 1)) a :ruleset arith)
+;; Mul-Commutativity: a*b => b*a
+(rewrite (Mul a b) (Mul b a) :ruleset arith)
+;; Mul-Associativity: (a*b)*c => a*(b*c)
+(rewrite (Mul (Mul a b) c) (Mul a (Mul b c)) :ruleset arith)
+
+;; Div-Cancel: a/a => 1
+(rewrite (Div a a) (I64 1) :when ((non-zero a)) :ruleset arith)
+;; Div-Identity: a/1 => a
+(rewrite (Div a (I64 1)) a :ruleset arith)
+;; Div => Mul-Pow: a/b => a*b^-1
+(rewrite (Div a b) (Mul a (Pow b (I64 -1))) :when ((non-zero b)) :ruleset arith)
+;; Div-Semi-Assocativity: (a/b)/c => a/(b*c)
+(rewrite (Div (Div a b) c) (Div a (Mul b c)) :when ((non-zero b) (non-zero c)) :ruleset arith)
+
+;; Add-Mul-Distributivity: a*(b+c) <=> a*b+a*c
+(rewrite (Mul a (Add b c)) (Add (Mul a b) (Mul a c)) :ruleset arith)
+
+;; Mul-Div Cancel: a*b/a => b
+(rewrite (Div (Mul a b) a) b :when ((non-zero a)) :ruleset arith)
+
+;; Neg-Neg: -(-a) => a
+(rewrite (Neg (Neg a)) a :ruleset arith)
+;; Neg => Mul: -1*a => -a
+(rewrite (Neg a) (Mul (I64 -1) a) :ruleset arith)
+;; Sub => Add-Neg: a+(-b) => a-b
+(rewrite (Add a (Neg b)) (Sub a b) :ruleset arith)
+
+;; Abs-Pos: abs(a) => a
+(rewrite (Abs a) a :when ((positive a)) :ruleset arith)
+;; Abs-Neg: abs(-a) => -(-a)
+(rewrite (Abs a) (Neg a) :when ((negative a)) :ruleset arith)
+
+;; Pow2-Mul: a^2 => a*a
+(rewrite (Pow a (I64 2)) (Mul a a) :ruleset arith)
+
+;; ----------------------------------------------------------------------------
+
+(ruleset if-else)
+
+;; If-True: if (true) a b = a
+(rewrite (If (Bool true) then else) then :ruleset if-else)
+;; If-False: if (false) a b = b
+(rewrite (If (Bool false) then else) else :ruleset if-else)
+;; If-Neg: if (not c) a b = if c b else a
+(rewrite (If (Not c) a b) (If c b a) :ruleset if-else)
+;; If-If: if (c1) (if (c2) a b) c = if (c1 and c2) a (if c1 b c)
+(rewrite (If c1 (If c2 a b) c) (If (And c1 c2) a (If c1 b c)) :ruleset if-else)
+;; If-Or: if (c1 or c2) a b = if c1 a (if c2 a b)
+(rewrite (If (Or c1 c2) a b) (If c1 a (If c2 a b)) :ruleset if-else)
+
+;; ----------------------------------------------------------------------------
+
+(ruleset logic)
+
+;; Not-Not: not (not a) => a
+(rewrite (Not (Not a)) a :ruleset logic)
+;; Not-True: not true => false
+(rewrite (Not (Bool true)) (Bool false) :ruleset logic)
+;; Not-False: not false => true
+(rewrite (Not (Bool false)) (Bool true) :ruleset logic)
+;; Not-And: not (a and b) => (not a) or (not b)
+(rewrite (Not (And a b)) (Or (Not a) (Not b)) :ruleset logic)
+;; Not-Or: not (a or b) => (not a) and (not b)
+(rewrite (Not (Or a b)) (And (Not a) (Not b)) :ruleset logic)
+
+;; And-True: a and true => a
+(rewrite (And a (Bool true)) a :ruleset logic)
+;; And-False: a and false => false
+(rewrite (And a (Bool false)) (Bool false) :ruleset logic)
+;; And-Commutativity: a and b => b and a
+(rewrite (And a b) (And b a) :ruleset logic)
+;; And-Associativity: (a and b) and c => a and (b and c)
+(rewrite (And (And a b) c) (And a (And b c)) :ruleset logic)
+
+;; Or-True: a or true => true
+(rewrite (Or a (Bool true)) (Bool true) :ruleset logic)
+;; Or-False: a or false => a
+(rewrite (Or a (Bool false)) a :ruleset logic)
+;; Or-Commutativity: a or b => b or a
+(rewrite (Or a b) (Or b a) :ruleset logic)
+;; Or-Associativity: (a or b) or c => a or (b or c)
+(rewrite (Or (Or a b) c) (Or a (Or b c)) :ruleset logic)
+
+;; And-Or-Distributivity: a and (b or c) => (a and b) or (a and c)
+(rewrite (And a (Or b c)) (Or (And a b) (And a c)) :ruleset logic)
+;; Or-And-Distributivity: a or (b and c) => (a or b) and (a or c)
+(rewrite (Or a (And b c)) (And (Or a b) (Or a c)) :ruleset logic)
+
+;; ----------------------------------------------------------------------------
+
+(ruleset compare)
+
+;; Eq-True: a == a => true
+(rewrite (Eq a a) (Bool true) :ruleset compare)
+;; Ne-False: a != a => false
+(rewrite (Ne a a) (Bool false) :ruleset compare)
+
+;; Gt-Lt: a > b => b < a
+(rewrite (Gt a b) (Lt b a) :ruleset compare)
+;; Ge-Le: a >= b => b <= a
+(rewrite (Ge a b) (Le b a) :ruleset compare)
+
+;; Eq-Ne: a == b => not (a != b)
+(rewrite (Eq a b) (Not (Ne a b)) :ruleset compare)
+;; Le-Neg: a <= b => not (b < a)
+(rewrite (Le a b) (Not (Lt b a)) :ruleset compare)
+
+;; Le-Expand: a <= b => a < b or a == b
+(rewrite (Le a b) (Or (Lt a b) (Eq a b)) :ruleset compare)
+
+;; Min-If: min(a, b) => if (a <= b) a b
+(rewrite (Min a b) (If (Le a b) a b) :ruleset compare)
+;; Max-If: max(a, b) => if (a >= b) a b
+(rewrite (Max a b) (If (Ge a b) a b) :ruleset compare)
+
+;; Min-Commutativity: min(a, b) => min(b, a)
+(rewrite (Min a b) (Min b a) :ruleset compare)
+;; Max-Commutativity: max(a, b) => max(b, a)
+(rewrite (Max a b) (Max b a) :ruleset compare)
+
+;; Min-Associativity: min(a, min(b, c)) => min(min(a, b), c)
+(rewrite (Min a (Min b c)) (Min (Min a b) c) :ruleset compare)
+;; Max-Associativity: max(a, max(b, c)) => max(max(a, b), c)
+(rewrite (Max a (Max b c)) (Max (Max a b) c) :ruleset compare)
+
+;; ----------------------------------------------------------------------------
+
+(ruleset eval)
+
+;; Binary Operations
+(rewrite (Add (I64 a) (I64 b)) (I64 (+ a b)) :ruleset eval)
+(rewrite (Add (F64 a) (F64 b)) (F64 (+ a b)) :ruleset eval)
+(rewrite (Sub (I64 a) (I64 b)) (I64 (- a b)) :ruleset eval)
+(rewrite (Sub (F64 a) (F64 b)) (F64 (- a b)) :ruleset eval)
+(rewrite (Mul (I64 a) (I64 b)) (I64 (* a b)) :ruleset eval)
+(rewrite (Mul (F64 a) (F64 b)) (F64 (* a b)) :ruleset eval)
+(rewrite (Div (I64 a) (I64 b)) (I64 (/ a b)) :ruleset eval)
+(rewrite (Div (F64 a) (F64 b)) (F64 (/ a b)) :ruleset eval)
+(rewrite (And (Bool a) (Bool b)) (Bool (and a b)) :ruleset eval)
+(rewrite (Or (Bool a) (Bool b)) (Bool (or a b)) :ruleset eval)
+(rewrite (Eq (I64 a) (I64 b)) (Bool (bool-= a b)) :ruleset eval)
+(rewrite (Le (I64 a) (I64 b)) (Bool (bool-<= a b)) :ruleset eval)
+
+;; Unary Operations
+(rewrite (Not (Bool a)) (Bool (not a)) :ruleset eval)
+(rewrite (Neg (F64 a)) (F64 (neg a)) :ruleset eval)
+
+(rewrite (Fst (Pair a b)) a :ruleset eval)
+(rewrite (Snd (Pair a b)) b :ruleset eval)
+
+;; ----------------------------------------------------------------------------
+
+;; Free variables
+
+(sort FreeVars (Set String))
+(function fv (Expr) FreeVars :merge (set-intersect old new))
+(rule ((= e (Nullary v)))
+      ((set (fv e) (set-empty))) :ruleset eval)
+(rule ((= e (Unary s e1))
+       (= (fv e1) fv1))
+      ((set (fv e) fv1)) :ruleset eval)
+(rule ((= e (Binary s e1 e2))
+       (= (fv e1) fv1)
+       (= (fv e2) fv2))
+      ((set (fv e) (set-union fv1 fv2))) :ruleset eval)
+(rule ((= e (Fun x e1))
+       (= (fv e1) fv1))
+      ((set (fv e) (set-remove fv1 x))) :ruleset eval)
+(rule ((= e (App e1 e2))
+       (= (fv e1) fv1)
+       (= (fv e2) fv2))
+      ((set (fv e) (set-union fv1 fv2))) :ruleset eval)
+(rule ((= e (Var x)))
+      ((set (fv e) (set-insert (set-empty) x))) :ruleset eval)
+(rule ((= e (If e1 e2 e3))
+       (= (fv e1) fv1)
+       (= (fv e2) fv2)
+       (= (fv e3) fv3))
+      ((set (fv e) (set-union fv1 (set-union fv2 fv3)))) :ruleset eval)
+
+;; ----------------------------------------------------------------------------
+
+;; Lookup variable in environment
+(function lookup (Env String) Expr :cost 1000)
+(rewrite (lookup (EnvCons x e env) x) e :ruleset eval)
+(rule ((= e1 (lookup (EnvCons x e2 env) x))
+       (!= x y))
+      ((union e1 (lookup env x))) :ruleset eval)
+
+;; ----------------------------------------------------------------------------
+
+;; Partial evaluation
+(function pe (Env Expr) Expr :cost 1000)
+;; App-Beta: env ⊢ (fun x e) e1 => e[x -> e1]
+(rewrite (pe env (App (Fun x e2) e3)) (pe (EnvCons x e3 env) e2) :ruleset eval)
+;; App-Eval: env ⊢ e1 e2 => e1' e2'
+(rewrite (pe env (App e1 e2)) (App (pe env e1) (pe env e2)) :ruleset eval)
+;; Var-Subst: x → e ∈ env ⊢ x => e
+(rewrite (pe env (Var x)) (lookup env x) :ruleset eval)
+;; If-Eval: env ⊢ if e1 e2 e3 => if e1' e2' e3'
+(rewrite (pe env (If e1 e2 e3)) (If (pe env e1) (pe env e2) (pe env e3)) :ruleset eval)
+;; Nullary-Eval: env ⊢ v => v
+(rewrite (pe env (Nullary v)) (Nullary v) :ruleset eval)
+;; Unary-Eval: env ⊢ op e => op e'
+(rewrite (pe env (Unary op e)) (Unary op (pe env e)) :ruleset eval)
+;; Binary-Eval: env ⊢ op e1 e2 => op e1' e2'
+(rewrite (pe env (Binary op e1 e2)) (Binary op (pe env e1) (pe env e2)) :ruleset eval)
+;; Fun-Eval: env ⊢ fun x e => fun x (env ⊢ e)
+(rewrite (pe env (Fun x e)) (Fun x (pe env e)) :ruleset eval)
+
+(function partial-eval (Expr) Expr :cost 1000)
+(rewrite (partial-eval e) (pe (EnvNil) e) :ruleset eval)
+
+;; ----------------------------------------------------------------------------
+
+(ruleset dataflow)
+
+;; Map-Fusion: S.map(f).map(g) => S.map(f . g)
+(rewrite (Map (Map s f) g)
+         (Map s (Compose f g)) :ruleset dataflow)
+
+;; Filter-Fusion: S.filter(f).filter(g) => S.filter(f and g)
+(rewrite (Filter (Filter s f) g)
+         (Filter s (Fun "x" (And (App f (Var "x"))
+                                 (App g (Var "x"))))) :ruleset dataflow)
+
+;; Fold-Fusion: pair(S.fold(id0, f0), S.fold(id1, f1))
+;;           => S.fold(fun(x) = pair(id0, id1), fun(a, x) = pair(f0(fst a, x), f1(snd a, x)))
+(rewrite (Pair (Fold s id0 f0) (Fold s id1 f1))
+         (Fold s (Pair id0 id1)
+                 (Fun2 "a" "x" (Pair (App2 f0 (Fst (Var "a")) (Var "x"))
+                                     (App2 f1 (Snd (Var "a")) (Var "x"))))) :ruleset dataflow)
+
+;; Map-Fold-Fusion: S.map(f).fold(id, g) => S.fold(id, fun(a, x) = g(a, f(x)))
+(rewrite (Fold (Map s f) id g) (Fold s id (Fun2 "a" "x" (App2 g (Var "a") (App f (Var "x"))))) :ruleset dataflow)
+
+;; Fold-FoldMap
+;;(rewrite (App fLower (Fold (Map fLift s) id fCombine))
+;;         (Fold s id (Fun2 "a" "x" (App2 f1 (App2 f0 (Fst (Var "a")) (Var "x")) (Snd (Var "a"))))) :ruleset dataflow)
+
+;; Filter-Filter: S.filter(f).filter(f) => S.filter(f)
+(rewrite (Filter (Filter s f) f)
+         (Filter s f) :ruleset dataflow)
+
+;; KeyBy-Unkey: S.keyBy(f).unkey() => S
+(rewrite (Unkey (KeyBy s f)) s :ruleset dataflow)
+
+;; Unkey-KeyBy: S.unkey().keyBy(f) => S.keyBy(f)
+(rewrite (KeyBy (Unkey s) f) (Unkey (KeyBy s f)) :ruleset dataflow)
+
+;; Merge-Map: merge(S0, S1).map(f) => merge(S0.map(f), S1.map(f))
+(rewrite (Map (Merge s0 s1) f)
+         (Merge (Map s0 f) (Map s1 f)) :ruleset dataflow)
+
+;; Merge-Filter: merge(S0, S1).filter(f) => merge(S0.filter(f), S1.filter(f))
+(rewrite (Filter (Merge s0 s1) f)
+         (Merge (Filter s0 f) (Filter s1 f)) :ruleset dataflow)
+
+;; Rewrite Fold of sums into a sum of folds:
+;; W.fold(id, fun(a, x) = f(a, x) + g(a, x)) => W.fold(id, f) + W.fold(id, g)
+(rewrite (Fold s id (Fun2 a x (Add (App2 f (Var a) (Var x))
+                                   (App2 g (Var a) (Var x)))))
+         (Add (Fold s id f) (Fold s id g)) :ruleset dataflow)
+
+;; Rewrite Fold of products into a product of folds:
+;; W.fold(id, fun(a, x) = f(a, x) * g(a, x)) => W.fold(id, f) * W.fold(id, g)
+(rewrite (Fold s id (Fun2 a x (Mul (App2 f (Var a) (Var x))
+                                   (App2 g (Var a) (Var x)))))
+         (Mul (Fold s id f) (Fold s id g)) :ruleset dataflow)
+
+;(rewrite (Fold (Fun2 a b (Add (Var a) (Var b))) (I64 0))
+;         (I64 0) :ruleset dataflow)
+
+;; ----------------------------------------------------------------------------
+
+;;; 2 * (x + 3) = 6 + 2 * x
+(let a0 (Mul (I64 2) (Add (Var "x") (I64 3))))
+(let b0 (Add (I64 6) (Mul (I64 2) (Var "x"))))
+
+;; 6 + 2 * 3 = 12
+(let a1 (Add (I64 6) (Mul (I64 2) (I64 3))))
+(let b1 (I64 12))
+
+;; 1 + 2 = 3
+(let a2 (Add (I64 1) (I64 2)))
+(let b2 (I64 3))
+
+;; 1 - 2 = -1
+(let a3 (Sub (I64 1) (I64 2)))
+(let b3 (I64 -1))
+
+;; 1 * 2 = 2
+(let a4 (Mul (I64 1) (I64 2)))
+(let b4 (I64 2))
+
+;; 1 / 2 = 0
+(let a5 (Div (I64 1) (I64 2)))
+(let b5 (I64 0))
+
+;; x + 1 = 1 + x
+(let a6 (Add (Var "x") (I64 1)))
+(let b6 (Add (I64 1) (Var "x")))
+
+;; ----------------------------------------------------------------------------
+
+(run-schedule
+  (saturate
+    (seq
+      (run desugar)
+      (run arith)
+      (run logic)
+      (run if-else)
+      (run compare)
+      (run eval)
+      (run dataflow))))
+
+(check (= a0 b0))
+(check (= a1 b1))
+(check (= a2 b2))
+(check (= a3 b3))
+(check (= a4 b4))
+(check (= a5 b5))
+(check (= a6 b6))

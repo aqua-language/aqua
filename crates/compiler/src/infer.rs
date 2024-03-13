@@ -17,9 +17,9 @@ use crate::ast::StmtType;
 use crate::ast::StmtVar;
 use crate::ast::Type;
 use crate::diag::Report;
+use crate::dsl::ty;
+use crate::dsl::ty_unit;
 use crate::lexer::Span;
-use crate::util::ty;
-use crate::util::ty_unit;
 
 impl Default for Context {
     fn default() -> Self {
@@ -469,9 +469,8 @@ impl Context {
                     .chain(gs1)
                     .zip(ts0.clone().into_iter().chain(ts1.clone()))
                     .collect::<Vec<_>>();
-                let param_ts = d.params.iter().map(|p| p.ty.clone()).collect::<Vec<_>>();
                 let return_t = d.ty.clone();
-                let fun_t = Type::Fun(param_ts, Rc::new(return_t)).instantiate(&gsub0);
+                let fun_t = Type::Fun(d.params.clone(), Rc::new(return_t)).instantiate(&gsub0);
                 self.recover(s, s, unify(sub, t0, &fun_t));
                 let ts0 = ts0.iter().map(|t| t.apply(sub)).collect::<Vec<_>>();
                 let ts1 = ts1.iter().map(|t| t.apply(sub)).collect::<Vec<_>>();
@@ -510,10 +509,6 @@ impl Context {
             Expr::While(_, _, _, _) => todo!(),
             Expr::Record(_, _, _) => todo!(),
             Expr::Value(_, _) => todo!(),
-            Expr::Infix(_, _, _, _, _) => unreachable!(),
-            Expr::Postfix(_, _, _, _) => unreachable!(),
-            Expr::Prefix(_, _, _, _) => unreachable!(),
-            Expr::If(_, _, _, _, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Char(_, _, _) => todo!(),
         }

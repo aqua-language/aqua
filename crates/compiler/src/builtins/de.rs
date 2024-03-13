@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use serde::de::DeserializeSeed;
 use serde::de::MapAccess;
@@ -6,13 +7,14 @@ use serde::de::VariantAccess;
 use serde::de::Visitor;
 use serde::Deserialize;
 use serde::Deserializer;
+use smol_str::SmolStr;
 
 use crate::ast::Name;
+use crate::ast::Type;
 use crate::builtins::Array;
 use crate::builtins::Record;
-use crate::*;
+use crate::lexer::Span;
 
-// use super::Matrix;
 use super::Tuple;
 use super::Value;
 
@@ -324,3 +326,25 @@ impl<'de> DeserializeSeed<'de> for Seed {
         }
     }
 }
+
+impl serde::Serialize for Name {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.data.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Name {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        String::deserialize(deserializer).map(|data| Self {
+            span: Span::default(),
+            data: SmolStr::from(data),
+        })
+    }
+}
+

@@ -25,7 +25,42 @@ use crate::ast::TraitType;
 use crate::ast::Type;
 use crate::ast::UnresolvedPatField;
 use crate::lexer::Span;
-use crate::lexer::Token;
+
+#[macro_export]
+macro_rules! check {
+    ($a:expr, $b:expr) => {
+        assert!($a == $b, "\n(a) {}\n\n(b) {}", $a, $b);
+    };
+    ($a:expr, $b:expr, $b_msg:literal) => {{
+        fn diff(a: impl std::fmt::Debug, b: impl std::fmt::Debug) -> String {
+            let a = format!("{:#?}", a);
+            let b = format!("{:#?}", b);
+            let mut output = String::new();
+            let diff = similar::TextDiff::from_lines(&a, &b);
+            for change in diff.iter_all_changes() {
+                let sign = match change.tag() {
+                    similar::ChangeTag::Delete => "-",
+                    similar::ChangeTag::Insert => "+",
+                    similar::ChangeTag::Equal => " ",
+                };
+                output.push_str(&format!("{}{}", sign, change));
+            }
+            output
+        }
+        let b_msg = indoc::indoc!($b_msg);
+        assert!($a.val == $b, "{}", diff($a.val, $b));
+        assert!($a.msg == b_msg, "{}", diff($a.msg, b_msg));
+    }};
+}
+
+pub fn trim(s: &str) -> String {
+    // Trim space right before \n on each line
+    s.trim_end()
+        .lines()
+        .map(|line| line.trim_end().to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
 
 pub fn program<const N: usize>(ss: [Stmt; N]) -> Program {
     Program::new(vec(ss))
@@ -322,12 +357,8 @@ pub fn expr_assoc<const N: usize, const M: usize>(
     Expr::Assoc(span(), ty_hole(), name(x0), vec(ts0), name(x1), vec(ts1))
 }
 
-pub fn expr_assign_desugared(e0: Expr, e1: Expr) -> Expr {
-    Expr::Assign(span(), ty_hole(), Rc::new(e0), Rc::new(e1))
-}
-
 pub fn expr_assign(e0: Expr, e1: Expr) -> Expr {
-    Expr::Infix(span(), ty_hole(), Token::Eq, Rc::new(e0), Rc::new(e1))
+    Expr::Assign(span(), ty_hole(), Rc::new(e0), Rc::new(e1))
 }
 
 // pub fn stmt_mod<const N: usize>(x: &'static str, ss: [Stmt; N]) -> Stmt {
@@ -428,18 +459,11 @@ pub fn stmt_err() -> Stmt {
 pub fn tr_def<const N: usize, const M: usize, const K: usize>(
     x: &'static str,
     gs: [&'static str; N],
-    ps: [(&'static str, Type); K],
+    ts: [Type; K],
     qs: [Bound; M],
     t: Type,
 ) -> TraitDef {
-    TraitDef::new(
-        span(),
-        name(x),
-        map(gs, name),
-        vec(qs),
-        map(ps, |(s, t)| Param::new(span(), name(s), t)),
-        t,
-    )
+    TraitDef::new(span(), name(x), map(gs, name), vec(qs), vec(ts), t)
 }
 
 pub fn tr_type<const N: usize>(x: &'static str, gs: [&'static str; N]) -> TraitType {
@@ -478,25 +502,13 @@ pub fn expr_call<const N: usize>(e: Expr, es: [Expr; N]) -> Expr {
     Expr::Call(span(), ty_hole(), Rc::new(e), vec(es))
 }
 
-pub fn binop_desugared(s: Span, tr: &'static str, op: &'static str, e0: Expr, e1: Expr) -> Expr {
+pub fn binop(s: Span, tr: &'static str, op: &'static str, e0: Expr, e1: Expr) -> Expr {
     Expr::Call(
         s,
         ty_hole(),
         Rc::new(parsed_expr_assoc(span(), tr, op)),
         vec([e0, e1]),
     )
-}
-
-pub fn infix(s: Span, op: Token, e0: Expr, e1: Expr) -> Expr {
-    Expr::Infix(s, ty_hole(), op, Rc::new(e0), Rc::new(e1))
-}
-
-pub fn prefix(s: Span, op: Token, e: Expr) -> Expr {
-    Expr::Prefix(s, ty_hole(), op, Rc::new(e))
-}
-
-pub fn postfix(s: Span, op: Token, e: Expr) -> Expr {
-    Expr::Postfix(s, ty_hole(), op, Rc::new(e))
 }
 
 pub fn parsed_expr_unop(s: Span, tr: &'static str, op: &'static str, e: Expr) -> Expr {
@@ -509,102 +521,46 @@ pub fn parsed_expr_unop(s: Span, tr: &'static str, op: &'static str, e: Expr) ->
 }
 
 pub fn expr_add(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::Plus, e0, e1)
+    binop(span(), "Add", "add", e0, e1)
 }
 
 pub fn expr_sub(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::Minus, e0, e1)
+    binop(span(), "Sub", "sub", e0, e1)
 }
 
 pub fn expr_mul(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::Star, e0, e1)
+    binop(span(), "Mul", "mul", e0, e1)
 }
 
 pub fn expr_div(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::Slash, e0, e1)
+    binop(span(), "Div", "div", e0, e1)
 }
 
 pub fn expr_eq(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::EqEq, e0, e1)
+    binop(span(), "PartialEq", "eq", e0, e1)
 }
 
 pub fn expr_ne(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::NotEq, e0, e1)
+    binop(span(), "PartialEq", "ne", e0, e1)
 }
 
 pub fn expr_lt(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::Lt, e0, e1)
+    binop(span(), "PartialOrd", "lt", e0, e1)
 }
 
 pub fn expr_le(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::Le, e0, e1)
+    binop(span(), "PartialOrd", "le", e0, e1)
 }
 
 pub fn expr_gt(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::Gt, e0, e1)
+    binop(span(), "PartialOrd", "gt", e0, e1)
 }
 
 pub fn expr_ge(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::Ge, e0, e1)
+    binop(span(), "PartialOrd", "ge", e0, e1)
 }
 
 pub fn expr_and(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::And, e0, e1)
-}
-
-pub fn expr_or(e0: Expr, e1: Expr) -> Expr {
-    infix(span(), Token::Or, e0, e1)
-}
-
-pub fn expr_not(e: Expr) -> Expr {
-    prefix(span(), Token::Not, e)
-}
-
-pub fn expr_neg(e: Expr) -> Expr {
-    prefix(span(), Token::Minus, e)
-}
-
-pub fn expr_add_desugared(e0: Expr, e1: Expr) -> Expr {
-    binop_desugared(span(), "Add", "add", e0, e1)
-}
-
-pub fn expr_sub_desugared(e0: Expr, e1: Expr) -> Expr {
-    binop_desugared(span(), "Sub", "sub", e0, e1)
-}
-
-pub fn expr_mul_desugared(e0: Expr, e1: Expr) -> Expr {
-    binop_desugared(span(), "Mul", "mul", e0, e1)
-}
-
-pub fn expr_div_desugared(e0: Expr, e1: Expr) -> Expr {
-    binop_desugared(span(), "Div", "div", e0, e1)
-}
-
-pub fn expr_eq_desugared(e0: Expr, e1: Expr) -> Expr {
-    binop_desugared(span(), "PartialEq", "eq", e0, e1)
-}
-
-pub fn expr_ne_desugared(e0: Expr, e1: Expr) -> Expr {
-    binop_desugared(span(), "PartialEq", "ne", e0, e1)
-}
-
-pub fn expr_lt_desugared(e0: Expr, e1: Expr) -> Expr {
-    binop_desugared(span(), "PartialOrd", "lt", e0, e1)
-}
-
-pub fn expr_le_desugared(e0: Expr, e1: Expr) -> Expr {
-    binop_desugared(span(), "PartialOrd", "le", e0, e1)
-}
-
-pub fn expr_gt_desugared(e0: Expr, e1: Expr) -> Expr {
-    binop_desugared(span(), "PartialOrd", "gt", e0, e1)
-}
-
-pub fn expr_ge_desugared(e0: Expr, e1: Expr) -> Expr {
-    binop_desugared(span(), "PartialOrd", "ge", e0, e1)
-}
-
-pub fn expr_and_desugared(e0: Expr, e1: Expr) -> Expr {
     Expr::Match(
         span(),
         ty_hole(),
@@ -613,7 +569,7 @@ pub fn expr_and_desugared(e0: Expr, e1: Expr) -> Expr {
     )
 }
 
-pub fn expr_or_desugared(e0: Expr, e1: Expr) -> Expr {
+pub fn expr_or(e0: Expr, e1: Expr) -> Expr {
     Expr::Match(
         span(),
         ty_hole(),
@@ -622,11 +578,11 @@ pub fn expr_or_desugared(e0: Expr, e1: Expr) -> Expr {
     )
 }
 
-pub fn expr_not_desugared(e: Expr) -> Expr {
+pub fn expr_not(e: Expr) -> Expr {
     parsed_expr_unop(span(), "Not", "not", e)
 }
 
-pub fn expr_neg_desugared(e: Expr) -> Expr {
+pub fn expr_neg(e: Expr) -> Expr {
     parsed_expr_unop(span(), "Neg", "neg", e)
 }
 
@@ -699,11 +655,27 @@ pub fn expr_match<const N: usize>(e: Expr, pes: [(Pat, Expr); N]) -> Expr {
 }
 
 pub fn expr_if(e0: Expr, b1: Block) -> Expr {
-    Expr::If(span(), ty_hole(), Rc::new(e0), b1, block([], expr_unit()))
+    Expr::Match(
+        span(),
+        ty_hole(),
+        Rc::new(e0),
+        arms([
+            (pat_bool(true), Expr::Block(span(), Type::Hole, b1)),
+            (pat_wild(), expr_unit()),
+        ]),
+    )
 }
 
 pub fn expr_if_else(e0: Expr, b1: Block, b2: Block) -> Expr {
-    Expr::If(span(), ty_hole(), Rc::new(e0), b1, b2)
+    Expr::Match(
+        span(),
+        ty_hole(),
+        Rc::new(e0),
+        arms([
+            (pat_bool(true), Expr::Block(span(), Type::Hole, b1)),
+            (pat_wild(), Expr::Block(span(), Type::Hole, b2)),
+        ]),
+    )
 }
 
 pub fn expr_def<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
@@ -828,15 +800,6 @@ pub fn expr_while(e: Expr, b: Block) -> Expr {
 
 pub fn span() -> Span {
     Span::default()
-}
-
-pub fn trim(s: String) -> String {
-    // Trim space right before \n on each line
-    s.trim_end()
-        .lines()
-        .map(|line| line.trim_end().to_string())
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 pub fn seg<const N: usize>(x: &'static str, ts: [Type; N]) -> (Name, Vec<Type>) {

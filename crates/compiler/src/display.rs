@@ -332,7 +332,6 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.brace(|this| {
             if !s.defs.is_empty() || !s.types.is_empty() {
                 this.indented(|this| {
-                    this.newline()?;
                     this.newline_sep(&s.defs, Self::stmt_def_decl)?;
                     this.newline_sep(&s.types, Self::stmt_type_decl)
                 })?;
@@ -347,7 +346,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
-        self.paren(|this| this.comma_sep(&s.params, Self::param))?;
+        self.paren(|this| this.comma_sep(&s.params, Self::ty))?;
         self.punct(":")?;
         self.space()?;
         self.ty(&s.ty)?;
@@ -499,34 +498,6 @@ impl<'a, 'b> Pretty<'a, 'b> {
             }
             Expr::Value(_, _) => {
                 self.kw("<value>")?;
-            }
-            Expr::Infix(_, _, t, e0, e1) => {
-                self.expr(e0)?;
-                self.space()?;
-                self.token(t)?;
-                self.space()?;
-                self.expr(e1)?;
-            }
-            Expr::Postfix(_, _, t, e) => {
-                self.expr(e)?;
-                self.space()?;
-                self.token(t)?;
-            }
-            Expr::Prefix(_, _, t, e) => {
-                self.token(t)?;
-                self.space()?;
-                self.expr(e)?;
-            }
-            Expr::If(_, _, e, b0, b1) => {
-                self.kw("if")?;
-                self.space()?;
-                self.expr(e)?;
-                self.space()?;
-                self.block(b0)?;
-                self.space()?;
-                self.kw("else")?;
-                self.space()?;
-                self.block(b1)?;
             }
             Expr::For(_, _, x, e, b) => {
                 self.kw("for")?;

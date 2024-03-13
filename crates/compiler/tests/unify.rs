@@ -1,7 +1,7 @@
 use compiler::infer::unify;
-use compiler::util::ty;
-use compiler::util::ty_con;
-use compiler::util::ty_var;
+use compiler::dsl::ty;
+use compiler::dsl::ty_con;
+use compiler::dsl::ty_var;
 
 #[test]
 fn test_unify_atom0() {

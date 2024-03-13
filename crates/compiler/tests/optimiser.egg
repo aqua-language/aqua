@@ -1,0 +1,20 @@
+;; 1 + 2 = 3
+(check (=
+  (Op2 Add (Val (I64 1)) (Val (I64 2)))
+  (Val (I64 3))))
+
+;; 1 - 2 = -1
+(check (=
+  (Op2 Sub (Val (I64 1)) (Val (I64 2)))
+  (Val (I64 (-1)))))
+
+;; 1 * 2 = 2
+(check (=
+  (Op2 Mul (Val (I64 1)) (Val (I64 2)))
+  (Val (I64 2))))
+
+;; 1 / 2 = 0
+(check (=
+  (Op2 Div (Val (I64 1)) (Val (I64 2)))
+  (Val (I64 0))))
+

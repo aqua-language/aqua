@@ -409,7 +409,7 @@ impl Context {
         let name = s.name.clone();
         let generics = s.generics.clone();
         let preds = s.bounds.iter().map(|p| self.bound(p)).collect();
-        let params = s.params.iter().map(|p| self.param(p)).collect();
+        let params = s.params.iter().map(|p| self.ty(p)).collect();
         let ty = self.ty(&s.ty);
         TraitDef::new(span, name, generics, preds, params, ty)
     }
@@ -628,10 +628,6 @@ impl Context {
                 Expr::Record(s, t, xes)
             }
             Expr::Value(_, _) => unreachable!(),
-            Expr::Infix(_, _, _, _, _) => unreachable!(),
-            Expr::Postfix(_, _, _, _) => unreachable!(),
-            Expr::Prefix(_, _, _, _) => unreachable!(),
-            Expr::If(_, _, _, _, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Char(_, _, _) => todo!(),
         }

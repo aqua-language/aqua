@@ -218,7 +218,7 @@ impl<'a, 'b> Rust<'a, 'b> {
         self.space()?;
         self.name(&s.name)?;
         assert!(s.generics.is_empty());
-        self.paren(|this| this.comma_sep(&s.params, Self::param))?;
+        self.paren(|this| this.comma_sep(&s.params, Self::ty))?;
         self.punct(":")?;
         self.space()?;
         self.ty(&s.ty)?;
@@ -356,10 +356,6 @@ impl<'a, 'b> Rust<'a, 'b> {
                 self.fields(xts, Self::assign)?;
             }
             Expr::Value(_, _) => todo!(),
-            Expr::Infix(_, _, _, _, _) => unreachable!(),
-            Expr::Postfix(_, _, _, _) => unreachable!(),
-            Expr::Prefix(_, _, _, _) => unreachable!(),
-            Expr::If(_, _, _, _, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Char(_, _, _) => todo!(),
         }

@@ -1,7 +1,5 @@
 use std::rc::Rc;
 
-use serde::Deserialize;
-use serde::Serialize;
 use smol_str::SmolStr;
 
 #[cfg(feature = "runtime")]
@@ -11,7 +9,6 @@ pub type Value = crate::builtins::Value;
 pub type Value = ();
 
 use crate::lexer::Span;
-use crate::lexer::Token;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Path {
@@ -28,27 +25,6 @@ impl Path {
 pub struct Name {
     pub span: Span,
     pub data: SmolStr,
-}
-
-impl Serialize for Name {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.data.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for Name {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        String::deserialize(deserializer).map(|data| Self {
-            span: Span::default(),
-            data: SmolStr::from(data),
-        })
-    }
 }
 
 impl Ord for Name {
@@ -194,7 +170,7 @@ pub struct TraitDef {
     pub name: Name,
     pub generics: Vec<Name>,
     pub bounds: Vec<Bound>,
-    pub params: Vec<Param>,
+    pub params: Vec<Type>,
     pub ty: Type,
 }
 
@@ -256,9 +232,6 @@ pub struct Index {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Expr {
     Unresolved(Span, Type, Path),
-    Prefix(Span, Type, Token, Rc<Expr>),
-    Infix(Span, Type, Token, Rc<Expr>, Rc<Expr>),
-    Postfix(Span, Type, Token, Rc<Expr>),
     Int(Span, Type, String),
     Float(Span, Type, String),
     Bool(Span, Type, bool),
@@ -284,7 +257,6 @@ pub enum Expr {
     Break(Span, Type),
     While(Span, Type, Rc<Expr>, Block),
     Fun(Span, Type, Vec<Param>, Type, Rc<Expr>),
-    If(Span, Type, Rc<Expr>, Block, Block),
     For(Span, Type, Name, Rc<Expr>, Block),
     Err(Span, Type),
     Value(Type, Value),
@@ -487,7 +459,7 @@ impl TraitDef {
         name: Name,
         generics: Vec<Name>,
         where_clause: Vec<Bound>,
-        params: Vec<Param>,
+        params: Vec<Type>,
         ty: Type,
     ) -> Self {
         Self {
@@ -598,10 +570,6 @@ impl Expr {
             Expr::Record(_, t, _) => t,
             Expr::Unresolved(_, t, _) => t,
             Expr::Value(_, _) => todo!(),
-            Expr::Infix(_, _, _, _, _) => todo!(),
-            Expr::Postfix(_, _, _, _) => todo!(),
-            Expr::Prefix(_, _, _, _) => todo!(),
-            Expr::If(_, _, _, _, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Char(_, _, _) => todo!(),
         }
@@ -637,10 +605,6 @@ impl Expr {
             Expr::Record(_, _, _) => todo!(),
             Expr::Unresolved(s, _, p) => Expr::Unresolved(s, t, p),
             Expr::Value(_, _) => todo!(),
-            Expr::Infix(_, _, _, _, _) => todo!(),
-            Expr::Postfix(_, _, _, _) => todo!(),
-            Expr::Prefix(_, _, _, _) => todo!(),
-            Expr::If(_, _, _, _, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Char(_, _, _) => todo!(),
         }
@@ -675,10 +639,6 @@ impl Expr {
             Expr::Record(s, _, _) => *s,
             Expr::Unresolved(s, _, _) => *s,
             Expr::Value(_, _) => todo!(),
-            Expr::Infix(_, _, _, _, _) => todo!(),
-            Expr::Postfix(_, _, _, _) => todo!(),
-            Expr::Prefix(_, _, _, _) => todo!(),
-            Expr::If(_, _, _, _, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Char(_, _, _) => todo!(),
         }
@@ -714,10 +674,6 @@ impl Expr {
             Expr::Match(_, t, e, pes) => Expr::Match(span, t, e, pes),
             Expr::Err(_, t) => Expr::Err(span, t),
             Expr::Value(_, _) => todo!(),
-            Expr::Infix(_, _, _, _, _) => todo!(),
-            Expr::Postfix(_, _, _, _) => todo!(),
-            Expr::Prefix(_, _, _, _) => todo!(),
-            Expr::If(_, _, _, _, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Char(_, _, _) => todo!(),
         }

@@ -274,10 +274,6 @@ impl Context {
             Expr::Fun(_, _, _, _, _) => unreachable!(),
             Expr::Err(_, _) => unreachable!(),
             Expr::Value(_, _) => unreachable!(),
-            Expr::Infix(_, _, _, _, _) => unreachable!(),
-            Expr::Postfix(_, _, _, _) => unreachable!(),
-            Expr::Prefix(_, _, _, _) => unreachable!(),
-            Expr::If(_, _, _, _, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Char(_, _, _) => todo!(),
         }
