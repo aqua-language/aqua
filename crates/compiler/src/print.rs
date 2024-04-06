@@ -1,5 +1,6 @@
 use crate::ast::Index;
 use crate::ast::Name;
+use crate::ast::Uid;
 use crate::lexer::Token;
 
 pub trait Print<'b> {
@@ -167,7 +168,15 @@ pub trait Print<'b> {
     }
 
     fn name(&mut self, s: &Name) -> std::fmt::Result {
-        write!(self.fmt(), "{}", &s.data)
+        write!(self.fmt(), "{}", &s.data)?;
+        self.uid(&s.uid)
+    }
+
+    fn uid(&mut self, s: &Uid) -> std::fmt::Result {
+        if s.0 != 0 {
+            write!(self.fmt(), "_{}", s.0)?;
+        }
+        Ok(())
     }
 
     fn index(&mut self, i: &Index) -> std::fmt::Result {

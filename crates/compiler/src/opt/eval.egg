@@ -1,0 +1,61 @@
+(ruleset eval)
+
+;; ----------------------------------------------------------------------------
+
+(sort Env)
+
+;; Env
+(function EnvNil () Env :unextractable)
+(function EnvCons (String Expr Env) Env :unextractable)
+
+;; Lookup variable in environment
+(function lookup (Env String) Expr :cost 1000)
+(rewrite (lookup (EnvCons x e env) x) e :ruleset eval)
+(rule ((= e1 (lookup (EnvCons x e2 env) x))
+       (!= x y))
+      ((union e1 (lookup env x))) :ruleset eval)
+
+;; ----------------------------------------------------------------------------
+
+;; Binary Operations
+(rewrite (Add (I64 a) (I64 b)) (I64 (+ a b)) :ruleset eval)
+(rewrite (Add (F64 a) (F64 b)) (F64 (+ a b)) :ruleset eval)
+(rewrite (Sub (I64 a) (I64 b)) (I64 (- a b)) :ruleset eval)
+(rewrite (Sub (F64 a) (F64 b)) (F64 (- a b)) :ruleset eval)
+(rewrite (Mul (I64 a) (I64 b)) (I64 (* a b)) :ruleset eval)
+(rewrite (Mul (F64 a) (F64 b)) (F64 (* a b)) :ruleset eval)
+(rewrite (Div (I64 a) (I64 b)) (I64 (/ a b)) :ruleset eval)
+(rewrite (Div (F64 a) (F64 b)) (F64 (/ a b)) :ruleset eval)
+(rewrite (And (Bool a) (Bool b)) (Bool (and a b)) :ruleset eval)
+(rewrite (Or (Bool a) (Bool b)) (Bool (or a b)) :ruleset eval)
+(rewrite (Eq (I64 a) (I64 b)) (Bool (bool-= a b)) :ruleset eval)
+(rewrite (Le (I64 a) (I64 b)) (Bool (bool-<= a b)) :ruleset eval)
+
+;; Unary Operations
+(rewrite (Not (Bool a)) (Bool (not a)) :ruleset eval)
+(rewrite (Neg (F64 a)) (F64 (neg a)) :ruleset eval)
+
+(rewrite (Fst (Pair a b)) a :ruleset eval)
+(rewrite (Snd (Pair a b)) b :ruleset eval)
+
+;; Partial evaluation
+(function pe (Env Expr) Expr :cost 1000)
+;; App-Beta: env ⊢ (fun x e) e1 => e[x -> e1]
+(rewrite (pe env (App (Fun x e2) e3)) (pe (EnvCons x e3 env) e2) :ruleset eval)
+;; App-Eval: env ⊢ e1 e2 => e1' e2'
+(rewrite (pe env (App e1 e2)) (App (pe env e1) (pe env e2)) :ruleset eval)
+;; Var-Subst: x → e ∈ env ⊢ x => e
+(rewrite (pe env (Var x)) (lookup env x) :ruleset eval)
+;; If-Eval: env ⊢ if e1 e2 e3 => if e1' e2' e3'
+(rewrite (pe env (If e1 e2 e3)) (If (pe env e1) (pe env e2) (pe env e3)) :ruleset eval)
+;; Value-Eval: env ⊢ v => v
+(rewrite (pe env (Value v)) (Value v) :ruleset eval)
+;; Unary-Eval: env ⊢ op e => op e'
+(rewrite (pe env (Unary op e)) (Unary op (pe env e)) :ruleset eval)
+;; Binary-Eval: env ⊢ op e1 e2 => op e1' e2'
+(rewrite (pe env (Binary op e1 e2)) (Binary op (pe env e1) (pe env e2)) :ruleset eval)
+;; Fun-Eval: env ⊢ fun x e => fun x (env ⊢ e)
+(rewrite (pe env (Fun x e)) (Fun x (pe env e)) :ruleset eval)
+
+(function partial-eval (Expr) Expr :cost 1000)
+(rewrite (partial-eval e) (pe (EnvNil) e) :ruleset eval)

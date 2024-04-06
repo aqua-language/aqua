@@ -5,6 +5,7 @@ use ast::Pat;
 use ast::Program;
 use ast::Stmt;
 use ast::Type;
+use builtins::Value;
 use config::Config;
 use diag::Report;
 use diag::Sources;
@@ -19,31 +20,39 @@ pub mod codegen;
 pub mod diag;
 pub mod display;
 // pub mod ffi;
-pub mod infer;
-pub mod lexer;
-// pub mod lift;
+pub mod builtins;
 pub mod dsl;
+pub mod infer;
+pub mod interpret;
+pub mod lexer;
+#[allow(unused)]
+pub mod lift;
 pub mod parser;
 pub mod print;
 pub mod resolve;
 
 #[cfg(feature = "optimiser")]
 pub mod opt;
+// mod visitor;
+// pub mod monomorphise;
 
-#[cfg(feature = "interpret")]
-pub mod builtins;
-
-#[cfg(feature = "interpret")]
-pub mod interpret;
-
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Compiler {
-    ctx0: resolve::Context,
-    ctx1: infer::Context,
-    // ctx2: interpret::Context,
     pub sources: Sources,
+    pub(crate) declarations: Vec<Stmt>,
+    resolve: resolve::Context,
+    #[allow(unused)]
+    lift: lift::Context,
+    infer: infer::Context,
+    interpret: interpret::Context,
     report: Report,
     pub config: Config,
+}
+
+impl Default for Compiler {
+    fn default() -> Self {
+        Self::new(Config::default())
+    }
 }
 
 impl Drop for Compiler {
@@ -56,23 +65,45 @@ impl Drop for Compiler {
 
 impl Compiler {
     pub fn new(config: Config) -> Self {
-        Self {
-            ctx0: resolve::Context::new(),
-            ctx1: infer::Context::new(),
-            // ctx2: interpret::Context::new(),
+        Compiler {
+            declarations: Vec::new(),
             sources: Sources::new(),
+            resolve: resolve::Context::new(),
+            lift: lift::Context::new(),
+            infer: infer::Context::new(),
+            interpret: interpret::Context::new(),
             report: Report::new(),
             config,
         }
     }
 
+    pub fn init(&mut self) -> &mut Self {
+        self.declare();
+        let stmts = self.declarations.drain(..).collect();
+        let program = Program::new(stmts);
+        let program = self.resolve.resolve(&program);
+        self.report.merge(&mut self.resolve.report);
+        let program = self.lift.lift(&program);
+        self.report.merge(&mut self.lift.report);
+        let program = self.infer.infer(&program);
+        self.report.merge(&mut self.infer.report);
+        self.interpret.interpret(&program);
+        self.report.merge(&mut self.interpret.report);
+        self
+        // let result = self.inferrer.infer(&result);
+        // let result = self.inferrer.infer(&result);
+        // self.interpreter.interpret(&result);
+        // assert!(self.inferrer.report.is_empty());
+        // assert!(self.interpreter.report.is_empty());
+    }
+
     pub fn parse<T>(
         &mut self,
         name: impl ToString,
-        input: impl Into<Rc<str>>,
-        f: impl for<'a> Fn(&mut Parser<'a, &mut Lexer<'a>>) -> T,
+        input: &str,
+        f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>) -> T,
     ) -> Result<T, Recovered<T>> {
-        let input = input.into();
+        let input: Rc<str> = unindent::unindent(input).into();
         let id = self.sources.add(name, input.clone());
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
@@ -83,28 +114,34 @@ impl Compiler {
     }
 
     pub fn resolve(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.parse(name, input, |parser| parser.parse(Parser::program))?;
-        let result = self.ctx0.resolve(&program);
-        self.report.merge(&mut self.ctx0.report);
+        let program = self.parse(name, input, |parser| parser.parse(Parser::program).unwrap())?;
+        let result = self.resolve.resolve(&program);
+        self.report.merge(&mut self.resolve.report);
         self.recover(result)
+    }
+
+    pub fn lift(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
+        let program = self.resolve(name, input)?;
+        let program = self.lift.lift(&program);
+        self.recover(program)
     }
 
     pub fn infer(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
         let result = self.resolve(name, input)?;
-        let result = self.ctx1.infer(&result);
-        self.report.merge(&mut self.ctx1.report);
+        let result = self.infer.infer(&result);
+        self.report.merge(&mut self.infer.report);
         self.recover(result)
     }
 
-    // pub fn interpret(&mut self, name: &str, input: &str) -> Result<Program, (Program, String)> {
-    //     let program = match self.infer(name, input) {
-    //         Ok(program) => program,
-    //         Err((program, e)) => return Err((program, e)),
-    //     };
-    //     self.ctx2.interpret(&program);
-    //     self.report.merge(&mut self.ctx2.report);
-    //     self.ok_or_err(program)
-    // }
+    pub fn interpret(&mut self, name: &str, input: &str) -> Result<Value, Recovered<Value>> {
+        let mut result = self.infer(name, input).unwrap();
+        let stmt = result.stmts.pop().unwrap();
+        let expr = stmt.as_expr();
+        self.interpret.interpret(&result);
+        let value = self.interpret.expr(expr);
+        self.report.merge(&mut self.interpret.report);
+        self.recover(value)
+    }
 
     fn recover<T>(&mut self, result: T) -> Result<T, Recovered<T>> {
         if self.report.is_empty() {
@@ -121,37 +158,45 @@ impl Compiler {
 
 impl Stmt {
     pub fn parse(input: &str) -> Result<Stmt, Recovered<Stmt>> {
-        Compiler::default().parse("test", input, |parser| parser.parse(Parser::stmt))
+        Compiler::default().parse("test", input, |parser| parser.parse(Parser::stmt).unwrap())
     }
 }
 
 impl Expr {
     pub fn parse(input: &str) -> Result<Expr, Recovered<Expr>> {
-        Compiler::default().parse("test", input, |parser| parser.parse(Parser::expr))
+        Compiler::default().parse("test", input, |parser| parser.parse(Parser::expr).unwrap())
     }
 }
 
 impl Type {
     pub fn parse(input: &str) -> Result<Type, Recovered<Type>> {
-        Compiler::default().parse("test", input, |parser| parser.parse(Parser::ty))
+        Compiler::default().parse("test", input, |parser| parser.parse(Parser::ty).unwrap())
     }
 }
 
 impl Pat {
     pub fn parse(input: &str) -> Result<Pat, Recovered<Pat>> {
-        Compiler::default().parse("test", input, |parser| parser.parse(Parser::pat))
+        Compiler::default().parse("test", input, |parser| parser.parse(Parser::pat).unwrap())
     }
 }
 
 impl Program {
     pub fn parse(input: &str) -> Result<Program, Recovered<Program>> {
-        Compiler::default().parse("test", input, |parser| parser.parse(Parser::program))
+        Compiler::default().parse("test", input, |parser| {
+            parser.parse(Parser::program).unwrap()
+        })
     }
     pub fn resolve(input: &str) -> Result<Program, Recovered<Program>> {
-        Compiler::default().resolve("test", input)
+        Compiler::default().init().resolve("test", input)
     }
-    pub fn try_infer(input: &str) -> Result<Program, Recovered<Program>> {
-        Compiler::default().infer("test", input)
+    pub fn lift(input: &str) -> Result<Program, Recovered<Program>> {
+        Compiler::default().init().lift("test", input)
+    }
+    pub fn infer(input: &str) -> Result<Program, Recovered<Program>> {
+        Compiler::default().init().infer("test", input)
+    }
+    pub fn interpret(input: &str) -> Result<Value, Recovered<Value>> {
+        Compiler::default().init().interpret("test", input)
     }
 }
 

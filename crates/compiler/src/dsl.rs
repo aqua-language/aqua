@@ -2,34 +2,54 @@ use std::rc::Rc;
 
 use crate::ast::Arm;
 use crate::ast::Block;
-use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Index;
+use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Param;
 use crate::ast::Pat;
-use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Query;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
+use crate::ast::StmtDefBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
 use crate::ast::StmtType;
+use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
+use crate::ast::TraitBound;
 use crate::ast::TraitDef;
 use crate::ast::TraitType;
 use crate::ast::Type;
-use crate::ast::UnresolvedPatField;
+
 use crate::lexer::Span;
 
 #[macro_export]
 macro_rules! check {
     ($a:expr, $b:expr) => {
         assert!($a == $b, "\n(a) {}\n\n(b) {}", $a, $b);
+    };
+    (@debug; $a:expr, $b:expr) => {
+        fn diff(a: impl std::fmt::Debug, b: impl std::fmt::Debug) -> String {
+            let a = format!("{:#?}", a);
+            let b = format!("{:#?}", b);
+            let mut output = String::new();
+            let diff = similar::TextDiff::from_lines(&a, &b);
+            for change in diff.iter_all_changes() {
+                let sign = match change.tag() {
+                    similar::ChangeTag::Delete => "A",
+                    similar::ChangeTag::Insert => "B",
+                    similar::ChangeTag::Equal => " ",
+                };
+                output.push_str(&format!("{}{}", sign, change));
+            }
+            output
+        }
+        assert!($a == $b, "\n{}", diff($a, $b));
     };
     ($a:expr, $b:expr, $b_msg:literal) => {{
         fn diff(a: impl std::fmt::Debug, b: impl std::fmt::Debug) -> String {
@@ -69,15 +89,15 @@ pub fn program<const N: usize>(ss: [Stmt; N]) -> Program {
 pub fn stmt_trait<const N: usize, const M: usize, const K: usize, const L: usize>(
     x: &'static str,
     gs: [&'static str; N],
-    body: [Bound; M],
+    bounds: [Bound; M],
     defs: [TraitDef; K],
     types: [TraitType; L],
 ) -> Stmt {
     StmtTrait::new(
         span(),
         name(x),
-        map(gs, name),
-        vec(body),
+        app(gs, name),
+        vec(bounds),
         vec(defs),
         vec(types),
     )
@@ -88,8 +108,29 @@ fn vec<const N: usize, T: Clone>(xs: [T; N]) -> Vec<T> {
     xs.into_iter().collect()
 }
 
-fn map<const N: usize, T, U: Clone>(xs: [T; N], f: impl Fn(T) -> U) -> Vec<U> {
+fn map<const N: usize, K, V>(kvs: [(K, V); N]) -> Map<K, V> {
+    Map::from(kvs.into_iter().collect::<Vec<_>>())
+}
+
+fn name_map<const N: usize, V>(xs: [(&'static str, V); N]) -> Map<Name, V> {
+    Map::from(
+        xs.into_iter()
+            .map(|(x, v)| (name(x), v))
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn app<const N: usize, T, U: Clone>(xs: [T; N], f: impl Fn(T) -> U) -> Vec<U> {
     xs.into_iter().map(f).collect()
+}
+
+#[allow(unused)]
+fn map2<const N: usize, T, U, V: Clone>(xs: [(T, U); N], f: impl Fn(T, U) -> V) -> Vec<V> {
+    xs.into_iter().map(|(x, y)| f(x, y)).collect()
+}
+
+fn map3<const N: usize, T, U, S, V: Clone>(xs: [(T, U, S); N], f: impl Fn(T, U, S) -> V) -> Vec<V> {
+    xs.into_iter().map(|(x, y, z)| f(x, y, z)).collect()
 }
 
 // Create a Rule:
@@ -103,17 +144,17 @@ pub fn stmt_impl<const N: usize, const M: usize, const K: usize, const L: usize>
 ) -> Stmt {
     StmtImpl::new(
         span(),
-        map(gs, name),
+        app(gs, name),
         head,
         vec(body),
-        map(defs, |s| {
+        app(defs, |s| {
             if let Stmt::Def(s) = s {
                 s
             } else {
                 unreachable!()
             }
         }),
-        map(types, |s| {
+        app(types, |s| {
             if let Stmt::Type(s) = s {
                 s
             } else {
@@ -132,13 +173,25 @@ pub fn fact<const N: usize, const M: usize, const K: usize>(
     defs: [StmtDef; M],
     types: [StmtType; K],
 ) -> StmtImpl {
-    StmtImpl::new(span(), map(gs, name), head, vec([]), vec(defs), vec(types))
+    StmtImpl::new(span(), app(gs, name), head, vec([]), vec(defs), vec(types))
 }
 
 // Create a predicate:
 // {t0}: {name}<{t1},..,{tn},{assoc}>
-pub fn bound<const N: usize>(x: &'static str, types: [Type; N]) -> Bound {
-    Bound::Trait(span(), name(x), vec(types))
+pub fn bound<const N: usize, const M: usize>(
+    x: &'static str,
+    ts: [Type; N],
+    xts: [(&'static str, Type); M],
+) -> Bound {
+    Bound::Trait(span(), trait_bound(x, ts, xts))
+}
+
+pub fn trait_bound<const N: usize, const M: usize>(
+    x: &'static str,
+    ts: [Type; N],
+    xts: [(&'static str, Type); M],
+) -> TraitBound {
+    TraitBound::new(name(x), vec(ts), name_map(xts))
 }
 
 pub fn bound_err() -> Bound {
@@ -187,52 +240,54 @@ pub fn ty_gen(x: &'static str) -> Type {
     Type::Generic(name(x))
 }
 
-pub fn ty_assoc<const N: usize, const M: usize>(
+pub fn ty_assoc<const N: usize, const M: usize, const K: usize>(
     x0: &'static str,
     ts0: [Type; N],
+    xts0: [(&'static str, Type); M],
     x1: &'static str,
-    ts1: [Type; M],
+    ts1: [Type; K],
 ) -> Type {
-    Type::Assoc(name(x0), vec(ts0), name(x1), vec(ts1))
+    Type::Assoc(trait_bound(x0, ts0, xts0), name(x1), vec(ts1))
 }
 
 pub fn pat_record<const N: usize>(xps: [(&'static str, Pat); N]) -> Pat {
-    Pat::Record(span(), ty_hole(), map(xps, |(x, p)| (name(x), p)))
+    Pat::Record(span(), ty_hole(), name_map(xps))
 }
 
 pub mod unresolved {
     use std::rc::Rc;
 
     use super::expr_assign;
-    use super::parsed_expr_def;
+    use super::map;
+    use super::map3;
+    use super::name_map;
     use super::vec;
     use crate::ast::Bound;
     use crate::ast::Expr;
+    use crate::ast::Map;
     use crate::ast::Name;
     use crate::ast::Pat;
     use crate::ast::Path;
+    use crate::ast::Segment;
     use crate::ast::Type;
     use crate::ast::UnresolvedPatField;
 
+    use super::app;
     use super::expr_call;
-    use super::map;
     use super::name;
-    use super::parsed_expr_var;
     use super::span;
     use super::ty_hole;
 
-    pub fn bound<const N: usize>(x: &'static str, ts: [Type; N]) -> Bound {
-        Bound::Unresolved(span(), unresolved_name(x, ts))
-    }
-
-    pub fn pat_var(x: &'static str) -> Pat {
-        Pat::Unresolved(span(), ty_hole(), unresolved_name(x, []), None)
-    }
-
+    // x
     pub fn expr_var(x: &'static str) -> Expr {
-        parsed_expr_var(span(), x)
+        Expr::Unresolved(
+            span(),
+            ty_hole(),
+            Path::new(vec([segment(x, vec([]), map([]))])),
+        )
     }
 
+    // x[ts](x0 = e0, x1 = e1, ..)
     pub fn expr_struct<const N: usize, const M: usize>(
         x: &'static str,
         ts: [Type; N],
@@ -241,13 +296,17 @@ pub mod unresolved {
         Expr::Call(
             span(),
             ty_hole(),
-            Rc::new(parsed_expr_def(span(), x, vec(ts))),
-            map(xes, |(x, e)| expr_assign(parsed_expr_var(span(), x), e)),
+            Rc::new(name_expr(x, ts)),
+            app(xes, |(x, e)| expr_assign(expr_var(x), e)),
         )
     }
 
     pub fn expr_def<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
-        Expr::Unresolved(span(), ty_hole(), unresolved_name(x, ts))
+        name_expr(x, ts)
+    }
+
+    fn name_expr<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
+        Expr::Unresolved(span(), ty_hole(), name_path(x, ts, []))
     }
 
     pub fn expr_variant<const N: usize, const M: usize>(
@@ -262,7 +321,7 @@ pub mod unresolved {
             Rc::new(Expr::Unresolved(
                 span(),
                 ty_hole(),
-                path([(name(x0), vec(ts)), (name(x1), vec([]))]),
+                path([(x0, vec(ts), map([])), (x1, vec([]), map([]))]),
             )),
             vec(es),
         )
@@ -276,7 +335,7 @@ pub mod unresolved {
         Expr::Unresolved(
             span(),
             ty_hole(),
-            path([(name(x0), vec(ts)), (name(x1), vec([]))]),
+            path([(x0, vec(ts), map([])), (x1, vec([]), map([]))]),
         )
     }
     pub fn expr_call_direct<const N: usize, const M: usize>(
@@ -285,6 +344,99 @@ pub mod unresolved {
         es: [Expr; M],
     ) -> Expr {
         expr_call(expr_def(x, ts), es)
+    }
+
+    pub fn expr_assoc<const N: usize, const M: usize>(
+        x0: &'static str,
+        ts: [Type; N],
+        xts: [(&'static str, Type); M],
+        x1: &'static str,
+    ) -> Expr {
+        Expr::Unresolved(
+            span(),
+            ty_hole(),
+            path([(x0, vec(ts), name_map(xts)), (x1, vec([]), map([]))]),
+        )
+    }
+
+    pub fn expr_binop(x0: &'static str, x1: &'static str, e0: Expr, e1: Expr) -> Expr {
+        Expr::Call(
+            span(),
+            ty_hole(),
+            Rc::new(expr_assoc(x0, [], [], x1)),
+            vec([e0, e1]),
+        )
+    }
+
+    pub fn expr_enum(x0: &'static str, x1: &'static str) -> Expr {
+        Expr::Unresolved(
+            span(),
+            ty_hole(),
+            Path::new(vec([
+                segment(x0, vec([]), map([])),
+                segment(x1, vec([]), map([])),
+            ])),
+        )
+    }
+
+    pub fn expr_unop(x0: &'static str, x1: &'static str, e: Expr) -> Expr {
+        Expr::Call(
+            span(),
+            ty_hole(),
+            Rc::new(expr_assoc(x0, [], [], x1)),
+            vec([e]),
+        )
+    }
+
+    pub fn expr_add(e0: Expr, e1: Expr) -> Expr {
+        expr_binop("Add", "add", e0, e1)
+    }
+
+    pub fn expr_sub(e0: Expr, e1: Expr) -> Expr {
+        expr_binop("Sub", "sub", e0, e1)
+    }
+
+    pub fn expr_mul(e0: Expr, e1: Expr) -> Expr {
+        expr_binop("Mul", "mul", e0, e1)
+    }
+
+    pub fn expr_div(e0: Expr, e1: Expr) -> Expr {
+        expr_binop("Div", "div", e0, e1)
+    }
+
+    pub fn expr_eq(e0: Expr, e1: Expr) -> Expr {
+        expr_binop("PartialEq", "eq", e0, e1)
+    }
+
+    pub fn expr_ne(e0: Expr, e1: Expr) -> Expr {
+        expr_binop("PartialEq", "ne", e0, e1)
+    }
+
+    pub fn expr_lt(e0: Expr, e1: Expr) -> Expr {
+        expr_binop("PartialOrd", "lt", e0, e1)
+    }
+
+    pub fn expr_le(e0: Expr, e1: Expr) -> Expr {
+        expr_binop("PartialOrd", "le", e0, e1)
+    }
+
+    pub fn expr_gt(e0: Expr, e1: Expr) -> Expr {
+        expr_binop("PartialOrd", "gt", e0, e1)
+    }
+
+    pub fn expr_ge(e0: Expr, e1: Expr) -> Expr {
+        expr_binop("PartialOrd", "ge", e0, e1)
+    }
+    pub fn expr_not(e: Expr) -> Expr {
+        expr_unop("Not", "not", e)
+    }
+
+    pub fn expr_neg(e: Expr) -> Expr {
+        expr_unop("Neg", "neg", e)
+    }
+
+    pub fn pat_var(x: &'static str) -> Pat {
+        Pat::Unresolved(span(), ty_hole(), name_path(x, [], []), None)
     }
 
     pub fn pat_enum<const N: usize>(
@@ -296,7 +448,7 @@ pub mod unresolved {
         Pat::Unresolved(
             span(),
             ty_hole(),
-            path([(name(x0), vec(ts)), (name(x1), vec([]))]),
+            path([(x0, vec(ts), map([])), (x1, vec([]), map([]))]),
             Some(vec([UnresolvedPatField::Unnamed(p)])),
         )
     }
@@ -309,42 +461,60 @@ pub mod unresolved {
         Pat::Unresolved(
             span(),
             ty_hole(),
-            path([(name(x0), vec(ts))]),
-            Some(map(xps, |(x, p)| UnresolvedPatField::Named(name(x), p))),
+            path([(x0, vec(ts), map([]))]),
+            Some(app(xps, |(x, p)| UnresolvedPatField::Named(name(x), p))),
         )
     }
 
     pub fn pat_unit_struct<const N: usize>(x: &'static str, ts: [Type; N]) -> Pat {
-        Pat::Unresolved(span(), ty_hole(), path([(name(x), vec(ts))]), None)
-    }
-
-    pub fn path<const N: usize>(segments: [(Name, Vec<Type>); N]) -> Path {
-        Path::new(vec(segments))
-    }
-
-    pub fn unresolved_name<const N: usize>(x: &'static str, ts: [Type; N]) -> Path {
-        let name = Name::from(x);
-        let tys = vec(ts);
-        Path::new(vec([(name, tys)]))
+        Pat::Unresolved(span(), ty_hole(), path([(x, vec(ts), map([]))]), None)
     }
 
     pub fn ty_con<const N: usize>(x: &'static str, ts: [Type; N]) -> Type {
-        Type::Unresolved(Path::new(vec([(name(x), vec(ts))])))
+        Type::Unresolved(name_path(x, ts, []))
     }
 
     pub fn ty(x: &'static str) -> Type {
-        Type::Unresolved(unresolved_name(x, []))
+        Type::Unresolved(name_path(x, [], []))
     }
 
-    pub fn ty_assoc<const N: usize>(x0: &'static str, ts: [Type; N], x1: &'static str) -> Type {
-        Type::Unresolved(Path::new(vec([(name(x0), vec(ts)), (name(x1), vec([]))])))
+    pub fn ty_assoc<const N: usize, const M: usize>(
+        x0: &'static str,
+        ts: [Type; N],
+        xts: [(&'static str, Type); M],
+        x1: &'static str,
+    ) -> Type {
+        Type::Unresolved(path([(x0, vec(ts), name_map(xts)), (x1, vec([]), map([]))]))
     }
-    pub fn expr_assoc<const N: usize>(x0: &'static str, ts: [Type; N], x1: &'static str) -> Expr {
-        Expr::Unresolved(
-            span(),
-            ty_hole(),
-            path([(name(x0), vec(ts)), (name(x1), vec([]))]),
-        )
+
+    pub fn bound<const N: usize, const M: usize>(
+        x: &'static str,
+        ts: [Type; N],
+        xts: [(&'static str, Type); M],
+    ) -> Bound {
+        Bound::Unresolved(span(), name_path(x, ts, xts))
+    }
+
+    pub fn head<const N: usize>(x: &'static str, ts: [Type; N]) -> Bound {
+        Bound::Unresolved(span(), name_path(x, ts, []))
+    }
+
+    pub fn path<const N: usize>(segments: [(&'static str, Vec<Type>, Map<Name, Type>); N]) -> Path {
+        Path::new(map3(segments, segment))
+    }
+
+    pub fn segment(x: &'static str, ts: Vec<Type>, xts: Map<Name, Type>) -> Segment {
+        Segment::new(span(), name(x), ts, xts)
+    }
+
+    pub fn name_path<const N: usize, const M: usize>(
+        x: &'static str,
+        ts: [Type; N],
+        xts: [(&'static str, Type); M],
+    ) -> Path {
+        let tys = vec(ts);
+        let xts = name_map(xts);
+        Path::new(vec([segment(x, tys, xts)]))
     }
 }
 
@@ -354,7 +524,8 @@ pub fn expr_assoc<const N: usize, const M: usize>(
     x1: &'static str,
     ts1: [Type; M],
 ) -> Expr {
-    Expr::Assoc(span(), ty_hole(), name(x0), vec(ts0), name(x1), vec(ts1))
+    let b = trait_bound(x0, ts0, []);
+    Expr::Assoc(span(), ty_hole(), b, name(x1), vec(ts1))
 }
 
 pub fn expr_assign(e0: Expr, e1: Expr) -> Expr {
@@ -373,8 +544,16 @@ pub fn stmt_var(x: &'static str, t: Type, e: Expr) -> Stmt {
     StmtVar::new(span(), name(x), t, e).into()
 }
 
-pub fn stmt_type<const N: usize>(x: &'static str, generics: [&'static str; N], t: Type) -> Stmt {
-    StmtType::new(span(), name(x), map(generics, name), t).into()
+pub fn type_body(t: Type) -> StmtTypeBody {
+    StmtTypeBody::UserDefined(t)
+}
+
+pub fn stmt_type<const N: usize>(
+    x: &'static str,
+    generics: [&'static str; N],
+    t: impl Into<StmtTypeBody>,
+) -> Stmt {
+    StmtType::new(span(), name(x), app(generics, name), t.into()).into()
 }
 
 pub fn stmt_expr(e: Expr) -> Stmt {
@@ -394,13 +573,7 @@ pub fn expr_struct<const N: usize, const M: usize>(
     ts: [Type; N],
     xes: [(&'static str, Expr); M],
 ) -> Expr {
-    Expr::Struct(
-        span(),
-        ty_hole(),
-        name(x),
-        vec(ts),
-        map(xes, |(x, e)| (name(x), e)),
-    )
+    Expr::Struct(span(), ty_hole(), name(x), vec(ts), name_map(xes))
 }
 
 pub fn expr_tuple<const N: usize>(es: [Expr; N]) -> Expr {
@@ -432,22 +605,26 @@ pub fn expr_enum<const N: usize>(
     Expr::Enum(span(), ty_hole(), name(x0), vec(ts), name(x1), Rc::new(e))
 }
 
+pub fn expr_body(e: Expr) -> StmtDefBody {
+    StmtDefBody::UserDefined(e)
+}
+
 pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
     x: &'static str,
     gs: [&'static str; N],
     ps: [(&'static str, Type); K],
     t: Type,
     qs: [Bound; M],
-    e: Expr,
+    b: impl Into<StmtDefBody>,
 ) -> Stmt {
     StmtDef::new(
         span(),
         name(x),
-        map(gs, name),
-        vec(qs),
-        map(ps, |(s, t)| Param::new(span(), name(s), t)),
+        app(gs, name),
+        app(ps, |(s, t)| Param::new(span(), name(s), t)),
         t,
-        Body::Expr(e),
+        vec(qs),
+        b.into(),
     )
     .into()
 }
@@ -459,105 +636,35 @@ pub fn stmt_err() -> Stmt {
 pub fn tr_def<const N: usize, const M: usize, const K: usize>(
     x: &'static str,
     gs: [&'static str; N],
-    ts: [Type; K],
-    qs: [Bound; M],
+    xts: [(&'static str, Type); K],
     t: Type,
+    qs: [Bound; M],
 ) -> TraitDef {
-    TraitDef::new(span(), name(x), map(gs, name), vec(qs), vec(ts), t)
+    TraitDef::new(span(), name(x), app(gs, name), app(xts, param), t, vec(qs))
 }
 
 pub fn tr_type<const N: usize>(x: &'static str, gs: [&'static str; N]) -> TraitType {
-    TraitType::new(span(), name(x), map(gs, name))
+    TraitType::new(span(), name(x), app(gs, name))
 }
 
 pub fn stmt_struct<const N: usize, const M: usize>(
     x: &'static str,
     gs: [&'static str; N],
-    ps: [(&'static str, Type); M],
+    xts: [(&'static str, Type); M],
 ) -> Stmt {
-    StmtStruct::new(
-        span(),
-        name(x),
-        map(gs, name),
-        map(ps, |(s, t)| (name(s), t)),
-    )
-    .into()
+    StmtStruct::new(span(), name(x), app(gs, name), name_map(xts)).into()
 }
 
 pub fn stmt_enum<const N: usize, const M: usize>(
     x: &'static str,
     gs: [&'static str; N],
-    ps: [(&'static str, Type); M],
+    xts: [(&'static str, Type); M],
 ) -> Stmt {
-    StmtEnum::new(
-        span(),
-        name(x),
-        map(gs, name),
-        map(ps, |(s, t)| (name(s), t)),
-    )
-    .into()
+    StmtEnum::new(span(), name(x), app(gs, name), name_map(xts)).into()
 }
 
 pub fn expr_call<const N: usize>(e: Expr, es: [Expr; N]) -> Expr {
     Expr::Call(span(), ty_hole(), Rc::new(e), vec(es))
-}
-
-pub fn binop(s: Span, tr: &'static str, op: &'static str, e0: Expr, e1: Expr) -> Expr {
-    Expr::Call(
-        s,
-        ty_hole(),
-        Rc::new(parsed_expr_assoc(span(), tr, op)),
-        vec([e0, e1]),
-    )
-}
-
-pub fn parsed_expr_unop(s: Span, tr: &'static str, op: &'static str, e: Expr) -> Expr {
-    Expr::Call(
-        s,
-        ty_hole(),
-        Rc::new(parsed_expr_assoc(span(), tr, op)),
-        vec([e]),
-    )
-}
-
-pub fn expr_add(e0: Expr, e1: Expr) -> Expr {
-    binop(span(), "Add", "add", e0, e1)
-}
-
-pub fn expr_sub(e0: Expr, e1: Expr) -> Expr {
-    binop(span(), "Sub", "sub", e0, e1)
-}
-
-pub fn expr_mul(e0: Expr, e1: Expr) -> Expr {
-    binop(span(), "Mul", "mul", e0, e1)
-}
-
-pub fn expr_div(e0: Expr, e1: Expr) -> Expr {
-    binop(span(), "Div", "div", e0, e1)
-}
-
-pub fn expr_eq(e0: Expr, e1: Expr) -> Expr {
-    binop(span(), "PartialEq", "eq", e0, e1)
-}
-
-pub fn expr_ne(e0: Expr, e1: Expr) -> Expr {
-    binop(span(), "PartialEq", "ne", e0, e1)
-}
-
-pub fn expr_lt(e0: Expr, e1: Expr) -> Expr {
-    binop(span(), "PartialOrd", "lt", e0, e1)
-}
-
-pub fn expr_le(e0: Expr, e1: Expr) -> Expr {
-    binop(span(), "PartialOrd", "le", e0, e1)
-}
-
-pub fn expr_gt(e0: Expr, e1: Expr) -> Expr {
-    binop(span(), "PartialOrd", "gt", e0, e1)
-}
-
-pub fn expr_ge(e0: Expr, e1: Expr) -> Expr {
-    binop(span(), "PartialOrd", "ge", e0, e1)
 }
 
 pub fn expr_and(e0: Expr, e1: Expr) -> Expr {
@@ -576,14 +683,6 @@ pub fn expr_or(e0: Expr, e1: Expr) -> Expr {
         Rc::new(e0),
         arms([(pat_bool(true), expr_bool(true)), (pat_wild(), e1)]),
     )
-}
-
-pub fn expr_not(e: Expr) -> Expr {
-    parsed_expr_unop(span(), "Not", "not", e)
-}
-
-pub fn expr_neg(e: Expr) -> Expr {
-    parsed_expr_unop(span(), "Neg", "neg", e)
 }
 
 pub fn expr_var(x: &'static str) -> Expr {
@@ -631,13 +730,7 @@ pub fn pat_struct<const N: usize, const M: usize>(
     ts: [Type; N],
     xps: [(&'static str, Pat); M],
 ) -> Pat {
-    Pat::Struct(
-        span(),
-        ty_hole(),
-        name(x),
-        vec(ts),
-        map(xps, |(x, p)| (name(x), p)),
-    )
+    Pat::Struct(span(), ty_hole(), name(x), vec(ts), name_map(xps))
 }
 
 pub fn pat_annot(t: Type, p: Pat) -> Pat {
@@ -722,17 +815,21 @@ pub fn expr_fun<const N: usize>(ps: [&'static str; N], e: Expr) -> Expr {
     Expr::Fun(
         span(),
         ty_hole(),
-        map(ps, |s| Param::new(span(), name(s), ty_hole())),
+        app(ps, |s| Param::new(span(), name(s), ty_hole())),
         ty_hole(),
         Rc::new(e),
     )
+}
+
+fn param((x, t): (&'static str, Type)) -> Param {
+    Param::new(span(), name(x), t)
 }
 
 pub fn expr_fun_typed<const N: usize>(ps: [(&'static str, Type); N], t: Type, e: Expr) -> Expr {
     Expr::Fun(
         span(),
         ty_hole(),
-        map(ps, |(s, t)| Param::new(span(), name(s), t)),
+        app(ps, |(s, t)| Param::new(span(), name(s), t)),
         t,
         Rc::new(e),
     )
@@ -754,8 +851,8 @@ pub fn expr_query<const N: usize>(qs: [Query; N]) -> Expr {
     Expr::Query(span(), ty_hole(), vec(qs))
 }
 
-pub fn query_select<const N: usize>(fields: [(&'static str, Expr); N]) -> Query {
-    Query::Select(span(), ty_hole(), map(fields, |(s, e)| (name(s), e)))
+pub fn query_select<const N: usize>(xes: [(&'static str, Expr); N]) -> Query {
+    Query::Select(span(), ty_hole(), name_map(xes))
 }
 
 pub fn query_where(e: Expr) -> Query {
@@ -806,48 +903,6 @@ pub fn seg<const N: usize>(x: &'static str, ts: [Type; N]) -> (Name, Vec<Type>) 
     (name(x), vec(ts))
 }
 
-pub fn parsed_pat_var(s: Span, x: impl Into<Name>) -> Pat {
-    Pat::Unresolved(
-        s,
-        ty_hole(),
-        Path::new(vec([(x.into(), vec([]))])),
-        Some(vec([])),
-    )
-}
-
-pub fn parsed_pat_enum(s: Span, x0: &'static str, x1: &'static str, p: Pat) -> Pat {
-    Pat::Unresolved(
-        s,
-        ty_hole(),
-        Path::new(vec([(name(x0), vec([])), (name(x1), vec([]))])),
-        Some(vec([UnresolvedPatField::Unnamed(p)])),
-    )
-}
-
-pub fn parsed_expr_enum(s: Span, x0: &'static str, x1: &'static str) -> Expr {
-    Expr::Unresolved(
-        s,
-        ty_hole(),
-        Path::new(vec([(name(x0), vec([])), (name(x1), vec([]))])),
-    )
-}
-
-pub fn parsed_expr_var(s: Span, x: impl Into<Name>) -> Expr {
-    Expr::Unresolved(s, ty_hole(), Path::new(vec([(x.into(), vec([]))])))
-}
-
-pub fn parsed_expr_def(s: Span, x: impl Into<Name>, ts: Vec<Type>) -> Expr {
-    Expr::Unresolved(s, ty_hole(), Path::new(vec([(x.into(), ts)])))
-}
-
-pub fn parsed_expr_assoc(s: Span, x0: impl Into<Name>, x1: impl Into<Name>) -> Expr {
-    Expr::Unresolved(
-        s,
-        ty_hole(),
-        Path::new(vec([(x0.into(), vec([])), (x1.into(), vec([]))])),
-    )
-}
-
 pub mod types {
     use crate::ast::Type;
 
@@ -885,8 +940,8 @@ pub mod traits {
     use crate::ast::StmtImpl;
     use crate::ast::Type;
 
+    use super::app;
     use super::bound;
-    use super::map;
     use super::name;
     use super::span;
     use super::stmt_type;
@@ -902,23 +957,11 @@ pub mod traits {
     ) -> StmtImpl {
         StmtImpl::new(
             span(),
-            map(gs, name),
+            app(gs, name),
             head,
             vec(where_clause),
-            map(defs, |s| {
-                if let Stmt::Def(s) = s {
-                    s
-                } else {
-                    unreachable!()
-                }
-            }),
-            map(types, |s| {
-                if let Stmt::Type(s) = s {
-                    s
-                } else {
-                    unreachable!()
-                }
-            }),
+            app(defs, |s| s.as_def().clone()),
+            app(types, |s| s.as_type().clone()),
         )
     }
 
@@ -931,7 +974,7 @@ pub mod traits {
     }
 
     pub fn tr_clone(t: Type) -> Bound {
-        bound("Clone", [t])
+        bound("Clone", [t], [])
     }
 
     pub fn impl_iterator<const N: usize, const M: usize>(
@@ -950,11 +993,11 @@ pub mod traits {
     }
 
     pub fn tr_iterator(t0: Type) -> Bound {
-        bound("Iterator", [t0])
+        bound("Iterator", [t0], [])
     }
 
     pub fn ty_iterator_item(t: Type) -> Type {
-        ty_assoc("Iterator", [t], "Item", [])
+        ty_assoc("Iterator", [t], [], "Item", [])
     }
 
     pub fn impl_add<const N: usize, const M: usize>(
@@ -973,14 +1016,14 @@ pub mod traits {
     }
 
     pub fn tr_add(ts: [Type; 2]) -> Bound {
-        bound("Add", ts)
+        bound("Add", ts, [])
     }
 
     pub fn ty_add_output(ts: [Type; 2]) -> Type {
-        ty_assoc("Add", ts, "Output", [])
+        ty_assoc("Add", ts, [], "Output", [])
     }
 
-    pub fn impl_intoiterator<const N: usize, const M: usize>(
+    pub fn impl_into_iterator<const N: usize, const M: usize>(
         gs: [&'static str; N],
         self_ty: Type,
         item_ty: Type,
@@ -989,7 +1032,7 @@ pub mod traits {
     ) -> StmtImpl {
         imp(
             gs,
-            tr_intoiterator(self_ty),
+            tr_into_iterator(self_ty),
             where_clause,
             [],
             [
@@ -1000,15 +1043,15 @@ pub mod traits {
     }
 
     // TODO: Need to be able to apply associated types
-    pub fn tr_intoiterator(t0: Type) -> Bound {
-        bound("IntoIterator", [t0])
+    pub fn tr_into_iterator(t0: Type) -> Bound {
+        bound("IntoIterator", [t0], [])
     }
 
     pub fn ty_intoiterator_item(t0: Type) -> Type {
-        ty_assoc("IntoIterator", [t0], "Item", [])
+        ty_assoc("IntoIterator", [t0], [], "Item", [])
     }
 
-    pub fn ty_intoiterator_intoiter(t0: Type) -> Type {
-        ty_assoc("IntoIterator", [t0], "IntoIter", [])
+    pub fn ty_into_iterator_into_iter(t0: Type) -> Type {
+        ty_assoc("IntoIterator", [t0], [], "IntoIter", [])
     }
 }

@@ -5,7 +5,6 @@ use compiler::ast::Stmt;
 use compiler::ast::Type;
 use compiler::check;
 use compiler::dsl::block;
-use compiler::dsl::expr_add;
 use compiler::dsl::expr_and;
 use compiler::dsl::expr_array;
 use compiler::dsl::expr_assign;
@@ -15,31 +14,20 @@ use compiler::dsl::expr_break;
 use compiler::dsl::expr_call;
 use compiler::dsl::expr_char;
 use compiler::dsl::expr_continue;
-use compiler::dsl::expr_div;
-use compiler::dsl::expr_eq;
 use compiler::dsl::expr_err;
 use compiler::dsl::expr_field;
 use compiler::dsl::expr_float;
 use compiler::dsl::expr_fun;
 use compiler::dsl::expr_fun_typed;
-use compiler::dsl::expr_ge;
-use compiler::dsl::expr_gt;
 use compiler::dsl::expr_if;
 use compiler::dsl::expr_if_else;
 use compiler::dsl::expr_index;
 use compiler::dsl::expr_int;
-use compiler::dsl::expr_le;
-use compiler::dsl::expr_lt;
 use compiler::dsl::expr_match;
-use compiler::dsl::expr_mul;
-use compiler::dsl::expr_ne;
-use compiler::dsl::expr_neg;
-use compiler::dsl::expr_not;
 use compiler::dsl::expr_or;
 use compiler::dsl::expr_query;
 use compiler::dsl::expr_return;
 use compiler::dsl::expr_string;
-use compiler::dsl::expr_sub;
 use compiler::dsl::expr_tuple;
 use compiler::dsl::expr_unit;
 use compiler::dsl::expr_while;
@@ -76,13 +64,26 @@ use compiler::dsl::ty_fun;
 use compiler::dsl::ty_hole;
 use compiler::dsl::ty_tuple;
 use compiler::dsl::unresolved::bound;
+use compiler::dsl::unresolved::expr_add;
 use compiler::dsl::unresolved::expr_assoc;
 use compiler::dsl::unresolved::expr_call_direct;
 use compiler::dsl::unresolved::expr_def;
+use compiler::dsl::unresolved::expr_div;
+use compiler::dsl::unresolved::expr_eq;
+use compiler::dsl::unresolved::expr_ge;
+use compiler::dsl::unresolved::expr_gt;
+use compiler::dsl::unresolved::expr_le;
+use compiler::dsl::unresolved::expr_lt;
+use compiler::dsl::unresolved::expr_mul;
+use compiler::dsl::unresolved::expr_ne;
+use compiler::dsl::unresolved::expr_neg;
+use compiler::dsl::unresolved::expr_not;
 use compiler::dsl::unresolved::expr_struct;
+use compiler::dsl::unresolved::expr_sub;
 use compiler::dsl::unresolved::expr_unit_variant;
 use compiler::dsl::unresolved::expr_var;
 use compiler::dsl::unresolved::expr_variant;
+use compiler::dsl::unresolved::head;
 use compiler::dsl::unresolved::pat_enum;
 use compiler::dsl::unresolved::pat_struct;
 use compiler::dsl::unresolved::pat_unit_struct;
@@ -748,7 +749,7 @@ fn test_parser_stmt_def_where1() {
         [],
         [],
         ty("i32"),
-        [bound("Clone", [ty("i32")])],
+        [bound("Clone", [ty("i32")], [])],
         expr_int("1"),
     );
     check!(a, b);
@@ -762,7 +763,10 @@ fn test_parser_stmt_def_where2() {
         [],
         [],
         ty("i32"),
-        [bound("Clone", [ty("i32")]), bound("Copy", [ty("i32")])],
+        [
+            bound("Clone", [ty("i32")], []),
+            bound("Copy", [ty("i32")], []),
+        ],
         expr_int("1"),
     );
     check!(a, b);
@@ -776,7 +780,10 @@ fn test_parser_stmt_def_where3() {
         [],
         [],
         ty("i32"),
-        [bound("Clone", [ty("i32")]), bound("Copy", [ty("i32")])],
+        [
+            bound("Clone", [ty("i32")], []),
+            bound("Copy", [ty("i32")], []),
+        ],
         expr_int("1"),
     );
     check!(a, b);
@@ -820,18 +827,29 @@ fn test_parser_stmt_trait0() {
 #[test]
 fn test_parser_stmt_trait1() {
     let a = Stmt::parse("trait Eq[T] where Clone[T] {}").unwrap();
-    let b = stmt_trait("Eq", ["T"], [bound("Clone", [ty("T")])], [], []);
+    let b = stmt_trait("Eq", ["T"], [bound("Clone", [ty("T")], [])], [], []);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_trait2() {
-    let a = Stmt::parse("trait Eq[T] { def eq(T, T): bool; }").unwrap();
+    let a = Stmt::parse(
+        "trait Eq[T] {
+             def eq(a:T, b:T): bool;
+         }",
+    )
+    .unwrap();
     let b = stmt_trait(
         "Eq",
         ["T"],
         [],
-        [tr_def("eq", [], [ty("T"), ty("T")], [], ty("bool"))],
+        [tr_def(
+            "eq",
+            [],
+            [("a", ty("T")), ("b", ty("T"))],
+            ty("bool"),
+            [],
+        )],
         [],
     );
     check!(a, b);
@@ -839,7 +857,12 @@ fn test_parser_stmt_trait2() {
 
 #[test]
 fn test_parser_stmt_trait3() {
-    let a = Stmt::parse("trait Eq { type T[U]; }").unwrap();
+    let a = Stmt::parse(
+        "trait Eq {
+             type T[U];
+         }",
+    )
+    .unwrap();
     let b = stmt_trait("Eq", [], [], [], [tr_type("T", ["U"])]);
     check!(a, b);
 }
@@ -854,7 +877,7 @@ fn test_parser_stmt_impl0() {
     .unwrap();
     let b = stmt_impl(
         [],
-        bound("Eq", [ty("bool")]),
+        head("Eq", [ty("bool")]),
         [],
         [stmt_def(
             "eq",
@@ -884,8 +907,21 @@ fn test_parser_stmt_impl2() {
     let a = Stmt::parse("impl Copy[i32] where Clone[i32] {}").unwrap();
     let b = stmt_impl(
         [],
-        bound("Copy", [ty("i32")]),
-        [bound("Clone", [ty("i32")])],
+        head("Copy", [ty("i32")]),
+        [bound("Clone", [ty("i32")], [])],
+        [],
+        [],
+    );
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_stmt_impl3() {
+    let a = Stmt::parse("impl Foo[i32] where Bar[i32, f32, T = f32] {}").unwrap();
+    let b = stmt_impl(
+        [],
+        head("Foo", [ty("i32")]),
+        [bound("Bar", [ty("i32"), ty("f32")], [("T", ty("f32"))])],
         [],
         [],
     );
@@ -1208,14 +1244,14 @@ fn test_parser_program_paren2() {
 #[test]
 fn test_parser_expr_assoc0() {
     let a = Expr::parse("Iterator[Vec[i32]]::next").unwrap();
-    let b = expr_assoc("Iterator", [ty_con("Vec", [ty("i32")])], "next");
+    let b = expr_assoc("Iterator", [ty_con("Vec", [ty("i32")])], [], "next");
     check!(a, b);
 }
 
 #[test]
 fn test_parser_type_assoc0() {
     let a = Type::parse("Iterator[Vec[i32]]::Item").unwrap();
-    let b = ty_assoc("Iterator", [ty_con("Vec", [ty("i32")])], "Item");
+    let b = ty_assoc("Iterator", [ty_con("Vec", [ty("i32")])], [], "Item");
     check!(a, b);
 }
 
@@ -1707,7 +1743,7 @@ fn test_parser_recover3() {
             │
           1 │ def f(x: +): i32 = 1;
             │          ┬
-            │          ╰── Expected one of `[`, `(`, `fun`, `struct`, `<name>`
+            │          ╰── Expected one of `[`, `(`, `!`, `fun`, `struct`, `<name>`, ...
          ───╯"
     );
 }

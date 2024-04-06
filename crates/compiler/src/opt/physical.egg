@@ -1,0 +1,64 @@
+(sort Node)
+(sort Capability)
+(sort Capabilities (Set Capability))
+(sort Stream)
+(sort Dataflow)
+(sort Plan)
+(sort Value)
+
+(function udf () Value)
+
+(function source () Stream)
+(function map (Stream Value) Stream)
+(function filter (Stream Value) Stream)
+(function sink (Stream) Dataflow)
+(function compose (Dataflow Dataflow) Dataflow)
+(function compile (Dataflow) Mapping)
+
+(function persistent () Capability)
+(function consumer () Capability)
+(function producer () Capability)
+(function cores (i64) Capability)
+
+(function node (i64 Capabilities) Node)
+(function edge (Node Node) f64)
+(function path (Node Node) f64 :merge (min old new))
+
+;; -----------------------------------------------------
+
+
+(sort DataStream)
+
+(function Source (i64))
+(function Map (i64 i64 Value) Stream)
+(function Filter (i64 i64 Value) Stream)
+(function Sink (i64 i64 Value) Stream)
+
+(function Mapping (Stream))
+
+;; -----------------------------------------------------
+
+(rule ((= (edge x y) c))
+      ((set (path x y) c)))
+
+(rule ((= (path x y) xy) (= (edge y z) yz))
+      ((set (path x z) (+ xy yz))))
+
+(let s1 (source))
+(let s2 (map s1 (udf)))
+(let s3 (filter s2 (udf)))
+(let df (sink s3))
+
+(let n1 (node 1 (set-empty)))
+(let n2 (node 2 (set-empty)))
+(let n3 (node 3 (set-empty)))
+(let n4 (node 4 (set-empty)))
+
+(set (edge n1 n2) 1.0)
+(set (edge n2 n3) 1.0)
+(set (edge n3 n4) 1.0)
+
+(run 10)
+;    1.0    1.0    1.0
+; n1 --> n2 --> n3 --> n4
+(check (= (path n1 n4) 3.0))

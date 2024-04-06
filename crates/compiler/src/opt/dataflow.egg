@@ -1,0 +1,60 @@
+(ruleset dataflow)
+
+;; Map-Fusion: S.map(f).map(g) => S.map(f . g)
+(rewrite (Map (Map s f) g)
+         (Map s (Compose f g)) :ruleset dataflow)
+
+;; Filter-Fusion: S.filter(f).filter(g) => S.filter(f and g)
+(rewrite (Filter (Filter s f) g)
+         (Filter s (Fun "x" (And (App f (Var "x"))
+                                 (App g (Var "x"))))) :ruleset dataflow)
+
+;; Fold-Fusion: pair(S.fold(id0, f0), S.fold(id1, f1))
+;;           => S.fold(fun(x) = pair(id0, id1), fun(a, x) = pair(f0(fst a, x), f1(snd a, x)))
+(rewrite (Pair (Fold s id0 f0) (Fold s id1 f1))
+         (Fold s (Pair id0 id1)
+                 (Fun2 "a" "x" (Pair (App2 f0 (Fst (Var "a")) (Var "x"))
+                                     (App2 f1 (Snd (Var "a")) (Var "x"))))) :ruleset dataflow)
+
+;; Map-Fold-Fusion: S.map(f).fold(id, g) => S.fold(id, fun(a, x) = g(a, f(x)))
+(rewrite (Fold (Map s f) id g) (Fold s id (Fun2 "a" "x" (App2 g (Var "a") (App f (Var "x"))))) :ruleset dataflow)
+
+;; Fold-FoldMap
+;;(rewrite (App fLower (Fold (Map fLift s) id fCombine))
+;;         (Fold s id (Fun2 "a" "x" (App2 f1 (App2 f0 (Fst (Var "a")) (Var "x")) (Snd (Var "a"))))) :ruleset dataflow)
+
+;; Filter-Filter: S.filter(f).filter(f) => S.filter(f)
+(rewrite (Filter (Filter s f) f)
+         (Filter s f) :ruleset dataflow)
+
+;; KeyBy-Unkey: S.keyBy(f).unkey() => S
+(rewrite (Unkey (KeyBy s f)) s :ruleset dataflow)
+
+;; Unkey-KeyBy: S.unkey().keyBy(f) => S.keyBy(f)
+(rewrite (KeyBy (Unkey s) f) (Unkey (KeyBy s f)) :ruleset dataflow)
+
+;; Merge-Map: merge(S0, S1).map(f) => merge(S0.map(f), S1.map(f))
+(rewrite (Map (Merge s0 s1) f)
+         (Merge (Map s0 f) (Map s1 f)) :ruleset dataflow)
+
+;; Merge-Filter: merge(S0, S1).filter(f) => merge(S0.filter(f), S1.filter(f))
+(rewrite (Filter (Merge s0 s1) f)
+         (Merge (Filter s0 f) (Filter s1 f)) :ruleset dataflow)
+
+;; Rewrite Fold of sums into a sum of folds:
+;; W.fold(id, fun(a, x) = f(a, x) + g(a, x)) => W.fold(id, f) + W.fold(id, g)
+(rewrite (Fold s id (Fun2 a x (Add (App2 f (Var a) (Var x))
+                                   (App2 g (Var a) (Var x)))))
+         (Add (Fold s id f) (Fold s id g)) :ruleset dataflow)
+
+;; Rewrite Fold of products into a product of folds:
+;; W.fold(id, fun(a, x) = f(a, x) * g(a, x)) => W.fold(id, f) * W.fold(id, g)
+(rewrite (Fold s id (Fun2 a x (Mul (App2 f (Var a) (Var x))
+                                   (App2 g (Var a) (Var x)))))
+         (Mul (Fold s id f) (Fold s id g)) :ruleset dataflow)
+
+;(rewrite (Fold (Fun2 a b (Add (Var a) (Var b))) (I64 0))
+;         (I64 0) :ruleset dataflow)
+
+;; ----------------------------------------------------------------------------
+

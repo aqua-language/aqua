@@ -1,0 +1,60 @@
+(ruleset desugar)
+
+;; Values
+(rewrite (I64 a) (Value (I64 a)) :ruleset desugar)
+(rewrite (F64 a) (Value (F64 a)) :ruleset desugar)
+(rewrite (Str a) (Value (Str a)) :ruleset desugar)
+(rewrite (Bool a) (Value (Bool a)) :ruleset desugar)
+(rewrite (None) (Value (None)) :ruleset desugar)
+(rewrite (Blackbox) (Value (Blackbox)) :ruleset desugar)
+
+;; Unary operators
+(rewrite (Neg a) (Unary "neg" a) :ruleset desugar)
+(rewrite (Not a) (Unary "not" a) :ruleset desugar)
+(rewrite (Sqrt a) (Unary "sqrt" a) :ruleset desugar)
+(rewrite (Abs a) (Unary "abs" a) :ruleset desugar)
+(rewrite (Fst a) (Unary "fst" a) :ruleset desugar)
+(rewrite (Snd a) (Unary "snd" a) :ruleset desugar)
+(rewrite (Some a) (Unary "some" a) :ruleset desugar)
+
+;; Binary operators
+(rewrite (Add a b) (Binary "add" a b) :ruleset desugar)
+(rewrite (Sub a b) (Binary "sub" a b) :ruleset desugar)
+(rewrite (Mul a b) (Binary "mul" a b) :ruleset desugar)
+(rewrite (Div a b) (Binary "div" a b) :ruleset desugar)
+(rewrite (Eq a b) (Binary "eq" a b) :ruleset desugar)
+(rewrite (Ne a b) (Binary "ne" a b) :ruleset desugar)
+(rewrite (Lt a b) (Binary "lt" a b) :ruleset desugar)
+(rewrite (Le a b) (Binary "le" a b) :ruleset desugar)
+(rewrite (Gt a b) (Binary "gt" a b) :ruleset desugar)
+(rewrite (Ge a b) (Binary "ge" a b) :ruleset desugar)
+(rewrite (Pow a b) (Binary "pow" a b) :ruleset desugar)
+(rewrite (Log a b) (Binary "log" a b) :ruleset desugar)
+(rewrite (Mod a b) (Binary "mod" a b) :ruleset desugar)
+(rewrite (LShift a b) (Binary "lshift" a b) :ruleset desugar)
+(rewrite (RShift a b) (Binary "rshift" a b) :ruleset desugar)
+(rewrite (BitAnd a b) (Binary "bitand" a b) :ruleset desugar)
+(rewrite (BitOr a b) (Binary "bitor" a b) :ruleset desugar)
+(rewrite (BitXor a b) (Binary "bitxor" a b) :ruleset desugar)
+(rewrite (Min a b) (Binary "min" a b) :ruleset desugar)
+(rewrite (Max a b) (Binary "max" a b) :ruleset desugar)
+(rewrite (Pair a b) (Binary "pair" a b) :ruleset desugar)
+
+;; a and b => if a then b else false
+(rewrite (Or a b) (If a (Bool true) b) :ruleset desugar)
+;; a or b => if a then true else b
+(rewrite (And a b) (If a b (Bool false)) :ruleset desugar)
+;; not a => if a then false else true
+(rewrite (Not a) (If a (Bool false) (Bool true)) :ruleset desugar)
+
+;; Compose: (fun(x1) = e1) . (fun(x2) = e2)
+;;       => fun(x1) = (fun(x2) = e2)(e1)
+(rewrite (Compose (Fun x1 e1) (Fun x2 e2))
+         (Fun x1 (App (Fun x2 e2) e1)) :ruleset desugar)
+
+;; fun(a,b) = e => fun(a) = fun(b) = e
+(rewrite (Fun2 x y e) (Fun x (Fun y e)) :ruleset desugar)
+;; f(a,b) => f(a)(b)
+(rewrite (App2 f a b) (App (App f a) b) :ruleset desugar)
+;; let x = a in b => (fun(x) = b)(a)
+(rewrite (Let x a b) (App (Fun x b) a) :ruleset desugar)

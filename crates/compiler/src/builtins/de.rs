@@ -11,6 +11,7 @@ use smol_str::SmolStr;
 
 use crate::ast::Name;
 use crate::ast::Type;
+use crate::ast::Uid;
 use crate::builtins::Array;
 use crate::builtins::Record;
 use crate::lexer::Span;
@@ -320,7 +321,7 @@ impl<'de> DeserializeSeed<'de> for Seed {
             )),
             Type::Err => unreachable!(),
             Type::Alias(_, _) => unreachable!(),
-            Type::Assoc(_, _, _, _) => unreachable!(),
+            Type::Assoc(_, _, _) => unreachable!(),
             Type::Hole => unreachable!(),
             Type::Unresolved(_) => todo!(),
         }
@@ -342,9 +343,9 @@ impl<'de> Deserialize<'de> for Name {
         D: serde::Deserializer<'de>,
     {
         String::deserialize(deserializer).map(|data| Self {
+            uid: Uid::default(),
             span: Span::default(),
             data: SmolStr::from(data),
         })
     }
 }
-

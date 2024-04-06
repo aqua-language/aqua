@@ -1,17 +1,17 @@
-use compiler::dsl::expr_add;
 use compiler::dsl::expr_bool;
-use compiler::dsl::expr_div;
-use compiler::dsl::expr_eq;
 use compiler::dsl::expr_int;
-use compiler::dsl::expr_mul;
-use compiler::dsl::expr_ne;
 use compiler::dsl::expr_string;
-use compiler::dsl::expr_sub;
 use compiler::dsl::expr_tuple;
 use compiler::dsl::stmt_struct;
 use compiler::dsl::ty;
 use compiler::dsl::ty_fun;
 use compiler::dsl::ty_tuple;
+use compiler::dsl::unresolved::expr_add;
+use compiler::dsl::unresolved::expr_div;
+use compiler::dsl::unresolved::expr_eq;
+use compiler::dsl::unresolved::expr_mul;
+use compiler::dsl::unresolved::expr_ne;
+use compiler::dsl::unresolved::expr_sub;
 
 #[test]
 fn test_display_int0() {

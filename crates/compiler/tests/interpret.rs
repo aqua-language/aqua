@@ -1,12 +1,9 @@
-// use compiler::ast::Expr;
-
-// macro_rules! ok {
-//     ($e:expr) => {
-//         Expr::eval(indoc::indoc!($e))
-//     };
-// }
+use compiler::ast::Program;
+use compiler::builtins::Value;
 
 #[test]
 fn test_interpret0() {
-    // let a = ok!("1 + 2 + 3;");
+    let a = Program::interpret("1 + 2 + 3;").unwrap();
+    let b = Value::I32(6);
+    assert_eq!(a, b);
 }

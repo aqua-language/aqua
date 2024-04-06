@@ -1,0 +1,91 @@
+(ruleset arith)
+
+;; 0.0 => 0
+(rewrite (F64 0.0) (I64 0) :ruleset arith)
+;; 1.0 => 1
+(rewrite (F64 1.0) (I64 1) :ruleset arith)
+
+;; x is non-zero if x != 0
+(relation non-zero (Expr))
+(rule ((I64 a) (!= a 0))
+      ((non-zero (I64 a))))
+
+;; x is positive if x > 0
+(relation positive (Expr))
+(rule ((I64 a) (bool-< 0 a))
+      ((positive (I64 a))))
+
+;; x is negative if x < 0
+(relation negative (Expr))
+(rule ((I64 a) (bool-< a 0))
+      ((negative (I64 a))))
+
+;; f is commutative if f(a, b) = f(b, a)
+(relation commutative (Expr))
+(rule ((= (App2 f b a)
+          (App2 f a b)))
+      ((commutative f)) :ruleset arith)
+
+;; f is associative if f(a, f(b, c)) = f(f(a, b), c)
+(relation associative (Expr))
+(rule ((= (App2 f (App2 f a b) c)
+          (App2 f a (App2 f b c))))
+      ((associative f)) :ruleset arith)
+
+;; Add-Identity: a+0 => a
+(rewrite (Add a (I64 0)) a :ruleset arith)
+;; Add-Commutativity: a+b => b+a
+(rewrite (Add a b) (Add b a) :ruleset arith)
+;; Add-Associativity: (a+b)+c => a+(b+c)
+(rewrite (Add (Add a b) c) (Add a (Add b c)) :ruleset arith)
+
+;; Sub-Cancel: a-a => 0
+(rewrite (Sub a a) (I64 0) :ruleset arith)
+;; Sub-Identity: a-0 => a
+(rewrite (Sub a (I64 0)) a :ruleset arith)
+;; Sub-Semi-Assocativity: (a-b)-c => a-(b+c)
+(rewrite (Sub (Sub a b) c) (Sub a (Add b c)) :ruleset arith)
+
+; Sub-Add Cancel: a+b-a => b
+(rewrite (Sub (Add a b) a) b :ruleset arith)
+; Add-Sub Cancel: a-b+a => b
+(rewrite (Add (Sub a b) a) b :ruleset arith)
+
+;; Mul-Cancel: a*0 = 0
+(rewrite (Mul a (I64 0)) (I64 0) :ruleset arith)
+;; Mul-Identity: a*1 => a
+(rewrite (Mul a (I64 1)) a :ruleset arith)
+;; Mul-Commutativity: a*b => b*a
+(rewrite (Mul a b) (Mul b a) :ruleset arith)
+;; Mul-Associativity: (a*b)*c => a*(b*c)
+(rewrite (Mul (Mul a b) c) (Mul a (Mul b c)) :ruleset arith)
+
+;; Div-Cancel: a/a => 1
+(rewrite (Div a a) (I64 1) :when ((non-zero a)) :ruleset arith)
+;; Div-Identity: a/1 => a
+(rewrite (Div a (I64 1)) a :ruleset arith)
+;; Div => Mul-Pow: a/b => a*b^-1
+(rewrite (Div a b) (Mul a (Pow b (I64 -1))) :when ((non-zero b)) :ruleset arith)
+;; Div-Semi-Assocativity: (a/b)/c => a/(b*c)
+(rewrite (Div (Div a b) c) (Div a (Mul b c)) :when ((non-zero b) (non-zero c)) :ruleset arith)
+
+;; Add-Mul-Distributivity: a*(b+c) <=> a*b+a*c
+(rewrite (Mul a (Add b c)) (Add (Mul a b) (Mul a c)) :ruleset arith)
+
+;; Mul-Div Cancel: a*b/a => b
+(rewrite (Div (Mul a b) a) b :when ((non-zero a)) :ruleset arith)
+
+;; Neg-Neg: -(-a) => a
+(rewrite (Neg (Neg a)) a :ruleset arith)
+;; Neg => Mul: -1*a => -a
+(rewrite (Neg a) (Mul (I64 -1) a) :ruleset arith)
+;; Sub => Add-Neg: a+(-b) => a-b
+(rewrite (Add a (Neg b)) (Sub a b) :ruleset arith)
+
+;; Abs-Pos: abs(a) => a
+(rewrite (Abs a) a :when ((positive a)) :ruleset arith)
+;; Abs-Neg: abs(-a) => -(-a)
+(rewrite (Abs a) (Neg a) :when ((negative a)) :ruleset arith)
+
+;; Pow2-Mul: a^2 => a*a
+(rewrite (Pow a (I64 2)) (Mul a a) :ruleset arith)

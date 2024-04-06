@@ -3,6 +3,7 @@ use serde::Serialize;
 
 use crate::ast::Name;
 use crate::builtins::Value;
+use crate::Compiler;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Record(pub Vec<(Name, Value)>);
@@ -10,6 +11,18 @@ pub struct Record(pub Vec<(Name, Value)>);
 impl Record {
     pub fn new(fields: Vec<(Name, Value)>) -> Record {
         Record(fields)
+    }
+}
+
+impl std::ops::Index<&Name> for Record {
+    type Output = Value;
+
+    fn index(&self, name: &Name) -> &Value {
+        self.0
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v)
+            .unwrap()
     }
 }
 
@@ -24,4 +37,8 @@ impl Serialize for Record {
         }
         map.end()
     }
+}
+
+impl Compiler {
+    pub(super) fn declare_record(&mut self) {}
 }

@@ -1,3 +1,5 @@
+use crate::Compiler;
+
 use std::rc::Rc;
 
 use crate::ast::Name;
@@ -17,4 +19,8 @@ impl Variant {
             value: Rc::new(value),
         }
     }
+}
+
+impl Compiler {
+    pub(super) fn declare_variant(&mut self) {}
 }

@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use compiler::ast::Map;
 use serde::de::DeserializeSeed;
 
 use compiler::ast::Type;
@@ -66,7 +67,7 @@ fn test_serde_record() {
     let mut de = serde_json::Deserializer::from_str(&s);
     let t0 = Type::Cons("i32".into(), vec![]);
     let t1 = Type::Cons("String".into(), vec![]);
-    let t2 = Type::Record(vec![("a".into(), t0), ("b".into(), t1)]);
+    let t2 = Type::Record(Map::from(vec![("a".into(), t0), ("b".into(), t1)]));
     let v3 = Seed(t2).deserialize(&mut de).unwrap();
     assert!(v2 == v3 || v2_permut == v3);
     assert!((s == r#"{"a":1,"b":"Hello"}"#) || (s == r#"{"b":"Hello","a":1}"#));

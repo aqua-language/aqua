@@ -60,9 +60,9 @@ pub enum Token {
     Order,
     Over,
     Return,
-    Record,
-    Select,
     Struct,
+    Select,
+    Record,
     Trait,
     True,
     Type,
@@ -331,6 +331,18 @@ pub enum Span {
     Generated,
 }
 
+impl Ord for Span {
+    fn cmp(&self, _: &Self) -> std::cmp::Ordering {
+        std::cmp::Ordering::Equal
+    }
+}
+
+impl PartialOrd for Span {
+    fn partial_cmp(&self, _: &Self) -> Option<std::cmp::Ordering> {
+        Some(std::cmp::Ordering::Equal)
+    }
+}
+
 impl Eq for Span {}
 impl PartialEq for Span {
     fn eq(&self, _: &Self) -> bool {
@@ -484,6 +496,7 @@ impl<'a> Lexer<'a> {
                             "return" => Token::Return,
                             "select" => Token::Select,
                             "struct" => Token::Struct,
+                            "record" => Token::Struct,
                             "trait" => Token::Trait,
                             "true" => Token::True,
                             "type" => Token::Type,

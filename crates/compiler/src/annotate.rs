@@ -2,24 +2,27 @@ use std::rc::Rc;
 
 use crate::ast::Arm;
 use crate::ast::Block;
-use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Param;
 use crate::ast::Pat;
-use crate::ast::UnresolvedPatField;
 use crate::ast::Path;
 use crate::ast::Program;
+use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
+use crate::ast::StmtDefBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
 use crate::ast::StmtType;
+use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
+use crate::ast::TraitBound;
 use crate::ast::TraitDef;
 use crate::ast::Type;
+use crate::ast::UnresolvedPatField;
 use crate::infer::Context;
 
 // Replace all holes with fresh type variables.
@@ -35,12 +38,11 @@ impl Type {
                 let ts = map(ts, |t| t.annotate(ctx));
                 Type::Cons(x, ts)
             }
-            Type::Assoc(x0, ts0, x1, ts1) => {
-                let x0 = x0.clone();
-                let ts0 = map(ts0, |t| t.annotate(ctx));
+            Type::Assoc(b, x1, ts1) => {
+                let b = b.annotate(ctx);
                 let x1 = x1.clone();
                 let ts1 = map(ts1, |t| t.annotate(ctx));
-                Type::Assoc(x0, ts0, x1, ts1)
+                Type::Assoc(b, x1, ts1)
             }
             Type::Var(x) => {
                 let x = x.clone();
@@ -89,12 +91,21 @@ impl Type {
 
 impl Path {
     pub fn annotate(&self, ctx: &mut Context) -> Path {
-        let segments = self
-            .segments
-            .iter()
-            .map(|(x, ts)| (x.clone(), ts.iter().map(|t| t.annotate(ctx)).collect()))
-            .collect();
+        let segments = self.segments.iter().map(|seg| seg.annotate(ctx)).collect();
         Path::new(segments)
+    }
+}
+
+impl Segment {
+    pub fn annotate(&self, ctx: &mut Context) -> Segment {
+        let x = self.name.clone();
+        let ts = self.types.iter().map(|t| t.annotate(ctx)).collect();
+        let xts = self
+            .named_types
+            .iter()
+            .map(|(x, t)| (x.clone(), t.annotate(ctx)))
+            .collect();
+        Segment::new(self.span, x, ts, xts)
     }
 }
 
@@ -164,8 +175,20 @@ impl StmtType {
         let span = self.span;
         let name = self.name.clone();
         let generics = self.generics.clone();
-        let ty = self.ty.annotate(ctx);
+        let ty = self.body.annotate(ctx);
         StmtType::new(span, name, generics, ty)
+    }
+}
+
+impl StmtTypeBody {
+    pub fn annotate(&self, ctx: &mut Context) -> StmtTypeBody {
+        match self {
+            StmtTypeBody::Builtin(b) => StmtTypeBody::Builtin(b.clone()),
+            StmtTypeBody::UserDefined(t) => {
+                let t = t.annotate(ctx);
+                StmtTypeBody::UserDefined(t)
+            }
+        }
     }
 }
 
@@ -202,18 +225,18 @@ impl StmtDef {
         let params = self.params.iter().map(|p| p.annotate(ctx)).collect();
         let ty = self.ty.annotate(ctx);
         let body = self.body.annotate(ctx);
-        StmtDef::new(span, name, generics, preds, params, ty, body)
+        StmtDef::new(span, name, generics, params, ty, preds, body)
     }
 }
 
-impl Body {
-    pub fn annotate(&self, ctx: &mut Context) -> Body {
+impl StmtDefBody {
+    pub fn annotate(&self, ctx: &mut Context) -> StmtDefBody {
         match self {
-            Body::Expr(e) => {
+            StmtDefBody::UserDefined(e) => {
                 let e = e.annotate(ctx);
-                Body::Expr(e)
+                StmtDefBody::UserDefined(e)
             }
-            Body::Builtin => todo!(),
+            StmtDefBody::Builtin(b) => StmtDefBody::Builtin(b.clone()),
         }
     }
 }
@@ -235,7 +258,7 @@ impl StmtTrait {
         let span = self.span;
         let generics = self.generics.clone();
         let name = self.name.clone();
-        let body = self.bounds.iter().map(|p| p.annotate(ctx)).collect();
+        let body = self.where_clause.iter().map(|p| p.annotate(ctx)).collect();
         let defs = self.defs.iter().map(|d| d.annotate(ctx)).collect();
         let assocs = self.types.clone();
         StmtTrait::new(span, name, generics, body, defs, assocs)
@@ -247,10 +270,10 @@ impl TraitDef {
         let span = self.span;
         let name = self.name.clone();
         let generics = self.generics.clone();
-        let preds = self.bounds.iter().map(|p| p.annotate(ctx)).collect();
+        let where_clause = self.where_clause.iter().map(|p| p.annotate(ctx)).collect();
         let params = self.params.iter().map(|p| p.annotate(ctx)).collect();
         let ty = self.ty.annotate(ctx);
-        TraitDef::new(span, name, generics, preds, params, ty)
+        TraitDef::new(span, name, generics, params, ty, where_clause)
     }
 }
 
@@ -318,12 +341,11 @@ impl Expr {
                 let es = es.iter().map(|e| e.annotate(ctx)).collect();
                 Expr::Tuple(s, t, es)
             }
-            Expr::Assoc(_, _, x0, ts0, x1, ts1) => {
-                let x0 = x0.clone();
-                let ts0 = ts0.iter().map(|t| t.annotate(ctx)).collect();
+            Expr::Assoc(_, _, b, x1, ts1) => {
+                let b = b.annotate(ctx);
                 let x1 = x1.clone();
                 let ts1 = ts1.iter().map(|t| t.annotate(ctx)).collect();
-                Expr::Assoc(s, t, x0, ts0, x1, ts1)
+                Expr::Assoc(s, t, b, x1, ts1)
             }
             Expr::Index(_, _, e, i) => {
                 let e = Rc::new(e.annotate(ctx));
@@ -489,12 +511,24 @@ impl Bound {
                 let path = path.annotate(ctx);
                 Bound::Unresolved(span, path)
             }
-            Bound::Trait(_, x, ts) => {
-                let x = x.clone();
-                let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
-                Bound::Trait(span, x, ts)
+            Bound::Trait(_, b) => {
+                let b = b.annotate(ctx);
+                Bound::Trait(span, b)
             }
             Bound::Err(_) => Bound::Err(span),
         }
+    }
+}
+
+impl TraitBound {
+    pub fn annotate(&self, ctx: &mut Context) -> TraitBound {
+        let x = self.name.clone();
+        let ts = self.ts.iter().map(|t| t.annotate(ctx)).collect();
+        let xts = self
+            .xts
+            .iter()
+            .map(|(x, t)| (x.clone(), t.annotate(ctx)))
+            .collect();
+        TraitBound::new(x, ts, xts)
     }
 }

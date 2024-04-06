@@ -1,0 +1,12 @@
+(ruleset if-else)
+
+;; If-True: if (true) a b = a
+(rewrite (If (Bool true) then else) then :ruleset if-else)
+;; If-False: if (false) a b = b
+(rewrite (If (Bool false) then else) else :ruleset if-else)
+;; If-Neg: if (not c) a b = if c b else a
+(rewrite (If (Not c) a b) (If c b a) :ruleset if-else)
+;; If-If: if (c1) (if (c2) a b) c = if (c1 and c2) a (if c1 b c)
+(rewrite (If c1 (If c2 a b) c) (If (And c1 c2) a (If c1 b c)) :ruleset if-else)
+;; If-Or: if (c1 or c2) a b = if c1 a (if c2 a b)
+(rewrite (If (Or c1 c2) a b) (If c1 a (If c2 a b)) :ruleset if-else)

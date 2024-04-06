@@ -15,7 +15,7 @@ impl PartialEq for Value {
             (Value::F32(_), Value::F32(_)) => unreachable!(),
             (Value::F64(_), Value::F64(_)) => unreachable!(),
             (Value::File(_), Value::File(_)) => unreachable!(),
-            (Value::Fun(a), Value::Fun(b)) => a == b,
+            (Value::Fun(_), Value::Fun(_)) => unreachable!(),
             (Value::I8(a), Value::I8(b)) => a == b,
             (Value::I16(a), Value::I16(b)) => a == b,
             (Value::I32(a), Value::I32(b)) => a == b,

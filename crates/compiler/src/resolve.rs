@@ -2,44 +2,32 @@ use std::rc::Rc;
 
 use crate::ast::Arm;
 use crate::ast::Block;
-use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Expr;
+use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Param;
 use crate::ast::Pat;
-use crate::ast::UnresolvedPatField;
 use crate::ast::Path;
 use crate::ast::Program;
+use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
+use crate::ast::StmtDefBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
 use crate::ast::StmtType;
+use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
+use crate::ast::TraitBound;
 use crate::ast::TraitDef;
+use crate::ast::TraitType;
 use crate::ast::Type;
+use crate::ast::UnresolvedPatField;
 use crate::diag::Report;
 use crate::lexer::Span;
-
-fn names_to_string<T>(names: &[T], f: impl FnMut(&T) -> String) -> String {
-    names.iter().map(f).collect::<Vec<_>>().join(", ")
-}
-
-impl std::ops::Deref for Context {
-    type Target = Stack;
-    fn deref(&self) -> &Self::Target {
-        &self.stack
-    }
-}
-
-impl std::ops::DerefMut for Context {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.stack
-    }
-}
 
 #[derive(Debug)]
 pub struct Stack(Vec<Scope>);
@@ -47,18 +35,21 @@ pub struct Stack(Vec<Scope>);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scope(Vec<(Name, Binding)>);
 
+pub type Arity = usize;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Binding {
-    Enum(usize, Vec<Name>),
-    Struct(usize, Vec<Name>),
-    BuiltinType(usize),
+    Enum(Arity, Vec<Name>),
+    Struct(Arity, Vec<Name>),
     #[allow(dead_code)]
-    BuiltinDef(usize),
+    BuiltinType(Arity),
+    #[allow(dead_code)]
+    BuiltinDef(Arity),
     Generic,
-    TypeAlias(usize),
-    Trait(usize, Vec<(Name, usize)>, Vec<(Name, usize)>),
+    TypeAlias(Arity),
+    Trait(Arity, Vec<(Name, Arity)>, Vec<(Name, Arity)>),
     Var,
-    Def(usize),
+    Def(Arity),
 }
 
 impl Stack {
@@ -74,7 +65,7 @@ impl Stack {
         })
     }
 
-    fn traits(&self) -> impl Iterator<Item = (&Name, usize, &[(Name, usize)], &[(Name, usize)])> {
+    fn traits(&self) -> impl Iterator<Item = (&Name, Arity, &[(Name, Arity)], &[(Name, Arity)])> {
         self.0
             .iter()
             .rev()
@@ -100,92 +91,19 @@ impl Default for Context {
 
 impl Context {
     pub fn new() -> Context {
-        let mut stack = Stack(vec![Scope(vec![])]);
-        // Types
-        stack.bind("i32", Binding::BuiltinType(0));
-        stack.bind("f32", Binding::BuiltinType(0));
-        stack.bind("i64", Binding::BuiltinType(0));
-        stack.bind("bool", Binding::BuiltinType(0));
-        stack.bind("Vec", Binding::BuiltinType(1));
-        stack.bind("VecIterator", Binding::BuiltinType(1));
-        stack.bind("Stream", Binding::BuiltinType(1));
-        stack.bind("StreamIterator", Binding::BuiltinType(1));
-        stack.bind("Option", Binding::BuiltinType(1));
-        // Traits
-        stack.bind(
-            "Iterator",
-            Binding::Trait(1, vec![], vec![(Name::from("Item"), 0)]),
-        );
-        stack.bind(
-            "IntoIterator",
-            Binding::Trait(
-                1,
-                vec![],
-                vec![(Name::from("Item"), 0), (Name::from("IntoIter"), 0)],
-            ),
-        );
-        stack.bind(
-            "Add",
-            Binding::Trait(
-                2,
-                vec![(Name::from("add"), 0)],
-                vec![(Name::from("Output"), 0)],
-            ),
-        );
-        stack.bind(
-            "Sub",
-            Binding::Trait(
-                2,
-                vec![(Name::from("sub"), 0)],
-                vec![(Name::from("Output"), 0)],
-            ),
-        );
-        stack.bind(
-            "Mul",
-            Binding::Trait(
-                2,
-                vec![(Name::from("mul"), 0)],
-                vec![(Name::from("Output"), 0)],
-            ),
-        );
-        stack.bind(
-            "Div",
-            Binding::Trait(
-                2,
-                vec![(Name::from("div"), 0)],
-                vec![(Name::from("Output"), 0)],
-            ),
-        );
-        stack.bind(
-            "Eq",
-            Binding::Trait(
-                1,
-                vec![(Name::from("eq"), 0), (Name::from("ne"), 0)],
-                vec![],
-            ),
-        );
-        stack.bind(
-            "Not",
-            Binding::Trait(1, vec![(Name::from("not"), 0)], vec![]),
-        );
-        stack.bind(
-            "Ord",
-            Binding::Trait(1, vec![(Name::from("cmp"), 0)], vec![]),
-        );
-        stack.bind(
-            "Clone",
-            Binding::Trait(1, vec![(Name::from("clone"), 0)], vec![]),
-        );
-        stack.bind("Copy", Binding::Trait(1, vec![], vec![]));
-        stack.bind(
-            "Display",
-            Binding::Trait(1, vec![(Name::from("to_string"), 0)], vec![]),
-        );
-        let report = Report::new();
-        Context { stack, report }
+        Context {
+            stack: Stack(vec![Scope(vec![])]),
+            report: Report::new(),
+        }
     }
 
-    fn scoped_block<F, T>(&mut self, f: F) -> T
+    pub fn resolve(&mut self, p: &Program) -> Program {
+        p.stmts.iter().for_each(|stmt| self.declare_stmt(stmt));
+        let stmts = p.stmts.iter().map(|stmt| self.stmt(stmt)).collect();
+        Program::new(stmts)
+    }
+
+    fn scoped<F, T>(&mut self, f: F) -> T
     where
         F: FnOnce(&mut Self) -> T,
     {
@@ -211,13 +129,15 @@ impl Context {
         );
     }
 
-    fn wrong_arity(&mut self, name: &Name, found: usize, expected: usize) {
+    #[track_caller]
+    fn wrong_arity(&mut self, name: &Name, found: Arity, expected: Arity) {
+        #[cfg(not(feature = "explicit"))]
+        let file = "";
+        #[cfg(feature = "explicit")]
+        let file = format!("{}: ", std::panic::Location::caller());
         self.report.err(
             name.span,
-            format!(
-                "Wrong number of type arguments. Found {}, expected {}",
-                found, expected
-            ),
+            format!("{file}Wrong number of type arguments. Found {found}, expected {expected}",),
             format!("Expected {} arguments.", expected),
         );
     }
@@ -238,6 +158,14 @@ impl Context {
         );
     }
 
+    fn unexpected_named_type_args(&mut self, x: &Name) {
+        self.report.err(
+            x.span,
+            format!("Unexpected named type arguments for `{x}`.",),
+            "Named type arguments can only occur in trait bounds.",
+        );
+    }
+
     fn wrong_fields<T>(&mut self, name: &Name, found: &[(Name, T)], expected: &[Name]) {
         let found = names_to_string(found, |(x, _)| format!("{x}"));
         let expected = names_to_string(expected, |x| format!("{x}"));
@@ -248,15 +176,15 @@ impl Context {
         );
     }
 
-    fn wrong_items(
+    fn wrong_items<'a>(
         &mut self,
         kind: &'static str,
         name: &Name,
-        found: &[(Name, usize)],
-        expected: &[(Name, usize)],
+        found: impl IntoIterator<Item = &'a Name>,
+        expected: impl IntoIterator<Item = &'a Name>,
     ) {
-        let found = names_to_string(found, |(x, _)| format!("`{x}`"));
-        let expected = names_to_string(expected, |(x, _)| format!("`{x}`"));
+        let found = names_to_string(found, |x| format!("`{x}`"));
+        let expected = names_to_string(expected, |x| format!("`{x}`"));
         self.report.err(
             name.span,
             format!("Wrong {kind}s implemented for {name}. Found {{ {found} }}, expected {{ {expected} }}",),
@@ -283,13 +211,7 @@ impl Context {
         );
     }
 
-    pub fn resolve(&mut self, p: &Program) -> Program {
-        p.stmts.iter().for_each(|stmt| self.declare_stmt(stmt));
-        let stmts = p.stmts.iter().map(|stmt| self.stmt(stmt)).collect();
-        Program::new(stmts)
-    }
-
-    pub fn declare_stmt(&mut self, s: &Stmt) {
+    fn declare_stmt(&mut self, s: &Stmt) {
         match s {
             Stmt::Var(_) => {}
             Stmt::Def(s) => self.declare_stmt_def(s),
@@ -299,16 +221,16 @@ impl Context {
             Stmt::Enum(s) => self.declare_stmt_enum(s),
             Stmt::Type(s) => self.declare_stmt_type(s),
             Stmt::Expr(_) => {}
-            Stmt::Err(_) => todo!(),
+            Stmt::Err(_) => {}
         }
     }
 
-    pub fn declare_stmt_def(&mut self, s: &StmtDef) {
+    fn declare_stmt_def(&mut self, s: &StmtDef) {
         let name = s.name.clone();
-        self.bind(name, Binding::Def(s.generics.len()));
+        self.stack.bind(name, Binding::Def(s.generics.len()));
     }
 
-    pub fn declare_stmt_trait(&mut self, s: &StmtTrait) {
+    fn declare_stmt_trait(&mut self, s: &StmtTrait) {
         let name = s.name.clone();
         let def_names = s
             .defs
@@ -320,30 +242,39 @@ impl Context {
             .iter()
             .map(|t| (t.name.clone(), t.generics.len()))
             .collect();
-        self.bind(
+        self.stack.bind(
             name.clone(),
             Binding::Trait(s.generics.len(), def_names, type_names),
         );
     }
 
-    pub fn declare_stmt_struct(&mut self, s: &StmtStruct) {
+    fn declare_stmt_struct(&mut self, s: &StmtStruct) {
         let name = s.name.clone();
         let field_names = s.fields.iter().map(|(x, _)| x.clone()).collect();
-        self.bind(name.clone(), Binding::Struct(s.generics.len(), field_names));
+        self.stack
+            .bind(name.clone(), Binding::Struct(s.generics.len(), field_names));
     }
 
-    pub fn declare_stmt_enum(&mut self, s: &StmtEnum) {
+    fn declare_stmt_enum(&mut self, s: &StmtEnum) {
         let name = s.name.clone();
         let variant_names = s.variants.iter().map(|(x, _)| x.clone()).collect();
-        self.bind(name.clone(), Binding::Enum(s.generics.len(), variant_names));
+        self.stack
+            .bind(name.clone(), Binding::Enum(s.generics.len(), variant_names));
     }
 
-    pub fn declare_stmt_type(&mut self, s: &StmtType) {
+    fn declare_stmt_type(&mut self, s: &StmtType) {
         let name = s.name.clone();
-        self.bind(name.clone(), Binding::TypeAlias(s.generics.len()));
+        match &s.body {
+            StmtTypeBody::UserDefined(_) => self
+                .stack
+                .bind(name.clone(), Binding::TypeAlias(s.generics.len())),
+            StmtTypeBody::Builtin(_) => self
+                .stack
+                .bind(name.clone(), Binding::BuiltinType(s.generics.len())),
+        }
     }
 
-    pub fn stmt(&mut self, s: &Stmt) -> Stmt {
+    fn stmt(&mut self, s: &Stmt) -> Stmt {
         match s {
             Stmt::Var(s) => Stmt::Var(self.stmt_var(s)),
             Stmt::Def(s) => Stmt::Def(self.stmt_def(s)),
@@ -353,85 +284,102 @@ impl Context {
             Stmt::Enum(s) => Stmt::Enum(self.stmt_enum(s)),
             Stmt::Type(s) => Stmt::Type(self.stmt_type(s)),
             Stmt::Expr(s) => Stmt::Expr(self.expr(s)),
-            Stmt::Err(_) => todo!(),
+            Stmt::Err(s) => Stmt::Err(s.clone()),
         }
     }
 
-    pub fn stmt_var(&mut self, s: &StmtVar) -> StmtVar {
+    fn stmt_var(&mut self, s: &StmtVar) -> StmtVar {
         let span = s.span;
         let name = s.name.clone();
         let ty = self.ty(&s.ty);
         let expr = self.expr(&s.expr);
-        self.bind(name.clone(), Binding::Var);
+        self.stack.bind(name.clone(), Binding::Var);
         StmtVar::new(span, name, ty, expr)
     }
 
-    pub fn stmt_def(&mut self, s: &StmtDef) -> StmtDef {
-        let span = s.span;
-        let name = s.name.clone();
-        self.scoped_block(|ctx| {
-            let generics = s.generics.clone();
-            generics
+    fn stmt_def(&mut self, s: &StmtDef) -> StmtDef {
+        self.scoped(|ctx| {
+            s.generics
                 .iter()
-                .for_each(|g| ctx.bind(g.clone(), Binding::Generic));
-            let preds = s.where_clause.iter().map(|p| ctx.bound(p)).collect();
+                .for_each(|g| ctx.stack.bind(g.clone(), Binding::Generic));
+            let span = s.span;
+            let name = s.name.clone();
+            let generics = s.generics.clone();
+            let where_clause = s.where_clause.iter().map(|p| ctx.bound(p)).collect();
             let params = s.params.iter().map(|p| ctx.param(p)).collect();
             let ty = ctx.ty(&s.ty);
             let body = ctx.body(&s.body);
-            StmtDef::new(span, name, generics, preds, params, ty, body)
+            StmtDef::new(span, name, generics, params, ty, where_clause, body)
         })
     }
 
-    pub fn body(&mut self, body: &Body) -> Body {
+    fn body(&mut self, body: &StmtDefBody) -> StmtDefBody {
         match body {
-            Body::Expr(e) => Body::Expr(self.expr(e)),
-            Body::Builtin => Body::Builtin,
+            StmtDefBody::UserDefined(e) => StmtDefBody::UserDefined(self.expr(e)),
+            StmtDefBody::Builtin(b) => StmtDefBody::Builtin(b.clone()),
         }
     }
 
-    pub fn stmt_trait(&mut self, s: &StmtTrait) -> StmtTrait {
-        let span = s.span;
-        let name = s.name.clone();
-        self.scoped_block(|ctx| {
-            let generics = s.generics.clone();
-            generics
+    fn stmt_trait(&mut self, s: &StmtTrait) -> StmtTrait {
+        self.scoped(|ctx| {
+            s.generics
                 .iter()
-                .for_each(|g| ctx.bind(g.clone(), Binding::Generic));
-            let body = s.bounds.iter().map(|p| ctx.bound(p)).collect();
+                .for_each(|g| ctx.stack.bind(g.clone(), Binding::Generic));
+            s.defs.iter().for_each(|d| ctx.decl_trait_def(d));
+            s.types.iter().for_each(|d| ctx.decl_trait_type(d));
+            let span = s.span;
+            let name = s.name.clone();
+            let generics = s.generics.clone();
+            let body = s.where_clause.iter().map(|p| ctx.bound(p)).collect();
             let defs = s.defs.iter().map(|d| ctx.trait_def(d)).collect();
             let types = s.types.clone();
             StmtTrait::new(span, name, generics, body, defs, types)
         })
     }
 
-    pub fn trait_def(&mut self, s: &TraitDef) -> TraitDef {
-        let span = s.span;
+    fn decl_trait_def(&mut self, s: &TraitDef) {
         let name = s.name.clone();
-        let generics = s.generics.clone();
-        let preds = s.bounds.iter().map(|p| self.bound(p)).collect();
-        let params = s.params.iter().map(|p| self.ty(p)).collect();
-        let ty = self.ty(&s.ty);
-        TraitDef::new(span, name, generics, preds, params, ty)
+        self.stack.bind(name, Binding::Def(s.generics.len()));
     }
 
-    pub fn stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
-        let span = s.span;
-        let generics = s.generics.clone();
-        self.scoped_block(|ctx| {
-            for generic in &generics {
-                ctx.bind(generic.clone(), Binding::Generic);
-            }
+    fn decl_trait_type(&mut self, s: &TraitType) {
+        let name = s.name.clone();
+        self.stack.bind(name, Binding::TypeAlias(s.generics.len()));
+    }
+
+    fn trait_def(&mut self, s: &TraitDef) -> TraitDef {
+        self.scoped(|ctx| {
+            s.generics
+                .iter()
+                .for_each(|g| ctx.stack.bind(g.clone(), Binding::Generic));
+            let span = s.span;
+            let name = s.name.clone();
+            let generics = s.generics.clone();
+            let params = s.params.iter().map(|p| ctx.param(p)).collect();
+            let ty = ctx.ty(&s.ty);
+            let where_clause = s.where_clause.iter().map(|p| ctx.bound(p)).collect();
+            TraitDef::new(span, name, generics, params, ty, where_clause)
+        })
+    }
+
+    fn stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
+        self.scoped(|ctx| {
+            s.generics
+                .iter()
+                .for_each(|generic| ctx.stack.bind(generic.clone(), Binding::Generic));
+            let span = s.span;
+            let generics = s.generics.clone();
             let defs = s
                 .defs
                 .iter()
                 .map(|d| (d.name.clone(), d.generics.len()))
-                .collect();
+                .collect::<Vec<_>>();
             let types = s
                 .types
                 .iter()
-                .map(|t| (t.name.clone(), t.generics.len()))
-                .collect();
-            let head = ctx.head(&s.head, Some(&(defs, types)));
+                .map(|t| (t.name.clone(), t.generics.len(), t.body.unwrap_ty().clone()))
+                .collect::<Vec<_>>();
+            let head = ctx.head(&s.head, &defs, &types);
             let body = s
                 .where_clause
                 .iter()
@@ -443,14 +391,14 @@ impl Context {
         })
     }
 
-    pub fn stmt_struct(&mut self, s: &StmtStruct) -> StmtStruct {
-        let span = s.span;
-        let name = s.name.clone();
-        self.scoped_block(|ctx| {
+    fn stmt_struct(&mut self, s: &StmtStruct) -> StmtStruct {
+        self.scoped(|ctx| {
+            s.generics
+                .iter()
+                .for_each(|generic| ctx.stack.bind(generic.clone(), Binding::Generic));
+            let span = s.span;
+            let name = s.name.clone();
             let generics = s.generics.clone();
-            for generic in &generics {
-                ctx.bind(generic.clone(), Binding::Generic);
-            }
             let fields = s
                 .fields
                 .iter()
@@ -460,14 +408,14 @@ impl Context {
         })
     }
 
-    pub fn stmt_enum(&mut self, s: &StmtEnum) -> StmtEnum {
-        let span = s.span;
-        let name = s.name.clone();
-        self.scoped_block(|ctx| {
+    fn stmt_enum(&mut self, s: &StmtEnum) -> StmtEnum {
+        self.scoped(|ctx| {
+            s.generics
+                .iter()
+                .for_each(|generic| ctx.stack.bind(generic.clone(), Binding::Generic));
+            let span = s.span;
+            let name = s.name.clone();
             let generics = s.generics.clone();
-            for generic in &generics {
-                ctx.bind(generic.clone(), Binding::Generic);
-            }
             let variants = s
                 .variants
                 .iter()
@@ -477,45 +425,56 @@ impl Context {
         })
     }
 
-    pub fn stmt_type(&mut self, s: &StmtType) -> StmtType {
-        let span = s.span;
-        let name = s.name.clone();
-        self.scoped_block(|ctx| {
-            let generics = s.generics.clone();
-            generics
+    fn stmt_type(&mut self, s: &StmtType) -> StmtType {
+        self.scoped(|ctx| {
+            s.generics
                 .iter()
-                .for_each(|g| ctx.bind(g.clone(), Binding::Generic));
-            let ty = ctx.ty(&s.ty);
+                .for_each(|g| ctx.stack.bind(g.clone(), Binding::Generic));
+            let span = s.span;
+            let name = s.name.clone();
+            let generics = s.generics.clone();
+            let ty = ctx.stmt_type_body(&s.body);
             StmtType::new(span, name, generics, ty)
         })
     }
 
-    pub fn param(&mut self, s: &Param) -> Param {
-        let span = s.span;
-        let name = s.name.clone();
-        let ty = self.ty(&s.ty);
-        self.bind(name.clone(), Binding::Var);
+    fn stmt_type_body(&mut self, s: &StmtTypeBody) -> StmtTypeBody {
+        match s {
+            StmtTypeBody::UserDefined(t) => StmtTypeBody::UserDefined(self.ty(t)),
+            StmtTypeBody::Builtin(b) => StmtTypeBody::Builtin(b.clone()),
+        }
+    }
+
+    fn param(&mut self, p: &Param) -> Param {
+        let span = p.span;
+        let name = p.name.clone();
+        let ty = self.ty(&p.ty);
+        self.stack.bind(name.clone(), Binding::Var);
         Param::new(span, name, ty)
     }
 
-    pub fn path(&mut self, p: &Path) -> Path {
+    fn path(&mut self, p: &Path) -> Path {
         let segments = p
             .segments
             .iter()
-            .map(|(x, ts)| (x.clone(), ts.iter().map(|t| self.ty(t)).collect::<Vec<_>>()))
+            .map(|seg| {
+                let x = seg.name.clone();
+                let ts = seg.types.iter().map(|t| self.ty(t)).collect::<Vec<_>>();
+                let xts = seg
+                    .named_types
+                    .iter()
+                    .map(|(x, t)| (x.clone(), self.ty(t)))
+                    .collect::<Map<_, _>>();
+                Segment::new(seg.span, x, ts, xts)
+            })
             .collect();
         Path::new(segments)
     }
 
-    pub fn ty(&mut self, t: &Type) -> Type {
+    fn ty(&mut self, t: &Type) -> Type {
         match t {
-            Type::Cons(..) => unreachable!(),
-            Type::Alias(..) => unreachable!(),
             Type::Unresolved(p) => self.resolve_type_path(p),
-            Type::Assoc(..) => unreachable!(),
             Type::Hole => Type::Hole,
-            Type::Var(_) => unreachable!(),
-            Type::Err => Type::Err,
             Type::Generic(x) => Type::Generic(x.clone()),
             Type::Fun(ts, t) => {
                 let ts = ts.iter().map(|t| self.ty(t)).collect();
@@ -536,15 +495,18 @@ impl Context {
                 Type::Array(Rc::new(t), n)
             }
             Type::Never => Type::Never,
+            Type::Err => Type::Err,
+            Type::Cons(..) => unreachable!("Unexpected {:?}", t),
+            Type::Alias(..) => unreachable!(),
+            Type::Assoc(..) => unreachable!(),
+            Type::Var(_) => unreachable!(),
         }
     }
 
-    pub fn expr(&mut self, e: &Expr) -> Expr {
+    fn expr(&mut self, e: &Expr) -> Expr {
         let t = self.ty(e.ty());
         let s = e.span();
         match e {
-            Expr::Def(..) => unreachable!(),
-            Expr::Var(..) => unreachable!(),
             Expr::Unresolved(_s, _t, path) => self.resolve_expr_path(s, t, path),
             Expr::Int(s, t, v) => {
                 let t = self.ty(t);
@@ -565,9 +527,7 @@ impl Context {
                 let es = es.iter().map(|e| self.expr(e)).collect();
                 Expr::Tuple(*s, t, es)
             }
-            Expr::Struct(..) => unreachable!(),
-            Expr::Enum(..) => unreachable!(),
-            Expr::Call(s, t, e, es) => self.call(*s, t, e, es),
+            Expr::Call(s, t, e, es) => self.expr_call(*s, t, e, es),
             Expr::String(_, _, v) => {
                 let v = v.clone();
                 Expr::String(s, t, v)
@@ -584,7 +544,6 @@ impl Context {
             Expr::Query(..) => {
                 todo!()
             }
-            Expr::Assoc(..) => unreachable!(),
             Expr::Index(_, _, e, i) => {
                 let e = self.expr(e);
                 let i = *i;
@@ -627,76 +586,93 @@ impl Context {
                 let xes = xes.iter().map(|(x, e)| (x.clone(), self.expr(e))).collect();
                 Expr::Record(s, t, xes)
             }
+            Expr::Char(_, _, c) => Expr::Char(s, t, *c),
             Expr::Value(_, _) => unreachable!(),
             Expr::For(_, _, _, _, _) => todo!(),
-            Expr::Char(_, _, _) => todo!(),
+            Expr::Def(..) => unreachable!(),
+            Expr::Var(..) => unreachable!(),
+            Expr::Struct(..) => unreachable!(),
+            Expr::Enum(..) => unreachable!(),
+            Expr::Assoc(..) => unreachable!(),
         }
     }
 
     fn block(&mut self, b: &Block) -> Block {
-        let span = b.span;
-        let stmts = b.stmts.iter().map(|s| self.stmt(s)).collect();
-        let e = self.expr(&b.expr);
-        Block::new(span, stmts, e)
+        self.scoped(|ctx| {
+            let span = b.span;
+            let stmts = b.stmts.iter().map(|s| ctx.stmt(s)).collect();
+            let e = ctx.expr(&b.expr);
+            Block::new(span, stmts, e)
+        })
     }
 
     fn arm(&mut self, arm: &Arm) -> Arm {
-        let span = arm.span;
-        let p = self.pat(&arm.p);
-        let e = self.expr(&arm.e);
-        Arm::new(span, p, e)
+        self.scoped(|ctx| {
+            let span = arm.span;
+            let p = ctx.pat(&arm.p);
+            let e = ctx.expr(&arm.e);
+            Arm::new(span, p, e)
+        })
     }
 
-    fn call(&mut self, s: Span, t1: &Type, e: &Expr, es: &[Expr]) -> Expr {
+    fn fill_type_args(args: Vec<Type>, expected: Arity) -> Vec<Type> {
+        args.is_empty()
+            .then(|| (0..expected).map(|_| Type::Hole).collect())
+            .unwrap_or(args)
+    }
+
+    fn expr_call(&mut self, s: Span, t1: &Type, e: &Expr, es: &[Expr]) -> Expr {
         let t1 = self.ty(t1);
         if let Expr::Unresolved(_s, _t, path) = e {
             let path = self.path(path);
-            let mut iter = path.segments.into_iter().peekable();
-            let (x0, ts0) = iter.next().unwrap();
-            match self.get(&x0) {
+            let mut iter = path.segments.into_iter();
+            let seg0 = iter.next().unwrap();
+            match self.stack.get(&seg0.name) {
                 Some(Binding::Struct(n, xs)) => {
-                    if ts0.len() != *n && !ts0.is_empty() {
-                        self.wrong_arity(&x0, ts0.len(), *n);
+                    let Some(ts0) = seg0.try_instantiate(*n) else {
+                        self.wrong_arity(&seg0.name, seg0.types.len(), *n);
+                        return Expr::Err(s, t1);
+                    };
+                    if seg0.has_named_args() {
+                        self.unexpected_named_type_args(&seg0.name);
                         return Expr::Err(s, t1);
                     }
-                    let ts0 = (ts0.is_empty())
-                        .then(|| (0..*n).map(|_| Type::Hole).collect())
-                        .unwrap_or(ts0);
-                    if let Some((x1, _)) = iter.peek() {
-                        self.unexpected_assoc("Struct", "field", &x0, x1);
+                    if let Some(seg1) = iter.next() {
+                        self.unexpected_assoc("Struct", "field", &seg0.name, &seg1.name);
                         return Expr::Err(s, t1);
                     }
                     let xs = xs.clone();
-                    let xes: Vec<_> = es.iter().flat_map(|e| self.field(e)).collect();
-                    if !Self::fields_are_defined(&xs, &xes) {
-                        self.wrong_fields(&x0, &xes, &xs);
+                    let xes: Map<_, _> = es.iter().flat_map(|e| self.expr_field(e)).collect();
+                    if !fields_are_defined(&xs, &xes) {
+                        self.wrong_fields(&seg0.name, &xes, &xs);
                         return Expr::Err(s, t1);
                     }
-                    return Expr::Struct(s, t1, x0, ts0, xes);
+                    return Expr::Struct(s, t1, seg0.name, ts0, xes);
                 }
                 Some(Binding::Enum(n, xs)) => {
-                    if ts0.len() != *n && !ts0.is_empty() {
-                        self.wrong_arity(&x0, ts0.len(), *n);
+                    if !seg0.has_optional_arity(*n) {
+                        self.wrong_arity(&seg0.name, seg0.types.len(), *n);
                         return Expr::Err(s, t1);
                     }
-                    let ts0 = (ts0.is_empty())
-                        .then(|| (0..*n).map(|_| Type::Hole).collect())
-                        .unwrap_or(ts0);
-                    if iter.peek().is_none() {
-                        self.expected_assoc("variant", &x0);
+                    if seg0.has_named_args() {
+                        self.unexpected_named_type_args(&seg0.name);
                         return Expr::Err(s, t1);
                     }
-                    let (x1, ts1) = iter.next().unwrap();
-                    if !xs.contains(&x1) {
-                        self.unexpected_assoc("Enum", "variant", &x0, &x1);
+                    let ts0 = seg0.instantiate_unnamed(*n);
+                    let Some(seg1) = iter.next() else {
+                        self.expected_assoc("variant", &seg0.name);
+                        return Expr::Err(s, t1);
+                    };
+                    if !xs.contains(&seg1.name) {
+                        self.unexpected_assoc("Enum", "variant", &seg0.name, &seg1.name);
                         return Expr::Err(s, t1);
                     }
-                    if !ts1.is_empty() {
-                        self.wrong_arity(&x1, ts1.len(), 0);
+                    if !seg1.types.is_empty() {
+                        self.wrong_arity(&seg1.name, seg1.types.len(), 0);
                         return Expr::Err(s, t1);
                     }
-                    if let Some((x2, _)) = iter.next() {
-                        self.unexpected_assoc("Enum", "item", &x1, &x2);
+                    if let Some(seg2) = iter.next() {
+                        self.unexpected_assoc("Enum", "item", &seg1.name, &seg2.name);
                         return Expr::Err(s, t1);
                     }
                     let es = es.iter().map(|e| self.expr(e)).collect::<Vec<_>>();
@@ -704,7 +680,7 @@ impl Context {
                         1 => es.into_iter().next().unwrap(),
                         _ => Expr::Tuple(s, Type::Hole, es),
                     };
-                    return Expr::Enum(s, t1, x0, ts0, x1, Rc::new(e));
+                    return Expr::Enum(s, t1, seg0.name, ts0, seg1.name, Rc::new(e));
                 }
                 _ => {}
             }
@@ -714,7 +690,7 @@ impl Context {
         Expr::Call(s, t1, Rc::new(e), es)
     }
 
-    fn field(&mut self, e: &Expr) -> Option<(Name, Expr)> {
+    fn expr_field(&mut self, e: &Expr) -> Option<(Name, Expr)> {
         let s = e.span();
         let t = self.ty(e.ty());
         match e {
@@ -727,20 +703,16 @@ impl Context {
                 let e1 = self.expr(e1);
                 if let Expr::Unresolved(_, _, path) = &**e0 {
                     let mut iter = path.segments.iter();
-                    let (x0, ts0) = iter.next().unwrap();
-                    if !ts0.is_empty() {
-                        self.wrong_arity(x0, ts0.len(), 0);
+                    let seg0 = iter.next().unwrap();
+                    if !seg0.types.is_empty() {
+                        self.wrong_arity(&seg0.name, seg0.types.len(), 0);
                         return None;
                     }
-                    if iter.next().is_some() {
-                        self.report.err(
-                            x0.span,
-                            format!("Found unexpected associated item `::{x0}`.",),
-                            "Fields no associated items.",
-                        );
+                    if let Some(seg1) = iter.next() {
+                        self.unexpected_assoc("Assignment", "item", &seg0.name, &seg1.name);
                         return None;
                     }
-                    Some((x0.clone(), e1))
+                    Some((seg0.name.clone(), e1))
                 } else {
                     self.expected_name(e0);
                     None
@@ -748,29 +720,25 @@ impl Context {
             }
             Expr::Unresolved(_, _, path) => {
                 let mut iter = path.segments.iter();
-                let (x0, ts0) = iter.next().unwrap();
-                match self.get(x0) {
+                let seg0 = iter.next().unwrap();
+                match self.stack.get(&seg0.name) {
                     Some(Binding::Var) => {
-                        if !ts0.is_empty() {
-                            self.wrong_arity(x0, ts0.len(), 0);
+                        if !seg0.types.is_empty() {
+                            self.wrong_arity(&seg0.name, seg0.types.len(), 0);
                             return None;
                         }
-                        if let Some((x1, _)) = iter.next() {
-                            self.report.err(
-                                x1.span,
-                                format!("Found unexpected associated item `::{x1}`.",),
-                                "Variables have no associated items.",
-                            );
+                        if let Some(seg1) = iter.next() {
+                            self.unexpected_assoc("Variable", "item", &seg0.name, &seg1.name);
                             return None;
                         }
-                        Some((x0.clone(), Expr::Var(s, t, x0.clone())))
+                        Some((seg0.name.clone(), Expr::Var(s, t, seg0.name.clone())))
                     }
                     Some(b) => {
-                        self.unexpected(x0, b.name(), "variable");
+                        self.unexpected(&seg0.name, b.name(), "variable");
                         None
                     }
                     None => {
-                        self.not_found(x0, "variable");
+                        self.not_found(&seg0.name, "variable");
                         None
                     }
                 }
@@ -796,8 +764,6 @@ impl Context {
                 let ts = ts.iter().map(|t| self.pat(t)).collect();
                 Pat::Tuple(s, t, ts)
             }
-            Pat::Struct(..) => unreachable!(),
-            Pat::Enum(..) => unreachable!(),
             Pat::Int(_, _, v) => Pat::Int(s, t, v.clone()),
             Pat::String(_, _, v) => Pat::String(s, t, v.clone()),
             Pat::Wildcard(_, _) => Pat::Wildcard(s, t),
@@ -812,15 +778,21 @@ impl Context {
                 let p1 = self.pat(p1);
                 Pat::Or(s, t, Rc::new(p0), Rc::new(p1))
             }
-            Pat::Char(_, _, _) => todo!(),
+            Pat::Char(_, _, c) => Pat::Char(s, t, *c),
+            Pat::Struct(..) => unreachable!(),
+            Pat::Enum(..) => unreachable!(),
         }
     }
 
-    fn unnamed_pat_args(&mut self, args: Option<Vec<UnresolvedPatField>>, fieldless: bool) -> Option<Vec<Pat>> {
-        if args.is_none() && fieldless {
+    fn enum_pat_args(
+        &mut self,
+        args: &Option<Vec<UnresolvedPatField>>,
+        is_unit_enum: bool,
+    ) -> Option<Vec<Pat>> {
+        if args.is_none() && is_unit_enum {
             return Some(vec![]);
         }
-        let args = args.unwrap();
+        let args = args.as_ref().unwrap();
         let mut ps = Vec::with_capacity(args.len());
         for arg in args {
             match arg {
@@ -838,15 +810,18 @@ impl Context {
         Some(ps)
     }
 
-    fn named_pat_args(&mut self, args: Option<Vec<UnresolvedPatField>>) -> Option<Vec<(Name, Pat)>> {
+    fn struct_pat_args(
+        &mut self,
+        args: &Option<Vec<UnresolvedPatField>>,
+    ) -> Option<Map<Name, Pat>> {
         if args.is_none() {
-            return Some(vec![]);
+            return Some(Map::new());
         }
-        let args = args.unwrap();
-        let mut xps = Vec::with_capacity(args.len());
+        let args = args.as_ref().unwrap();
+        let mut xps = Map::new();
         for arg in args {
             match arg {
-                UnresolvedPatField::Named(x, p) => xps.push((x.clone(), p.clone())),
+                UnresolvedPatField::Named(x, p) => xps.insert(x.clone(), p.clone()),
                 UnresolvedPatField::Unnamed(p) => {
                     self.report.err(
                         p.span(),
@@ -860,24 +835,38 @@ impl Context {
         Some(xps)
     }
 
+    // impl Foo[T] { ... }
     #[allow(clippy::type_complexity)]
-    pub fn head(
+    fn head(
         &mut self,
         bound: &Bound,
-        expected: Option<&(Vec<(Name, usize)>, Vec<(Name, usize)>)>,
+        found_defs: &[(Name, Arity)],
+        found_types: &[(Name, Arity, Type)],
     ) -> Bound {
         let span = bound.span();
         match bound {
-            Bound::Unresolved(_, path) => self.resolve_bound_path(span, path, expected),
-            Bound::Trait(_, _, _) => unreachable!(),
+            Bound::Unresolved(_, path) => {
+                self.resolve_head_path(span, path, found_defs, found_types)
+            }
+            Bound::Trait(..) => unreachable!(),
             Bound::Err(_) => Bound::Err(span),
         }
     }
 
-    pub fn bound(&mut self, bound: &Bound) -> Bound {
-        self.head(bound, None)
+    // impl ... where Foo[T] { ... }
+    #[allow(clippy::type_complexity)]
+    fn bound(&mut self, bound: &Bound) -> Bound {
+        let span = bound.span();
+        match bound {
+            Bound::Unresolved(_, path) => self.resolve_bound_path(span, path),
+            Bound::Trait(..) => unreachable!(),
+            Bound::Err(_) => Bound::Err(span),
+        }
     }
 
+    // x = e;
+    // x.y = e;
+    // x[i] = e;
     fn lvalue(&mut self, e: &Expr) -> Expr {
         match e {
             Expr::Var(s, t, x) => Expr::Var(*s, t.clone(), x.clone()),
@@ -900,62 +889,97 @@ impl Context {
         }
     }
 
-    fn fields_are_defined<T>(expected: &[Name], provided: &[(Name, T)]) -> bool {
-        provided.iter().all(|(x, _)| expected.contains(x))
-            && expected
-                .iter()
-                .all(|x| provided.iter().any(|(y, _)| x == y))
-    }
-
-    fn items_are_defined(expected: &[(Name, usize)], provided: &[(Name, usize)]) -> bool {
-        provided
-            .iter()
-            .all(|(x0, n0)| expected.iter().any(|(x1, n1)| x0 == x1 && n0 == n1))
-            && expected
-                .iter()
-                .all(|(x0, n0)| provided.iter().any(|(x1, n1)| x0 == x1 && n0 == n1))
-    }
-
     #[allow(clippy::type_complexity)]
-    fn resolve_bound_path(
+    fn resolve_head_path(
         &mut self,
         span: Span,
         path: &Path,
-        expected: Option<&(Vec<(Name, usize)>, Vec<(Name, usize)>)>,
+        found_defs: &[(Name, Arity)],
+        found_types: &[(Name, Arity, Type)],
     ) -> Bound {
         let path = self.path(path);
-        let mut iter = path.segments.into_iter().peekable();
-        let (x0, ts0) = iter.next().unwrap();
-        match self.get(&x0) {
+        let mut iter = path.segments.into_iter();
+        let seg0 = iter.next().unwrap();
+        match self.stack.get(&seg0.name) {
             Some(Binding::Trait(n, expected_defs, expected_types)) => {
-                if *n != ts0.len() {
-                    self.wrong_arity(&x0.clone(), ts0.len(), *n);
+                if !seg0.has_optional_arity(*n) {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), *n);
                     return Bound::Err(span);
                 }
-                if let Some((x1, _)) = iter.peek() {
-                    self.unexpected_assoc("Trait", "item", &x0, x1);
+                let ts0 = seg0.instantiate_unnamed(*n);
+                if seg0.has_named_args() {
+                    self.unexpected_named_type_args(&seg0.name);
                     return Bound::Err(span);
                 }
-                if let Some((found_defs, found_types)) = expected {
-                    if !Self::items_are_defined(expected_defs, found_defs) {
-                        let expected_defs = expected_defs.clone();
-                        self.wrong_items("def", &x0, found_defs, &expected_defs);
-                        return Bound::Err(span);
-                    }
-                    if !Self::items_are_defined(expected_types, found_types) {
-                        let expected_types = expected_types.clone();
-                        self.wrong_items("type", &x0, found_types, &expected_types);
-                        return Bound::Err(span);
-                    }
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Trait", "item", &seg0.name, &seg1.name);
+                    return Bound::Err(span);
                 }
-                Bound::Trait(span, x0.clone(), ts0.clone())
+                if !defs_are_defined(expected_defs, found_defs) {
+                    let expected_defs = expected_defs.clone();
+                    self.wrong_items(
+                        "def",
+                        &seg0.name,
+                        found_defs.iter().map(|(x, _)| x),
+                        expected_defs.iter().map(|(x, _)| x),
+                    );
+                    return Bound::Err(span);
+                }
+                if !types_are_defined(expected_types, found_types) {
+                    let expected_types = expected_types.clone();
+                    self.wrong_items(
+                        "type",
+                        &seg0.name,
+                        found_types.iter().map(|(x, _, _)| x),
+                        expected_types.iter().map(|(x, _)| x),
+                    );
+                    return Bound::Err(span);
+                }
+                let xts = expected_types
+                    .iter()
+                    .map(|(x, _)| (x.clone(), Type::Hole))
+                    .collect();
+                let b = TraitBound::new(seg0.name.clone(), ts0, xts);
+                Bound::Trait(span, b)
             }
             Some(b) => {
-                self.unexpected(&x0, b.name(), "trait");
+                self.unexpected(&seg0.name, b.name(), "trait");
                 Bound::Err(span)
             }
             None => {
-                self.not_found(&x0, "trait");
+                self.not_found(&seg0.name, "trait");
+                Bound::Err(span)
+            }
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn resolve_bound_path(&mut self, span: Span, path: &Path) -> Bound {
+        let path = self.path(path);
+        let mut iter = path.segments.into_iter();
+        let seg0 = iter.next().unwrap();
+        match self.stack.get(&seg0.name) {
+            Some(Binding::Trait(n, _, expected_types)) => {
+                let Some(ts0) = seg0.try_instantiate(*n) else {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), *n);
+                    return Bound::Err(span);
+                };
+                let Some(xts0) = seg0.try_instantiate_named(expected_types.as_ref()) else {
+                    return Bound::Err(span);
+                };
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Trait", "item", &seg0.name, &seg1.name);
+                    return Bound::Err(span);
+                }
+                let b = TraitBound::new(seg0.name.clone(), ts0, xts0);
+                Bound::Trait(span, b)
+            }
+            Some(b) => {
+                self.unexpected(&seg0.name, b.name(), "trait");
+                Bound::Err(span)
+            }
+            None => {
+                self.not_found(&seg0.name, "trait");
                 Bound::Err(span)
             }
         }
@@ -963,101 +987,93 @@ impl Context {
 
     fn resolve_expr_path(&mut self, s: Span, t: Type, path: &Path) -> Expr {
         let path = self.path(path);
-        let mut iter = path.segments.into_iter().peekable();
-        let (x0, ts0) = iter.next().unwrap();
-        match self.get(&x0) {
+        let mut iter = path.segments.into_iter();
+        let seg0 = iter.next().unwrap();
+        match self.stack.get(&seg0.name) {
             Some(Binding::Var) => {
-                if !ts0.is_empty() {
-                    self.wrong_arity(&x0, ts0.len(), 0);
+                if !seg0.types.is_empty() {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), 0);
                     return Expr::Err(s, t.clone());
                 }
-                if let Some((x1, _)) = iter.peek() {
-                    self.unexpected_assoc("Variable", "item", &x0, x1);
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Variable", "item", &seg0.name, &seg1.name);
                     return Expr::Err(s, t.clone());
                 }
-                Expr::Var(s, t, x0.clone())
+                Expr::Var(s, t, seg0.name.clone())
             }
             Some(Binding::Def(n)) => {
-                if ts0.len() != *n && !ts0.is_empty() {
-                    self.wrong_arity(&x0, ts0.len(), *n);
+                if seg0.types.len() != *n && !seg0.types.is_empty() {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), *n);
                     return Expr::Err(s, t);
                 }
-                if let Some((x1, _)) = iter.peek() {
-                    self.unexpected_assoc("Def", "item", &x0, x1);
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Def", "item", &seg0.name, &seg1.name);
                     return Expr::Err(s, t);
                 }
-                let ts0 = (ts0.is_empty())
-                    .then(|| (0..*n).map(|_| Type::Hole).collect())
-                    .unwrap_or(ts0);
-                Expr::Def(s, t, x0.clone(), ts0.clone())
+                let ts0 = seg0.instantiate_unnamed(*n);
+                Expr::Def(s, t, seg0.name.clone(), ts0.clone())
             }
             // Unit Struct
             Some(Binding::Struct(n, xs)) => {
-                if ts0.len() != *n && !ts0.is_empty() {
-                    self.wrong_arity(&x0, ts0.len(), *n);
+                if !seg0.has_optional_arity(*n) {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), *n);
                     return Expr::Err(s, t.clone());
                 }
                 if !xs.is_empty() {
                     let xs = xs.clone();
-                    self.wrong_fields::<Type>(&x0, &[], &xs);
+                    self.wrong_fields::<Type>(&seg0.name, &[], &xs);
                     return Expr::Err(s, t.clone());
                 }
-                if let Some((x1, _)) = iter.peek() {
-                    self.unexpected_assoc("Struct", "item", &x0, x1);
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
                     return Expr::Err(s, t);
                 }
-                let ts0 = ts0
-                    .is_empty()
-                    .then(|| (0..*n).map(|_| Type::Hole).collect())
-                    .unwrap_or(ts0);
+                let ts0 = seg0.instantiate_unnamed(*n);
                 let t = self.ty(&t);
-                let x0 = x0.clone();
-                Expr::Struct(s, t, x0, ts0.clone(), vec![])
+                let x0 = seg0.name.clone();
+                Expr::Struct(s, t, x0, ts0.clone(), Map::new())
             }
             Some(Binding::Trait(n, def_names, _)) => {
-                if *n != ts0.len() && !ts0.is_empty() {
-                    self.wrong_arity(&x0, ts0.len(), *n);
+                if !seg0.has_optional_arity(*n) {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), *n);
                     return Expr::Err(s, t);
                 }
-                if iter.peek().is_none() {
-                    self.expected_assoc("type", &x0);
+                if seg0.has_named_args() {
+                    self.unexpected_named_type_args(&seg0.name);
                     return Expr::Err(s, t);
                 }
-                let (x1, ts1) = iter.peek().unwrap();
-                let result = def_names.iter().find(|(x2, _)| x2 == x1);
-                if result.is_none() {
-                    self.unexpected_assoc("Trait", "type", &x0, x1);
+                let Some(seg1) = iter.next() else {
+                    self.expected_assoc("function", &seg0.name);
+                    return Expr::Err(s, t);
+                };
+                let Some((_, n2)) = def_names.iter().find(|(x2, _)| x2 == &seg1.name) else {
+                    self.unexpected_assoc("Trait", "function", &seg0.name, &seg1.name);
+                    return Expr::Err(s, t);
+                };
+                if !seg1.has_optional_arity(*n2) {
+                    self.wrong_arity(&seg1.name, seg1.types.len(), *n2);
                     return Expr::Err(s, t);
                 }
-                let (_, n2) = result.unwrap();
-                if ts1.len() != *n2 && !ts1.is_empty() {
-                    self.wrong_arity(x1, ts1.len(), *n2);
-                    return Expr::Err(s, t);
-                }
-                let ts0 = ts0
-                    .is_empty()
-                    .then(|| (0..*n).map(|_| Type::Hole).collect())
-                    .unwrap_or(ts0);
-                Expr::Assoc(s, t, x0.clone(), ts0.clone(), x1.clone(), ts1.clone())
+                let ts0 = seg0.instantiate_unnamed(*n);
+                let b = TraitBound::new(seg0.name.clone(), ts0, Map::new());
+                Expr::Assoc(s, t, b, seg1.name.clone(), seg1.types.clone())
             }
             Some(b) => {
-                self.unexpected(&x0, b.name(), "expression");
+                self.unexpected(&seg0.name, b.name(), "expression");
                 Expr::Err(s, t.clone())
             }
             None => {
                 for (tr_x, tr_n, tr_def_xs, _) in self.stack.traits() {
                     for (tr_def_x, tr_def_n) in tr_def_xs {
-                        if &x0 == tr_def_x && (ts0.len() == *tr_def_n || ts0.is_empty()) {
-                            let ts0 = ts0
-                                .is_empty()
-                                .then(|| (0..*tr_def_n).map(|_| Type::Hole).collect())
-                                .unwrap_or(ts0);
-                            let tr_ts = (0..tr_n).map(|_| Type::Hole).collect::<Vec<_>>();
-                            return Expr::Assoc(s, t, tr_x.clone(), tr_ts, tr_def_x.clone(), ts0);
+                        if seg0.name == *tr_def_x && seg0.has_optional_arity(*tr_def_n) {
+                            let tr_def_ts = seg0.instantiate_unnamed(*tr_def_n);
+                            let tr_ts = vec![Type::Hole; tr_n];
+                            let b = TraitBound::new(tr_x.clone(), tr_ts, Map::new());
+                            return Expr::Assoc(s, t, b, tr_def_x.clone(), tr_def_ts);
                         }
                     }
                 }
-                self.not_found(&x0, "expression");
+                self.not_found(&seg0.name, "expression");
                 Expr::Err(s, t.clone())
             }
         }
@@ -1065,70 +1081,76 @@ impl Context {
 
     fn resolve_type_path(&mut self, p: &Path) -> Type {
         let p = self.path(p);
-        let mut iter = p.segments.into_iter().peekable();
-        let (x0, ts0) = iter.next().unwrap();
-        match self.get(&x0) {
+        let mut iter = p.segments.into_iter();
+        let seg0 = iter.next().unwrap();
+        match self.stack.get(&seg0.name) {
             Some(Binding::Generic) => {
-                if !ts0.is_empty() {
-                    self.wrong_arity(&x0, ts0.len(), 0);
+                if seg0.has_args() {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), 0);
                     return Type::Err;
                 }
-                if let Some((x1, _)) = iter.peek() {
-                    self.unexpected_assoc("Generic", "item", &x0, x1);
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Generic", "item", &seg0.name, &seg1.name);
                     return Type::Err;
                 }
-                Type::Generic(x0.clone())
+                Type::Generic(seg0.name.clone())
             }
             Some(Binding::Enum(n, _) | Binding::Struct(n, _) | Binding::BuiltinType(n)) => {
-                if ts0.len() != *n {
-                    self.wrong_arity(&x0, ts0.len(), *n);
+                if !seg0.has_arity(*n) {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), *n);
                     return Type::Err;
                 }
-                if let Some((x1, _)) = iter.peek() {
-                    self.unexpected_assoc("Type", "item", &x0, x1);
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
                     return Type::Err;
                 }
-                Type::Cons(x0.clone(), ts0.clone())
+                Type::Cons(seg0.name.clone(), seg0.types.clone())
             }
             Some(Binding::TypeAlias(n)) => {
-                if *n != ts0.len() {
-                    self.wrong_arity(&x0, ts0.len(), *n);
+                if !seg0.has_arity(*n) {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), *n);
                     return Type::Err;
                 }
-                if let Some((x1, _)) = iter.peek() {
-                    self.unexpected_assoc("Type", "item", &x0, x1);
+                if seg0.has_named_args() {
+                    self.unexpected_named_type_args(&seg0.name);
                     return Type::Err;
                 }
-                Type::Alias(x0.clone(), ts0.clone())
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
+                    return Type::Err;
+                }
+                Type::Alias(seg0.name.clone(), seg0.types.clone())
             }
             Some(Binding::Trait(n, _, type_names)) => {
-                if *n != ts0.len() {
-                    self.wrong_arity(&x0, ts0.len(), *n);
+                if !seg0.has_arity(*n) {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), *n);
                     return Type::Err;
                 }
-                if iter.peek().is_none() {
-                    self.expected_assoc("type", &x0);
+                let Some(seg1) = iter.next() else {
+                    self.expected_assoc("type", &seg0.name);
+                    return Type::Err;
+                };
+                let Some((_, n2)) = type_names.iter().find(|(x2, _)| x2 == &seg1.name) else {
+                    self.unexpected_assoc("Trait", "type", &seg0.name, &seg1.name);
+                    return Type::Err;
+                };
+                if !seg1.has_arity(*n2) {
+                    self.wrong_arity(&seg1.name, seg1.types.len(), *n2);
                     return Type::Err;
                 }
-                let (x1, ts1) = iter.next().unwrap();
-                let result = type_names.iter().find(|(x2, _)| x2 == &x1);
-                if result.is_none() {
-                    self.unexpected_assoc("Trait", "type", &x0, &x1);
-                    return Type::Err;
-                }
-                let (_, n2) = result.unwrap();
-                if ts1.len() != *n2 {
-                    self.wrong_arity(&x1, ts1.len(), *n2);
-                    return Type::Err;
-                }
-                Type::Assoc(x0.clone(), ts0.clone(), x1.clone(), ts1.clone())
+                let xts = type_names
+                    .iter()
+                    .map(|(x, _)| (x.clone(), Type::Hole))
+                    .collect();
+                let b = TraitBound::new(seg0.name.clone(), seg0.types.clone(), xts);
+                Type::Assoc(b, seg1.name.clone(), seg1.types.clone())
             }
             Some(b) => {
-                self.unexpected(&x0, b.name(), "type");
+                self.unexpected(&seg0.name, b.name(), "type");
                 Type::Err
             }
             None => {
-                self.not_found(&x0, "type");
+                self.not_found(&seg0.name, "type");
                 Type::Err
             }
         }
@@ -1142,88 +1164,81 @@ impl Context {
         args: &Option<Vec<UnresolvedPatField>>,
     ) -> Pat {
         let path = self.path(path);
-        let mut iter = path.segments.into_iter().peekable();
-        let (x0, ts0) = iter.next().unwrap();
-        match self.get(&x0) {
+        let mut iter = path.segments.into_iter();
+        let seg0 = iter.next().unwrap();
+        match self.stack.get(&seg0.name) {
             Some(Binding::Enum(n, xs)) => {
-                if ts0.len() != *n && !ts0.is_empty() {
-                    self.wrong_arity(&x0, ts0.len(), *n);
+                if !seg0.has_optional_arity(*n) {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), *n);
                     return Pat::Err(s, t.clone());
                 }
-                let ts0 = ts0
-                    .is_empty()
-                    .then(|| (0..*n).map(|_| Type::Hole).collect())
-                    .unwrap_or(ts0);
-                if iter.peek().is_none() {
-                    self.expected_assoc("variant", &x0);
+                let ts0 = Self::fill_type_args(seg0.types, *n);
+                let Some(seg1) = iter.next() else {
+                    self.expected_assoc("variant", &seg0.name);
+                    return Pat::Err(s, t.clone());
+                };
+                if !xs.contains(&seg1.name) {
+                    self.unexpected_assoc("Enum", "variant", &seg0.name, &seg1.name);
                     return Pat::Err(s, t.clone());
                 }
-                let (x1, ts1) = iter.next().unwrap();
-                if !xs.contains(&x1) {
-                    self.unexpected_assoc("Enum", "variant", &x0, &x1);
+                if !seg1.types.is_empty() {
+                    self.wrong_arity(&seg1.name, seg1.types.len(), 0);
                     return Pat::Err(s, t.clone());
                 }
-                if !ts1.is_empty() {
-                    self.wrong_arity(&x1, ts1.len(), 0);
+                if let Some(seg2) = iter.next() {
+                    self.unexpected_assoc("Enum", "item", &seg1.name, &seg2.name);
                     return Pat::Err(s, t.clone());
                 }
-                if let Some((x2, _)) = iter.peek() {
-                    self.unexpected_assoc("Enum", "item", &x1, x2);
+                let Some(ps) = self.enum_pat_args(args, xs.is_empty()) else {
                     return Pat::Err(s, t.clone());
-                }
-                let args = args.clone();
-                let xs = xs.clone();
-                let result = self.unnamed_pat_args(args, xs.is_empty());
-                if result.is_none() {
-                    return Pat::Err(s, t.clone());
-                }
-                let ps = result.unwrap();
+                };
                 let p = match ps.len() {
                     1 => ps.into_iter().next().unwrap(),
                     _ => Pat::Tuple(s, Type::Hole, ps),
                 };
-                Pat::Enum(s, t, x0.clone(), ts0.clone(), x1.clone(), Rc::new(p))
+                Pat::Enum(
+                    s,
+                    t,
+                    seg0.name.clone(),
+                    ts0.clone(),
+                    seg1.name.clone(),
+                    Rc::new(p),
+                )
             }
             Some(Binding::Struct(n, xs)) => {
-                if ts0.len() != *n && !ts0.is_empty() {
-                    self.wrong_arity(&x0, ts0.len(), *n);
+                if !seg0.has_arity(*n) {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), *n);
                     return Pat::Err(s, t.clone());
                 }
-                let ts0 = ts0
-                    .is_empty()
-                    .then(|| (0..*n).map(|_| Type::Hole).collect())
-                    .unwrap_or(ts0);
-                if let Some((x1, _)) = iter.peek() {
-                    self.unexpected_assoc("Struct", "item", &x0, x1);
+                let ts0 = Self::fill_type_args(seg0.types, *n);
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
                     return Pat::Err(s, t.clone());
                 }
-                let args = args.clone();
                 let xs = xs.clone();
-                let xps = self.named_pat_args(args);
-                if xps.is_none() {
+                let Some(xps) = self.struct_pat_args(args) else {
+                    return Pat::Err(s, t.clone());
+                };
+                if !fields_are_defined(&xs, &xps) {
+                    self.wrong_fields(&seg0.name, &xps, &xs);
                     return Pat::Err(s, t.clone());
                 }
-                let xps = xps.unwrap();
-                if !Self::fields_are_defined(&xs, &xps) {
-                    self.wrong_fields(&x0, &xps, &xs);
-                    return Pat::Err(s, t.clone());
-                }
-                Pat::Struct(s, t, x0.clone(), ts0.clone(), xps)
+                Pat::Struct(s, t, seg0.name.clone(), ts0.clone(), xps)
             }
             Some(b) => {
-                self.unexpected(&x0, b.name(), "pattern");
+                self.unexpected(&seg0.name, b.name(), "pattern");
                 Pat::Err(s, t.clone())
             }
             None => {
-                if !ts0.is_empty() {
-                    self.wrong_arity(&x0, ts0.len(), 0);
+                if !seg0.types.is_empty() {
+                    self.wrong_arity(&seg0.name, seg0.types.len(), 0);
                     return Pat::Err(s, t.clone());
                 }
-                if let Some((x1, _)) = iter.peek() {
-                    self.unexpected_assoc("Struct", "item", &x0, x1);
+                if let Some(seg) = iter.next() {
+                    self.unexpected_assoc("Struct", "item", &seg0.name, &seg.name);
                     return Pat::Err(s, t.clone());
                 }
-                Pat::Var(s, t, x0.clone())
+                Pat::Var(s, t, seg0.name.clone())
             }
         }
     }
@@ -1232,9 +1247,9 @@ impl Context {
 impl Binding {
     fn name(&self) -> &'static str {
         match self {
-            Binding::Enum(_, _) => "enum",
-            Binding::Struct(_, _) => "struct",
-            Binding::BuiltinType(_) => "type",
+            Binding::Enum(..) => "enum",
+            Binding::Struct(..) => "struct",
+            Binding::BuiltinType(..) => "type",
             Binding::Generic => "generic",
             Binding::TypeAlias(..) => "type alias",
             Binding::Trait(..) => "trait",
@@ -1243,4 +1258,94 @@ impl Binding {
             Binding::BuiltinDef(_) => "builtin def",
         }
     }
+}
+
+impl Segment {
+    fn has_optional_arity(&self, arity: Arity) -> bool {
+        self.types.is_empty() || self.types.len() == arity
+    }
+
+    fn has_arity(&self, arity: Arity) -> bool {
+        self.types.len() == arity
+    }
+
+    fn has_unnamed_args(&self) -> bool {
+        self.types.len() > 0
+    }
+
+    fn has_named_args(&self) -> bool {
+        self.named_types.len() > 0
+    }
+
+    fn has_args(&self) -> bool {
+        self.has_unnamed_args() || self.has_named_args()
+    }
+
+    fn try_instantiate(&self, arity: Arity) -> Option<Vec<Type>> {
+        if self.types.is_empty() {
+            Some(vec![Type::Hole; arity])
+        } else if self.types.len() == arity {
+            Some(self.types.clone())
+        } else {
+            None
+        }
+    }
+
+    fn try_instantiate_named(&self, expected: &[(Name, Arity)]) -> Option<Map<Name, Type>> {
+        if self
+            .named_types
+            .iter()
+            .all(|(x, _)| expected.iter().any(|(y, _)| x == y))
+        {
+            // If all named types are defined, return the named types.
+            let xts = expected
+                .iter()
+                .filter(|(x, _)| !self.named_types.iter().any(|(y, _)| x == y))
+                .cloned()
+                .map(|(x, _)| (x, Type::Hole));
+            Some(self.named_types.clone().into_iter().chain(xts).collect())
+        } else {
+            None
+        }
+    }
+
+    fn instantiate_unnamed(&self, n: Arity) -> Vec<Type> {
+        if self.types.is_empty() {
+            vec![Type::Hole; n]
+        } else {
+            self.types.clone()
+        }
+    }
+}
+
+fn fields_are_defined<T>(expected: &[Name], provided: &[(Name, T)]) -> bool {
+    provided.iter().all(|(x, _)| expected.contains(x))
+        && expected
+            .iter()
+            .all(|x| provided.iter().any(|(y, _)| x == y))
+}
+
+fn types_are_defined(expected: &[(Name, Arity)], provided: &[(Name, Arity, Type)]) -> bool {
+    provided
+        .iter()
+        .all(|(x0, n0, _)| expected.iter().any(|(x1, n1)| x0 == x1 && n0 == n1))
+        && expected
+            .iter()
+            .all(|(x0, n0)| provided.iter().any(|(x1, n1, _)| x0 == x1 && n0 == n1))
+}
+
+fn defs_are_defined(expected: &[(Name, Arity)], provided: &[(Name, Arity)]) -> bool {
+    provided
+        .iter()
+        .all(|(x0, n0)| expected.iter().any(|(x1, n1)| x0 == x1 && n0 == n1))
+        && expected
+            .iter()
+            .all(|(x0, n0)| provided.iter().any(|(x1, n1)| x0 == x1 && n0 == n1))
+}
+
+fn names_to_string<'a, T: 'a>(
+    names: impl IntoIterator<Item = &'a T>,
+    f: impl FnMut(&T) -> String,
+) -> String {
+    names.into_iter().map(f).collect::<Vec<_>>().join(", ")
 }

@@ -8,7 +8,6 @@ use runtime::builtins::duration::Duration;
 use runtime::builtins::encoding::Encoding;
 use runtime::builtins::file::File;
 // use runtime::builtins::image::Image;
-// #[cfg(feature = "model")]
 // use runtime::builtins::model::Model;
 use runtime::builtins::path::Path;
 use runtime::builtins::reader::Reader;
@@ -19,16 +18,15 @@ use runtime::builtins::time_source::TimeSource;
 // use runtime::builtins::url::Url;
 use runtime::builtins::writer::Writer;
 
-use super::dynamic::array::Array;
-use super::dynamic::dataflow::Dataflow;
-use super::dynamic::function::Fun;
-use super::dynamic::instance::Instance;
-// use super::dynamic::matrix::Matrix;
-use super::dynamic::record::Record;
-use super::dynamic::stream::Stream;
-use super::dynamic::tuple::Tuple;
-use super::dynamic::variant::Variant;
 use super::Value;
+use crate::builtins::decls::array::Array;
+use crate::builtins::decls::dataflow::Dataflow;
+use crate::builtins::decls::function::Fun;
+use crate::builtins::decls::instance::Instance;
+use crate::builtins::decls::record::Record;
+use crate::builtins::decls::stream::Stream;
+use crate::builtins::decls::tuple::Tuple;
+use crate::builtins::decls::variant::Variant;
 
 macro_rules! conv {
     {
@@ -37,11 +35,10 @@ macro_rules! conv {
         impl Value {
             #[track_caller]
             pub fn $as(&self) -> $type {
-                if let Value::$variant(v) = self {
-                    v.clone()
-                } else {
-                    unreachable!("{}{:?}", std::panic::Location::caller(), self);
-                }
+                let Value::$variant(v) = self else {
+                    unreachable!("{}{:?}", std::panic::Location::caller(), self)
+                };
+                v.clone()
             }
         }
         impl From<$type> for Value {
@@ -70,10 +67,18 @@ conv!(Encoding, Encoding, as_encoding);
 conv!(File, File, as_file);
 #[cfg(feature = "model")]
 conv!(Model, Model, as_model);
-conv!(runtime::builtins::option::Option<Rc<Value>>, Option, as_option);
+conv!(
+    runtime::builtins::option::Option<Rc<Value>>,
+    Option,
+    as_option
+);
 conv!(Path, Path, as_path);
 conv!(Reader, Reader, as_reader);
-conv!(runtime::builtins::result::Result<Rc<Value>>, Result, as_result);
+conv!(
+    runtime::builtins::result::Result<Rc<Value>>,
+    Result,
+    as_result
+);
 conv!(Set<Value>, Set, as_set);
 conv!(SocketAddr, SocketAddr, as_socket_addr);
 conv!(runtime::builtins::im_string::String, String, as_string);

@@ -1,0 +1,34 @@
+(ruleset compare)
+
+;; Eq-True: a == a => true
+(rewrite (Eq a a) (Bool true) :ruleset compare)
+;; Ne-False: a != a => false
+(rewrite (Ne a a) (Bool false) :ruleset compare)
+
+;; Gt-Lt: a > b => b < a
+(rewrite (Gt a b) (Lt b a) :ruleset compare)
+;; Ge-Le: a >= b => b <= a
+(rewrite (Ge a b) (Le b a) :ruleset compare)
+
+;; Eq-Ne: a == b => not (a != b)
+(rewrite (Eq a b) (Not (Ne a b)) :ruleset compare)
+;; Le-Neg: a <= b => not (b < a)
+(rewrite (Le a b) (Not (Lt b a)) :ruleset compare)
+
+;; Le-Expand: a <= b => a < b or a == b
+(rewrite (Le a b) (Or (Lt a b) (Eq a b)) :ruleset compare)
+
+;; Min-If: min(a, b) => if (a <= b) a b
+(rewrite (Min a b) (If (Le a b) a b) :ruleset compare)
+;; Max-If: max(a, b) => if (a >= b) a b
+(rewrite (Max a b) (If (Ge a b) a b) :ruleset compare)
+
+;; Min-Commutativity: min(a, b) => min(b, a)
+(rewrite (Min a b) (Min b a) :ruleset compare)
+;; Max-Commutativity: max(a, b) => max(b, a)
+(rewrite (Max a b) (Max b a) :ruleset compare)
+
+;; Min-Associativity: min(a, min(b, c)) => min(min(a, b), c)
+(rewrite (Min a (Min b c)) (Min (Min a b) c) :ruleset compare)
+;; Max-Associativity: max(a, max(b, c)) => max(max(a, b), c)
+(rewrite (Max a (Max b c)) (Max (Max a b) c) :ruleset compare)

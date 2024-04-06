@@ -1,8 +1,6 @@
 #![allow(unused)]
 use crate::ast::Arm;
 use crate::ast::Block;
-use crate::ast::Body;
-use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Index;
 use crate::ast::Name;
@@ -13,11 +11,13 @@ use crate::ast::Program;
 use crate::ast::Query;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
+use crate::ast::StmtDefBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
 use crate::ast::StmtType;
+use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::TraitDef;
 use crate::ast::TraitType;
@@ -86,7 +86,7 @@ impl<'a, 'b> Rust<'a, 'b> {
         match s {
             Stmt::Var(s) => self.stmt_var(s),
             Stmt::Def(s) => self.stmt_def(s),
-            Stmt::Impl(s) => self.stmt_impl(s),
+            Stmt::Impl(s) => unreachable!(),
             Stmt::Expr(s) => self.stmt_expr(s),
             Stmt::Struct(s) => self.stmt_struct(s),
             Stmt::Enum(s) => self.stmt_enum(s),
@@ -111,52 +111,27 @@ impl<'a, 'b> Rust<'a, 'b> {
     }
 
     fn stmt_def(&mut self, s: &StmtDef) -> std::fmt::Result {
-        self.kw("fn")?;
-        self.space()?;
-        self.name(&s.name)?;
-        assert!(s.generics.is_empty());
-        self.paren(|this| this.comma_sep(&s.params, Self::param))?;
-        self.punct(":")?;
-        self.space()?;
-        self.ty(&s.ty)?;
-        self.where_clause(&s.where_clause)?;
-        self.space()?;
-        self.punct("=")?;
-        self.space()?;
-        self.body(&s.body)?;
-        self.punct(";")
-    }
-
-    fn body(&mut self, e: &Body) -> std::fmt::Result {
-        match e {
-            Body::Expr(e) => self.expr(e),
-            Body::Builtin => self.kw("<builtin>"),
-        }
-    }
-
-    fn stmt_impl(&mut self, s: &StmtImpl) -> std::fmt::Result {
-        self.kw("impl")?;
-        assert!(s.generics.is_empty());
-        self.space()?;
-        self.bound(&s.head)?;
-        self.where_clause(&s.where_clause)?;
-        self.space()?;
-        self.brace(|this| {
-            this.indented(|this| {
-                this.newline_sep(&s.defs, Self::stmt_def)?;
-                this.newline_sep(&s.types, Self::stmt_type)
-            })
-        })
-    }
-
-    fn where_clause(&mut self, ts: &[Bound]) -> std::fmt::Result {
-        if !ts.is_empty() {
+        if let StmtDefBody::UserDefined(e) = &s.body {
+            self.kw("fn")?;
             self.space()?;
-            self.kw("where")?;
+            self.name(&s.name)?;
+            assert!(s.generics.is_empty());
+            self.paren(|this| this.comma_sep(&s.params, Self::param))?;
+            self.punct(":")?;
             self.space()?;
-            self.comma_sep(ts, Self::bound)?;
+            self.ty(&s.ty)?;
+            assert!(s.where_clause.is_empty());
+            self.space()?;
+            self.brace(|this| this.expr(e))?;
         }
         Ok(())
+    }
+
+    fn body(&mut self, e: &StmtDefBody) -> std::fmt::Result {
+        match e {
+            StmtDefBody::UserDefined(e) => self.expr(e),
+            StmtDefBody::Builtin(_) => self.kw("<builtin>"),
+        }
     }
 
     fn stmt_expr(&mut self, s: &Expr) -> std::fmt::Result {
@@ -169,7 +144,7 @@ impl<'a, 'b> Rust<'a, 'b> {
         self.space()?;
         self.name(&s.name)?;
         assert!(s.generics.is_empty());
-        self.fields(&s.fields, Self::annotate)?;
+        self.fields(s.fields.as_ref(), Self::annotate)?;
         self.punct(";")
     }
 
@@ -179,7 +154,7 @@ impl<'a, 'b> Rust<'a, 'b> {
         self.name(&s.name)?;
         assert!(s.generics.is_empty());
         self.space()?;
-        self.scope(&s.variants, Self::variant)
+        self.scope(s.variants.as_ref(), Self::variant)
     }
 
     fn variant(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
@@ -195,8 +170,15 @@ impl<'a, 'b> Rust<'a, 'b> {
         self.space()?;
         self.punct("=")?;
         self.space()?;
-        self.ty(&s.ty)?;
+        self.ty_body(&s.body)?;
         self.punct(";")
+    }
+
+    fn ty_body(&mut self, t: &StmtTypeBody) -> std::fmt::Result {
+        match t {
+            StmtTypeBody::UserDefined(t) => self.ty(t),
+            StmtTypeBody::Builtin(b) => self.kw("<builtin>"),
+        }
     }
 
     fn stmt_trait(&mut self, s: &StmtTrait) -> std::fmt::Result {
@@ -218,7 +200,7 @@ impl<'a, 'b> Rust<'a, 'b> {
         self.space()?;
         self.name(&s.name)?;
         assert!(s.generics.is_empty());
-        self.paren(|this| this.comma_sep(&s.params, Self::ty))?;
+        self.paren(|this| this.comma_sep(&s.params, Self::param))?;
         self.punct(":")?;
         self.space()?;
         self.ty(&s.ty)?;
@@ -267,7 +249,7 @@ impl<'a, 'b> Rust<'a, 'b> {
             Expr::Struct(_, _, name, ts, xes) => {
                 self.name(name)?;
                 self.type_args(ts)?;
-                self.fields(xes, Self::assign)?;
+                self.fields(xes.as_ref(), Self::assign)?;
             }
             Expr::Enum(_, _, name, ts, x1, e) => {
                 self.name(name)?;
@@ -290,14 +272,8 @@ impl<'a, 'b> Rust<'a, 'b> {
             Expr::Block(_, _, b) => {
                 self.block(b)?;
             }
-            Expr::Query(_, _, qs) => unreachable!(),
-            Expr::Assoc(_, _, x0, ts0, x1, ts1) => {
-                self.name(x0)?;
-                self.type_args(ts0)?;
-                self.punct("::")?;
-                self.name(x1)?;
-                self.type_args(ts1)?;
-            }
+            Expr::Query(..) => unreachable!(),
+            Expr::Assoc(..) => unreachable!(),
             Expr::Index(_, _, e, i) => {
                 self.expr(e)?;
                 self.punct(".")?;
@@ -306,9 +282,7 @@ impl<'a, 'b> Rust<'a, 'b> {
             Expr::Array(_, _, es) => {
                 self.brack(|this| this.comma_sep(es, Self::expr))?;
             }
-            Expr::Err(_, _) => {
-                self.kw("<err>")?;
-            }
+            Expr::Err(..) => unreachable!(),
             Expr::Assign(_, _, e0, e1) => {
                 self.expr(e0)?;
                 self.space()?;
@@ -353,7 +327,7 @@ impl<'a, 'b> Rust<'a, 'b> {
                 self.block(b)?;
             }
             Expr::Record(_, _, xts) => {
-                self.fields(xts, Self::assign)?;
+                self.fields(xts.as_ref(), Self::assign)?;
             }
             Expr::Value(_, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
@@ -418,44 +392,17 @@ impl<'a, 'b> Rust<'a, 'b> {
         self.ty(t)
     }
 
-    fn bound(&mut self, b: &Bound) -> std::fmt::Result {
-        match b {
-            Bound::Unresolved(..) => unreachable!(),
-            Bound::Trait(_, x, ts) => {
-                self.name(x)?;
-                self.type_args(ts)?;
-            }
-            Bound::Err(_) => unreachable!(),
-        }
-        Ok(())
-    }
-
     fn ty(&mut self, t: &Type) -> std::fmt::Result {
         match t {
             Type::Cons(name, ts) => {
                 self.name(name)?;
                 self.type_args(ts)?;
             }
-            Type::Assoc(x0, ts0, x1, ts1) => {
-                self.name(x0)?;
-                self.type_args(ts0)?;
-                self.punct("::")?;
-                self.name(x1)?;
-                self.type_args(ts1)?;
-            }
-            Type::Var(x) => {
-                self.punct("?")?;
-                self.name(x)?;
-            }
-            Type::Hole => {
-                self.punct("_")?;
-            }
-            Type::Err => {
-                self.kw("<err>")?;
-            }
-            Type::Generic(x) => {
-                self.name(x)?;
-            }
+            Type::Assoc(..) => unreachable!(),
+            Type::Var(x) => unreachable!(),
+            Type::Hole => unreachable!(),
+            Type::Err => unreachable!(),
+            Type::Generic(x) => unreachable!(),
             Type::Fun(ts, t) => {
                 self.kw("fun")?;
                 self.paren(|this| this.comma_sep(ts, Self::ty))?;
@@ -467,7 +414,7 @@ impl<'a, 'b> Rust<'a, 'b> {
                 self.paren(|this| this.comma_sep_trailing(ts, Self::ty))?;
             }
             Type::Record(xts) => {
-                self.fields(xts, Self::annotate)?;
+                self.fields(xts.as_ref(), Self::annotate)?;
             }
             Type::Alias(..) => unreachable!(),
             Type::Unresolved(..) => unreachable!(),
@@ -524,7 +471,7 @@ impl<'a, 'b> Rust<'a, 'b> {
             Pat::Struct(_, _, x, ts, xps) => {
                 self.name(x)?;
                 self.type_args(ts)?;
-                self.fields(xps, Self::bind)?;
+                self.fields(xps.as_ref(), Self::bind)?;
             }
             Pat::Enum(_, _, x0, ts, x1, p) => {
                 self.name(x0)?;
@@ -537,7 +484,7 @@ impl<'a, 'b> Rust<'a, 'b> {
                 self.kw("<err>")?;
             }
             Pat::Record(_, _, xps) => {
-                self.fields(xps, Self::bind)?;
+                self.fields(xps.as_ref(), Self::bind)?;
             }
             Pat::Or(_, _, p0, p1) => {
                 self.pat(p0)?;

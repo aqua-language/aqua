@@ -1,7 +1,6 @@
 #![allow(unused)]
 use crate::ast::Arm;
 use crate::ast::Block;
-use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Index;
@@ -11,18 +10,23 @@ use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Query;
+use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
+use crate::ast::StmtDefBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
 use crate::ast::StmtType;
+use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
+use crate::ast::TraitBound;
 use crate::ast::TraitDef;
 use crate::ast::TraitType;
 use crate::ast::Type;
 use crate::ast::UnresolvedPatField;
+use crate::builtins::Value;
 use crate::print::Print;
 
 pub struct Wrapper<T>(T);
@@ -75,6 +79,12 @@ impl std::fmt::Display for Expr {
     }
 }
 
+impl std::fmt::Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 impl std::fmt::Display for Block {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Pretty::new(f).block(self)
@@ -120,6 +130,12 @@ impl std::fmt::Display for Pat {
 impl std::fmt::Display for Bound {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Pretty::new(f).bound(self)
+    }
+}
+
+impl std::fmt::Display for TraitBound {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).trait_bound(self)
     }
 }
 
@@ -240,10 +256,10 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.punct(";")
     }
 
-    fn body(&mut self, e: &Body) -> std::fmt::Result {
+    fn body(&mut self, e: &StmtDefBody) -> std::fmt::Result {
         match e {
-            Body::Expr(e) => self.expr(e),
-            Body::Builtin => self.kw("<builtin>"),
+            StmtDefBody::UserDefined(e) => self.expr(e),
+            StmtDefBody::Builtin(_) => self.kw("<builtin>"),
         }
     }
 
@@ -257,9 +273,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.brace(|this| {
             if !s.defs.is_empty() || !s.types.is_empty() {
                 this.indented(|this| {
-                    this.newline()?;
-                    this.newline_sep(&s.defs, Self::stmt_def)?;
-                    this.newline_sep(&s.types, Self::stmt_type)
+                    this.newline_sep(&s.types, Self::stmt_type)?;
+                    this.newline_sep(&s.defs, Self::stmt_def)
                 })?;
                 this.newline()?;
             }
@@ -287,7 +302,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
-        self.fields(&s.fields, Self::annotate)?;
+        self.fields(s.fields.as_ref(), Self::annotate)?;
         self.punct(";")
     }
 
@@ -299,7 +314,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.space()?;
         self.brace(|this| {
             if !s.variants.is_empty() {
-                this.indented(|this| this.newline_comma_sep(&s.variants, Self::variant))?;
+                this.indented(|this| this.newline_comma_sep(s.variants.as_ref(), Self::variant))?;
                 this.newline()?;
             }
             Ok(())
@@ -319,8 +334,15 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.space()?;
         self.punct("=")?;
         self.space()?;
-        self.ty(&s.ty)?;
+        self.ty_body(&s.body)?;
         self.punct(";")
+    }
+
+    fn ty_body(&mut self, t: &StmtTypeBody) -> std::fmt::Result {
+        match t {
+            StmtTypeBody::UserDefined(t) => self.ty(t),
+            StmtTypeBody::Builtin(_) => self.kw("<builtin>"),
+        }
     }
 
     fn stmt_trait(&mut self, s: &StmtTrait) -> std::fmt::Result {
@@ -346,7 +368,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
-        self.paren(|this| this.comma_sep(&s.params, Self::ty))?;
+        self.paren(|this| this.comma_sep(&s.params, Self::param))?;
         self.punct(":")?;
         self.space()?;
         self.ty(&s.ty)?;
@@ -408,7 +430,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Expr::Struct(_, _, name, ts, xes) => {
                 self.name(name)?;
                 self.type_args(ts)?;
-                self.fields(xes, Self::assign)?;
+                self.fields(xes.as_ref(), Self::assign)?;
             }
             Expr::Enum(_, _, name, ts, x, e) => {
                 self.name(name)?;
@@ -428,13 +450,14 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.expr(e)?;
                 self.paren(|this| this.comma_sep(es, Self::expr))?;
             }
-            Expr::Block(_, _, b) => {}
+            Expr::Block(_, _, b) => {
+                self.block(b)?;
+            }
             Expr::Query(_, _, qs) => {
                 self.newline_sep(qs, Self::query_stmt)?;
             }
-            Expr::Assoc(_, _, x0, ts0, x1, ts1) => {
-                self.name(x0)?;
-                self.type_args(ts0)?;
+            Expr::Assoc(_, _, b, x1, ts1) => {
+                self.trait_bound(b)?;
                 self.punct("::")?;
                 self.name(x1)?;
                 self.type_args(ts1)?;
@@ -494,7 +517,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.block(b)?;
             }
             Expr::Record(_, _, xts) => {
-                self.fields(xts, Self::assign)?;
+                self.fields(xts.as_ref(), Self::assign)?;
             }
             Expr::Value(_, _) => {
                 self.kw("<value>")?;
@@ -536,6 +559,30 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.punct("=>")?;
         self.space()?;
         self.expr(&arm.e)
+    }
+
+    fn trait_bound(&mut self, b: &TraitBound) -> std::fmt::Result {
+        self.name(&b.name)?;
+        if !b.ts.is_empty() || !b.xts.is_empty() {
+            self.brack(|this| {
+                if !b.ts.is_empty() {
+                    this.comma_sep(&b.ts, Self::ty)?;
+                }
+                if !b.xts.is_empty() {
+                    if !b.ts.is_empty() {
+                        this.punct(",")?;
+                        this.space()?;
+                    }
+                    this.comma_sep(b.xts.as_ref(), |this, (x, t)| {
+                        this.name(x)?;
+                        this.punct("=")?;
+                        this.ty(t)
+                    })?;
+                }
+                Ok(())
+            })?;
+        }
+        Ok(())
     }
 
     fn expr(&mut self, expr: &Expr) -> std::fmt::Result {
@@ -594,7 +641,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Query::Select(_, _, xes) => {
                 self.kw("select")?;
                 self.space()?;
-                self.comma_scope(xes, Self::assign)?;
+                self.comma_scope(xes.as_ref(), Self::assign)?;
             }
             Query::Join(_, _, x, e0, e1) => {
                 self.kw("join")?;
@@ -689,9 +736,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Bound::Unresolved(_, path) => {
                 self.unresolved_path(path)?;
             }
-            Bound::Trait(_, x, ts) => {
-                self.name(x)?;
-                self.type_args(ts)?;
+            Bound::Trait(_, b) => {
+                self.trait_bound(b)?;
             }
             Bound::Err(_) => {
                 self.kw("<err>")?;
@@ -706,9 +752,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.name(name)?;
                 self.type_args(ts)?;
             }
-            Type::Assoc(x0, ts0, x1, ts1) => {
-                self.name(x0)?;
-                self.type_args(ts0)?;
+            Type::Assoc(b, x1, ts1) => {
+                self.trait_bound(b)?;
                 self.punct("::")?;
                 self.name(x1)?;
                 self.type_args(ts1)?;
@@ -736,7 +781,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.paren(|this| this.comma_sep_trailing(ts, Self::ty))?;
             }
             Type::Record(xts) => {
-                self.fields(xts, Self::annotate)?;
+                self.fields(xts.as_ref(), Self::annotate)?;
             }
             Type::Alias(name, xts) => {
                 self.name(name)?;
@@ -841,9 +886,28 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.sep("::", false, &p.segments, Self::segment)
     }
 
-    fn segment(&mut self, (x, ts): &(Name, Vec<Type>)) -> std::fmt::Result {
-        self.name(x)?;
-        self.type_args(ts)
+    fn segment(&mut self, seg: &Segment) -> std::fmt::Result {
+        self.name(&seg.name)?;
+        if !seg.types.is_empty() || !seg.named_types.is_empty() {
+            self.brack(|this| {
+                if !seg.types.is_empty() {
+                    this.comma_sep(&seg.types, Self::ty)?;
+                }
+                if !seg.named_types.is_empty() {
+                    if !seg.types.is_empty() {
+                        this.punct(",")?;
+                        this.space()?;
+                    }
+                    this.comma_sep(seg.named_types.as_ref(), |this, (x, t)| {
+                        this.name(x)?;
+                        this.punct("=")?;
+                        this.ty(t)
+                    })?;
+                }
+                Ok(())
+            })?;
+        }
+        Ok(())
     }
 
     fn fields<T>(

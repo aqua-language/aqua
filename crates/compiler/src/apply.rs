@@ -2,19 +2,21 @@ use std::rc::Rc;
 
 use crate::ast::Arm;
 use crate::ast::Block;
-use crate::ast::Body;
 use crate::ast::Bound;
 use crate::ast::Expr;
+use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Param;
 use crate::ast::Pat;
-use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
+use crate::ast::StmtDefBody;
 use crate::ast::StmtImpl;
 use crate::ast::StmtType;
+use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
+use crate::ast::TraitBound;
 use crate::ast::Type;
 
 impl Program {
@@ -37,12 +39,11 @@ impl Type {
                 .find(|(n, _)| n == x)
                 .map(|(_, t)| t.apply(sub))
                 .unwrap_or_else(|| Type::Var(x.clone())),
-            Type::Assoc(x0, ts0, x1, ts1) => {
-                let x0 = x0.clone();
-                let ts0 = ts0.iter().map(|t| t.apply(sub)).collect::<Vec<_>>();
+            Type::Assoc(b, x1, ts1) => {
+                let b = b.map_type(&|b| b.apply(sub));
                 let x1 = x1.clone();
                 let ts1 = ts1.iter().map(|t| t.apply(sub)).collect::<Vec<_>>();
-                Type::Assoc(x0, ts0, x1, ts1)
+                Type::Assoc(b, x1, ts1)
             }
             Type::Hole => unreachable!(),
             Type::Err => Type::Err,
@@ -68,16 +69,12 @@ impl Type {
                 let ts = ts.iter().map(|t| t.apply(sub)).collect();
                 Type::Alias(x, ts)
             }
-            Type::Unresolved(p) => {
-                let p = p.map_type(&|t| t.apply(sub));
-                Type::Unresolved(p)
-            }
+            Type::Unresolved(_) => unreachable!(),
             Type::Array(t, n) => {
                 let t = Rc::new(t.apply(sub));
                 let n = *n;
                 Type::Array(t, n)
             }
-
             Type::Never => Type::Never,
         }
     }
@@ -90,12 +87,11 @@ impl Type {
                 Type::Cons(x, ts)
             }
             Type::Var(x) => Type::Var(x.clone()),
-            Type::Assoc(x0, ts0, x1, ts1) => {
-                let x0 = x0.clone();
-                let ts0 = ts0.iter().map(|t| t.instantiate(sub)).collect::<Vec<_>>();
+            Type::Assoc(b, x1, ts1) => {
+                let b = b.map_type(&|b| b.instantiate(sub));
                 let x1 = x1.clone();
                 let ts1 = ts1.iter().map(|t| t.instantiate(sub)).collect::<Vec<_>>();
-                Type::Assoc(x0, ts0, x1, ts1)
+                Type::Assoc(b, x1, ts1)
             }
             Type::Hole => unreachable!(),
             Type::Generic(x) => sub
@@ -125,10 +121,7 @@ impl Type {
                 Type::Alias(x, ts)
             }
             Type::Err => Type::Err,
-            Type::Unresolved(p) => {
-                let p = p.map_type(&|t| t.apply(sub));
-                Type::Unresolved(p)
-            }
+            Type::Unresolved(_) => unreachable!(),
             Type::Array(t, n) => {
                 let t = Rc::new(t.instantiate(sub));
                 let n = *n;
@@ -174,15 +167,15 @@ impl StmtDef {
         let ps = self.params.iter().map(|p| p.map_type(f)).collect();
         let t = f(&self.ty);
         let e = self.body.map_type(f);
-        StmtDef::new(span, name, generics, qs, ps, t, e)
+        StmtDef::new(span, name, generics, ps, t, qs, e)
     }
 }
 
-impl Body {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Body {
+impl StmtDefBody {
+    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtDefBody {
         match self {
-            Body::Expr(e) => Body::Expr(e.map_type(f)),
-            Body::Builtin => Body::Builtin,
+            StmtDefBody::UserDefined(e) => StmtDefBody::UserDefined(e.map_type(f)),
+            StmtDefBody::Builtin(b) => StmtDefBody::Builtin(b.clone()),
         }
     }
 }
@@ -204,34 +197,40 @@ impl StmtType {
         let span = self.span;
         let name = self.name.clone();
         let generics = self.generics.clone();
-        let ty = f(&self.ty);
+        let ty = self.body.map_type(f);
         StmtType::new(span, name, generics, ty)
     }
 }
 
-impl Path {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Path {
-        let segments = self
-            .segments
-            .iter()
-            .map(|(x, ts)| (x.clone(), ts.iter().map(f).collect()))
-            .collect::<Vec<_>>();
-        Path::new(segments)
+impl StmtTypeBody {
+    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtTypeBody {
+        match self {
+            StmtTypeBody::UserDefined(t) => StmtTypeBody::UserDefined(f(t)),
+            StmtTypeBody::Builtin(b) => StmtTypeBody::Builtin(b.clone()),
+        }
     }
 }
 
 impl Bound {
     pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Bound {
-        let span = self.span();
         match self {
-            Bound::Unresolved(_, path) => Bound::Unresolved(span, path.map_type(f)),
-            Bound::Trait(_, x, ts) => {
-                let x = x.clone();
-                let ts = ts.iter().map(f).collect();
-                Bound::Trait(span, x, ts)
-            }
-            Bound::Err(_) => Bound::Err(span),
+            Bound::Unresolved(_, _) => unreachable!(),
+            Bound::Trait(s, b) => Bound::Trait(*s, b.map_type(f)),
+            Bound::Err(s) => Bound::Err(*s),
         }
+    }
+}
+
+impl TraitBound {
+    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> TraitBound {
+        let x = self.name.clone();
+        let ts = self.ts.iter().map(f).collect::<Vec<_>>();
+        let xts = self
+            .xts
+            .iter()
+            .map(|(x, t)| (x.clone(), f(t)))
+            .collect::<Map<_, _>>();
+        TraitBound::new(x, ts, xts)
     }
 }
 
@@ -298,12 +297,11 @@ impl Expr {
                 let es = es.iter().map(|e| e.map_type(f)).collect();
                 Expr::Tuple(s, t, es)
             }
-            Expr::Assoc(_, _, x0, ts0, x1, ts1) => {
-                let x0 = x0.clone();
-                let ts0 = ts0.iter().map(f).collect();
+            Expr::Assoc(_, _, b, x1, ts1) => {
+                let b = b.map_type(f);
                 let x1 = x1.clone();
                 let ts1 = ts1.iter().map(f).collect();
-                Expr::Assoc(s, t, x0, ts0, x1, ts1)
+                Expr::Assoc(s, t, b, x1, ts1)
             }
             Expr::Index(_, _, e, i) => {
                 let e = Rc::new(e.map_type(f));

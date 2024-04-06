@@ -1,15 +1,16 @@
+use std::collections::HashMap;
+
 use crate::ast::Block;
-use crate::ast::Body;
+use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Name;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::StmtEnum;
+use crate::ast::StmtDefBody;
 use crate::ast::StmtImpl;
-use crate::ast::StmtStruct;
-use crate::ast::StmtType;
 use crate::ast::StmtVar;
+use crate::ast::TraitBound;
 use crate::ast::Type;
 use crate::builtins::Fun;
 use crate::builtins::Record;
@@ -20,16 +21,24 @@ use crate::diag::Report;
 
 #[derive(Debug, Default)]
 pub struct Context {
-    stack: Stack,
+    pub stack: Stack,
     pub report: Report,
 }
 
 #[derive(Debug)]
-struct Stack(Vec<Scope>);
+pub struct Stack {
+    defs: HashMap<Name, StmtDef>,
+    impls: HashMap<Wrapper<TraitBound>, StmtImpl>,
+    locals: Vec<Scope>,
+}
 
 impl Default for Stack {
     fn default() -> Self {
-        Stack(vec![Scope::new()])
+        Stack {
+            defs: HashMap::default(),
+            impls: HashMap::default(),
+            locals: vec![Scope::new()],
+        }
     }
 }
 
@@ -38,12 +47,24 @@ impl Stack {
         Self::default()
     }
 
-    fn bind(&mut self, name: Name, binding: Binding) {
-        self.0.last_mut().unwrap().0.push((name, binding));
+    fn bind_def(&mut self, name: Name, def: StmtDef) {
+        self.defs.insert(name, def);
     }
 
-    fn get(&self, name: &Name) -> &Binding {
-        self.0
+    fn bind_val(&mut self, name: Name, val: Value) {
+        self.locals.last_mut().unwrap().0.push((name, val));
+    }
+
+    fn bind_impl(&mut self, head: TraitBound, imp: StmtImpl) {
+        self.impls.insert(Wrapper(head), imp);
+    }
+
+    fn get_def(&self, name: &Name) -> &StmtDef {
+        self.defs.get(name).unwrap()
+    }
+
+    fn get_val(&self, name: &Name) -> &Value {
+        self.locals
             .iter()
             .rev()
             .find_map(|scope| scope.0.iter().find(|(n, _)| n == name))
@@ -53,24 +74,105 @@ impl Stack {
 }
 
 #[derive(Debug)]
-struct Scope(Vec<(Name, Binding)>);
+struct Wrapper<T>(T);
+
+impl std::hash::Hash for Wrapper<TraitBound> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        Wrapper(&self.0).hash(state);
+    }
+}
+
+impl<'a> std::hash::Hash for Wrapper<&'a TraitBound> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.name.hash(state);
+        self.0.ts.iter().for_each(|t| Wrapper(t).hash(state));
+    }
+}
+
+impl<'a> std::hash::Hash for Wrapper<&'a Type> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self.0).hash(state);
+        match &self.0 {
+            Type::Unresolved(_) => unreachable!(),
+            Type::Cons(x, ts) => {
+                x.hash(state);
+                ts.iter().for_each(|t| Wrapper(t).hash(state));
+            }
+            Type::Alias(_, _) => unreachable!(),
+            Type::Assoc(tb, x, _) => {
+                let t = &tb.xts.iter().find(|(n, _)| n == x).unwrap().1;
+                Wrapper(t).hash(state);
+            }
+            Type::Var(_) => unreachable!(),
+            Type::Generic(x) => x.hash(state),
+            Type::Fun(ts, t) => {
+                ts.iter().for_each(|t| Wrapper(t).hash(state));
+                Wrapper(t.as_ref()).hash(state);
+            }
+            Type::Tuple(ts) => ts.iter().for_each(|t| Wrapper(t).hash(state)),
+            Type::Record(xts) => xts.iter().for_each(|(x, t)| {
+                x.hash(state);
+                Wrapper(t).hash(state);
+            }),
+            Type::Array(t, n) => {
+                Wrapper(t.as_ref()).hash(state);
+                n.hash(state);
+            }
+            Type::Never => {}
+            Type::Hole => unreachable!(),
+            Type::Err => unreachable!(),
+        }
+    }
+}
+
+impl PartialEq for Wrapper<TraitBound> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.name == other.0.name && self.0.ts == other.0.ts
+    }
+}
+
+impl<'a> PartialEq for Wrapper<&'a TraitBound> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.name == other.0.name && self.0.ts == other.0.ts
+    }
+}
+
+impl<'a> PartialEq for Wrapper<&'a Type> {
+    fn eq(&self, other: &Self) -> bool {
+        match (&self.0, &other.0) {
+            (Type::Unresolved(_), _) => unreachable!(),
+            (_, Type::Unresolved(_)) => unreachable!(),
+            (Type::Cons(x1, ts1), Type::Cons(x2, ts2)) => x1 == x2 && ts1 == ts2,
+            (Type::Alias(_, _), _) | (_, Type::Alias(_, _)) => unreachable!(),
+            (Type::Assoc(tb1, x1, _), Type::Assoc(tb2, x2, _)) => {
+                Wrapper(tb1) == Wrapper(tb2) && x1 == x2
+            }
+            (_, Type::Assoc(_, _, _)) => unreachable!(),
+            (Type::Var(_), _) => unreachable!(),
+            (_, Type::Var(_)) => unreachable!(),
+            (Type::Generic(x1), Type::Generic(x2)) => x1 == x2,
+            (Type::Fun(ts1, t1), Type::Fun(ts2, t2)) => ts1 == ts2 && t1 == t2,
+            (Type::Tuple(ts1), Type::Tuple(ts2)) => ts1 == ts2,
+            (Type::Record(xts1), Type::Record(xts2)) => xts1 == xts2,
+            (Type::Array(t1, n1), Type::Array(t2, n2)) => t1 == t2 && n1 == n2,
+            (Type::Never, Type::Never) => true,
+            (Type::Hole, _) => unreachable!(),
+            (_, Type::Hole) => unreachable!(),
+            (Type::Err, Type::Err) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Wrapper<TraitBound> {}
+
+#[derive(Debug)]
+struct Scope(Vec<(Name, Value)>);
 
 impl Scope {
     fn new() -> Scope {
         Scope(Vec::new())
     }
-}
-
-#[derive(Clone, Debug)]
-enum Binding {
-    Var(Value),
-    Def(Vec<Name>, Body),
-    #[allow(dead_code)]
-    Struct(Vec<(Name, Type)>),
-    #[allow(dead_code)]
-    Enum(Vec<(Name, Type)>),
-    #[allow(dead_code)]
-    Impl(Vec<(Name, Type)>, Vec<(Name, Body)>),
 }
 
 impl Context {
@@ -82,56 +184,59 @@ impl Context {
     }
 
     fn scoped(&mut self, f: impl FnOnce(&mut Self) -> Value) -> Value {
-        self.stack.0.push(Scope::new());
+        self.stack.locals.push(Scope::new());
         let v = f(self);
-        self.stack.0.pop();
+        self.stack.locals.pop();
         v
     }
 
     pub fn interpret(&mut self, p: &Program) {
+        p.stmts.iter().for_each(|stmt| self.decl_stmt(stmt));
         p.stmts.iter().for_each(|stmt| self.stmt(stmt));
+    }
+
+    fn decl_stmt(&mut self, s: &Stmt) {
+        match s {
+            Stmt::Var(_) => {}
+            Stmt::Def(s) => self.decl_stmt_def(s),
+            Stmt::Trait(_) => {}
+            Stmt::Impl(s) => self.decl_stmt_impl(s),
+            Stmt::Struct(_) => {}
+            Stmt::Enum(_) => {}
+            Stmt::Type(_) => {}
+            Stmt::Expr(_) => {}
+            Stmt::Err(_) => unreachable!(),
+        }
     }
 
     fn stmt(&mut self, s: &Stmt) {
         match s {
             Stmt::Var(s) => self.stmt_var(s),
-            Stmt::Def(s) => self.stmt_def(s),
+            Stmt::Def(_) => {}
             Stmt::Trait(_) => {}
-            Stmt::Impl(s) => self.stmt_impl(s),
-            Stmt::Struct(s) => self.stmt_struct(s),
-            Stmt::Enum(s) => self.stmt_enum(s),
-            Stmt::Type(s) => self.stmt_type(s),
+            Stmt::Impl(_) => {}
+            Stmt::Struct(_) => {}
+            Stmt::Enum(_) => {}
+            Stmt::Type(_) => {}
             Stmt::Expr(s) => self.stmt_expr(s),
-            Stmt::Err(_) => todo!(),
+            Stmt::Err(_) => unreachable!(),
         }
     }
 
     fn stmt_var(&mut self, s: &StmtVar) {
         let value = self.expr(&s.expr);
-        self.stack.bind(s.name.clone(), Binding::Var(value));
+        self.stack.bind_val(s.name.clone(), value);
     }
 
-    fn stmt_def(&mut self, s: &StmtDef) {
-        let body = s.body.clone();
-        let param_names = s.params.iter().map(|p| p.name.clone()).collect();
-        self.stack
-            .bind(s.name.clone(), Binding::Def(param_names, body));
+    fn decl_stmt_def(&mut self, s: &StmtDef) {
+        self.stack.bind_def(s.name.clone(), s.clone());
     }
 
-    fn stmt_impl(&mut self, _: &StmtImpl) {
-        todo!()
-    }
-
-    fn stmt_struct(&mut self, _: &StmtStruct) {
-        todo!()
-    }
-
-    fn stmt_enum(&mut self, _: &StmtEnum) {
-        todo!()
-    }
-
-    fn stmt_type(&mut self, _: &StmtType) {
-        todo!()
+    fn decl_stmt_impl(&mut self, s: &StmtImpl) {
+        let Bound::Trait(_, tb) = &s.head else {
+            unreachable!();
+        };
+        self.stack.bind_impl(tb.clone(), s.clone());
     }
 
     fn stmt_expr(&mut self, _: &Expr) {
@@ -145,7 +250,7 @@ impl Context {
         })
     }
 
-    fn expr(&mut self, e: &Expr) -> Value {
+    pub fn expr(&mut self, e: &Expr) -> Value {
         match e {
             Expr::Unresolved(_, _, _) => unreachable!(),
             Expr::Int(_, t, v) => {
@@ -175,6 +280,7 @@ impl Context {
                 }
             }
             Expr::Bool(_, _, b) => Value::Bool(*b),
+            Expr::Char(_, _, v) => Value::Char(*v),
             Expr::String(_, _, v) => Value::from(runtime::prelude::String::from(v.as_str())),
             Expr::Struct(_, _, _, _, xes) => {
                 let xvs = xes.iter().map(|(n, e)| (n.clone(), self.expr(e))).collect();
@@ -193,45 +299,50 @@ impl Context {
                 Value::from(Variant::new(x1.clone(), v))
             }
             Expr::Field(_, _, e, x) => {
-                let Value::Record(xvs) = self.expr(e) else {
-                    unreachable!();
-                };
-                xvs.0.iter().find(|(n, _)| n == x).unwrap().1.clone()
+                let rec = self.expr(e).as_record();
+                rec[x].clone()
             }
             Expr::Index(_, _, e, i) => {
-                let Value::Tuple(vs) = self.expr(e) else {
-                    unreachable!();
-                };
-                vs.0[i.data].clone()
+                let tup = self.expr(e).as_tuple();
+                tup[i].clone()
             }
-            Expr::Var(_, _, x) => {
-                let Binding::Var(v) = self.stack.get(x) else {
-                    unreachable!();
-                };
-                v.clone()
+            Expr::Var(_, _, x) => self.stack.get_val(x).clone(),
+            Expr::Def(_, _, x, ts) => Value::from(Fun::new_def(x.clone(), ts.clone())),
+            Expr::Assoc(_, _, tb, x, ts) => {
+                Value::from(Fun::new_assoc(tb.clone(), x.clone(), ts.clone()))
             }
-            Expr::Def(_, _, x, ts) => Value::from(Fun::new(x.clone(), ts.clone())),
             Expr::Call(_, _, e, es) => {
-                let Value::Fun(f) = self.expr(e) else {
-                    unreachable!();
-                };
+                let f = self.expr(e).as_function();
                 let vs = es.iter().map(|e| self.expr(e)).collect::<Vec<_>>();
-                let Binding::Def(xs, body) = self.stack.get(&f.name).clone() else {
-                    unreachable!();
-                };
-                match body {
-                    Body::Expr(e) => self.scoped(|this| {
-                        xs.iter()
-                            .zip(vs)
-                            .for_each(|(x, v)| this.stack.bind(x.clone(), Binding::Var(v)));
-                        this.expr(&e)
-                    }),
-                    Body::Builtin => todo!(),
+                match f {
+                    Fun::Def(x, ts) => {
+                        let s = self.stack.get_def(&x).clone();
+                        match s.body {
+                            StmtDefBody::UserDefined(e) => self.scoped(|ctx| {
+                                for (p, v) in s.params.iter().zip(vs) {
+                                    ctx.stack.bind_val(p.name.clone(), v)
+                                }
+                                ctx.expr(&e)
+                            }),
+                            StmtDefBody::Builtin(builtin) => (builtin.fun)(self, &ts, &vs),
+                        }
+                    }
+                    Fun::Assoc(tb, x, _) => {
+                        println!("Looking for: {}", tb);
+                        let s = self.stack.impls.get(&Wrapper(tb)).unwrap().clone();
+                        println!("Found: {}", s);
+                        let s = s.defs.iter().find(|d| d.name == x).unwrap();
+                        self.scoped(|ctx| {
+                            for (p, v) in s.params.iter().zip(vs) {
+                                ctx.stack.bind_val(p.name.clone(), v)
+                            }
+                            ctx.expr(&e)
+                        })
+                    }
                 }
             }
             Expr::Block(_, _, b) => self.block(b),
             Expr::Query(_, _, _) => todo!(),
-            Expr::Assoc(_, _, _, _, _, _) => todo!(),
             Expr::Match(_, _, _e, _pes) => {
                 todo!()
                 // let mut iter = pes.iter();
@@ -261,12 +372,7 @@ impl Context {
             Expr::Continue(_, _) => unreachable!(),
             Expr::Break(_, _) => unreachable!(),
             Expr::While(_, _, e0, b) => {
-                while {
-                    let Value::Bool(v) = self.expr(e0) else {
-                        unreachable!()
-                    };
-                    v
-                } {
+                while self.expr(e0).as_bool() {
                     self.block(b);
                 }
                 Value::from(Tuple::new(vec![]))
@@ -275,7 +381,6 @@ impl Context {
             Expr::Err(_, _) => unreachable!(),
             Expr::Value(_, _) => unreachable!(),
             Expr::For(_, _, _, _, _) => todo!(),
-            Expr::Char(_, _, _) => todo!(),
         }
     }
 }

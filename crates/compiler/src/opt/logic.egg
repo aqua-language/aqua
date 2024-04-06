@@ -1,0 +1,33 @@
+(ruleset logic)
+
+;; Not-Not: not (not a) => a
+(rewrite (Not (Not a)) a :ruleset logic)
+;; Not-True: not true => false
+(rewrite (Not (Bool true)) (Bool false) :ruleset logic)
+;; Not-False: not false => true
+(rewrite (Not (Bool false)) (Bool true) :ruleset logic)
+;; Not-And: not (a and b) => (not a) or (not b)
+(rewrite (Not (And a b)) (Or (Not a) (Not b)) :ruleset logic)
+;; Not-Or: not (a or b) => (not a) and (not b)
+(rewrite (Not (Or a b)) (And (Not a) (Not b)) :ruleset logic)
+
+;; And-True: a and true => a
+(rewrite (And a (Bool true)) a :ruleset logic)
+;; And-False: a and false => false
+(rewrite (And a (Bool false)) (Bool false) :ruleset logic)
+;; And-Commutativity: a and b => b and a
+(rewrite (And a b) (And b a) :ruleset logic)
+;; And-Associativity: (a and b) and c => a and (b and c)
+(rewrite (And (And a b) c) (And a (And b c)) :ruleset logic)
+
+;; Or-True: a or true => true
+(rewrite (Or a (Bool true)) (Bool true) :ruleset logic)
+;; Or-False: a or false => a
+(rewrite (Or a (Bool false)) a :ruleset logic)
+;; Or-Commutativity: a or b => b or a
+(rewrite (Or a b) (Or b a) :ruleset logic)
+;; Or-Associativity: (a or b) or c => a or (b or c)
+(rewrite (Or (Or a b) c) (Or a (Or b c)) :ruleset logic)
+
+;; And-Or-Distributivity: a and (b or c) => (a and b) or (a and c)
+(rewrite (And a (Or b c)) (Or (And a b) (And a c)) :ruleset logic)
