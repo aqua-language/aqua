@@ -1,6 +1,5 @@
 [workspace]
 members = ["crates/*", "crates/compiler/fuzz"]
-exclude = ["crates/tree-sitter-aqua", "crates/mdbook-aqua/"]
 resolver = "2"
 
 [workspace.package]
