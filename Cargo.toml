@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*", "crates/compiler/fuzz"]
+default-members = ["crates/aqua"]
 exclude = ["crates/tree-sitter-aqua", "crates/mdbook-aqua/"]
 resolver = "2"
 
