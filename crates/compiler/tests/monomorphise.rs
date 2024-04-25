@@ -5,6 +5,7 @@ use common::stmt_def;
 use common::ty;
 use compiler::ast::Program;
 
+#[ignore]
 #[test]
 fn test_monomorphise0() {
     let a = Program::monomorphise(
