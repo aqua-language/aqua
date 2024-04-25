@@ -9,7 +9,6 @@ impl CurrentThreadRunner {
             ctx.await_termination().await
         };
         tokio::runtime::Builder::new_current_thread()
-            .unhandled_panic(tokio::runtime::UnhandledPanic::ShutdownRuntime)
             .enable_all()
             .build()
             .expect("Failed to build runtime")
