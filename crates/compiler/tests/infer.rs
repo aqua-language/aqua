@@ -1,81 +1,67 @@
-// use compiler::ast::Program;
-//
-// macro_rules! ok {
-//     {$s:tt} => { { Program::try_infer(indoc::indoc! { $s }).unwrap_or_else(|(_, s)| panic!("{s}")) } }
-// }
-//
-// macro_rules! ng {
-//     {$s:tt} => { { Program::try_infer(indoc::indoc! { $s }).map(|v| panic!("Unexpected {v}")).unwrap_err() } }
-// }
-//
-// macro_rules! ty {
-//     {$s:tt} => { { Program::try_resolve(indoc::indoc! { $s }).unwrap_or_else(|(_, s)| panic!("{s}")) } }
-// }
-//
-// #[test]
-// fn test_infer_literal0() {
-//     let a = ok!("1;");
-//     let b = ty!("1:i32;");
-//     assert!(a == b, "{}\n\n{}", a.display_types(), b.display_types());
-// }
-//
-// #[test]
-// fn test_infer_def0() {
-//     let a = ok!("
-//         def f(): i32 = 0;
-//         f();
-//     ");
-//     let b = ty!("
-//         def f(): i32 = 0:i32;
-//         (f:(fun():i32))():i32;
-//     ");
-//     assert!(a == b, "{}\n\n{}", a.display_types(), b.display_types());
-// }
-//
-// #[test]
-// fn test_infer_def1() {
-//     let a = ok!("def f(x: i32): i32 = 0;");
-//     let b = ty!("def f(x: i32): i32 = 0:i32;");
-//     assert!(a == b, "{}\n\n{}", a.display_types(), b.display_types());
-// }
-//
-// #[test]
-// fn test_infer_def2() {
-//     let a = ok!("
-//         def f(x: i32): i32 = x;
-//         f(0);
-//     ");
-//     let b = ty!("
-//         def f(x: i32): i32 = x:i32;
-//         (f:(fun(i32):i32))(0:i32):i32;
-//     ");
-//     assert!(a == b, "{}\n\n{}", a.display_types(), b.display_types());
-// }
-//
-// #[test]
-// fn test_infer_def3() {
-//     let (a, msg) = ng!("def f(x: i32): f32 = x;");
-//     let b = ty!("def f(x: i32): f32 = x:i32;");
-//     assert!(a == b, "{}\n\n{}", a.display_types(), b.display_types());
-//     assert_eq!(
-//         msg,
-//         indoc::indoc! {"
-//             Error: Type mismatch
-//                ╭─[test:1:1]
-//                │
-//              1 │ def f(x: i32): f32 = x;
-//                │ ┬┬─
-//                │ ╰──── Found i32
-//                │  │
-//                │  ╰─── Expected f32
-//             ───╯"}
-//     )
-// }
-//
+mod common;
+use compiler::ast::Program;
+
+#[test]
+fn test_infer_literal0() {
+    let a = Program::infer("1;").unwrap();
+    let b = Program::resolve("1:i32;").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_def0() {
+    let a = Program::infer("def f(): i32 = 0;").unwrap();
+    let b = Program::resolve("def f(): i32 = 0:i32;").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_def1() {
+    let a = Program::infer("def f(x: i32): i32 = 0;").unwrap();
+    let b = Program::resolve("def f(x: i32): i32 = 0:i32;").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_def2() {
+    let a = Program::infer(
+        "def f(x: i32): i32 = x;
+         f(0);",
+    )
+    .unwrap();
+    let b = Program::resolve(
+        "def f(x: i32): i32 = x:i32;
+         (f:fun(i32):i32)(0:i32):i32;",
+    )
+    .unwrap();
+    check!(@typed; a, b);
+}
+
+#[test]
+fn test_infer_def3() {
+    let a = Program::infer("def f(x: i32): f32 = x;").unwrap_err();
+    let b = Program::resolve("def f(x: i32): f32 = x:i32;").unwrap();
+    check!(
+        @typed;
+        a,
+        b,
+        "Error: Type mismatch
+            ╭─[test:1:1]
+            │
+          1 │ def f(x: i32): f32 = x;
+            │ ───────────┬─────────┬─
+            │            ╰───────────── Expected f32
+            │                      │
+            │                      ╰─── Found i32
+         ───╯"
+    )
+}
+
 // #[test]
 // fn test_infer_def4() {
-//     let a = ok!("def f[T](x: T): T = x;");
-//     let b = ty!("def f[T](x: T): T = x:T;");
+//     let a = Program::infer("def f[T](x: T): T = x;");
+//     let b = program([
+//                     // "def f[T](x: T): T = x:T;"]);
 //     assert!(a == b, "{}\n\n{}", a.display_types(), b.display_types());
 // }
 //

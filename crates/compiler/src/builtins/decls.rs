@@ -81,7 +81,7 @@ impl Compiler {
         // self.declare_discretizer();
         // self.declare_duration();
         // self.declare_encoding();
-        // self.declare_f32();
+        self.declare_f32();
         // self.declare_f64();
         // self.declare_file();
         // self.declare_function();
@@ -125,34 +125,38 @@ impl Compiler {
 
     #[cfg_attr(debug_assertions, track_caller)]
     pub fn declare_def(&mut self, source: &'static str, body: BuiltinDef) {
-        self.try_parse(builtin_file_name!(), source, |parser, follow| {
+        if let Some(stmt) = self.try_parse(builtin_file_name!(), source, |parser, follow| {
             parser.stmt_def_builtin(follow, body)
-        })
-        .map(|stmt| self.declarations.push(Stmt::Def(stmt)));
+        }) {
+            self.declarations.push(Stmt::Def(Rc::new(stmt)))
+        }
     }
 
     #[cfg_attr(debug_assertions, track_caller)]
     pub fn declare_type(&mut self, source: &'static str, body: BuiltinType) {
-        self.try_parse(builtin_file_name!(), source, |parser, follow| {
+        if let Some(stmt) = self.try_parse(builtin_file_name!(), source, |parser, follow| {
             parser.stmt_type_builtin(follow, body)
-        })
-        .map(|stmt| self.declarations.push(Stmt::Type(stmt)));
+        }) {
+            self.declarations.push(Stmt::Type(Rc::new(stmt)))
+        }
     }
 
     #[cfg_attr(debug_assertions, track_caller)]
     pub fn declare_trait(&mut self, source: &'static str) {
-        self.try_parse(builtin_file_name!(), source, |parser, follow| {
+        if let Some(stmt) = self.try_parse(builtin_file_name!(), source, |parser, follow| {
             parser.stmt_trait(follow)
-        })
-        .map(|stmt| self.declarations.push(Stmt::Trait(stmt)));
+        }) {
+            self.declarations.push(Stmt::Trait(Rc::new(stmt)))
+        }
     }
 
     #[cfg_attr(debug_assertions, track_caller)]
     pub fn declare_impl(&mut self, source: &'static str) {
-        self.try_parse(builtin_file_name!(), source, |parser, follow| {
+        if let Some(stmt) = self.try_parse(builtin_file_name!(), source, |parser, follow| {
             parser.stmt_impl(follow)
-        })
-        .map(|stmt| self.declarations.push(Stmt::Impl(stmt)));
+        }) {
+            self.declarations.push(Stmt::Impl(Rc::new(stmt)))
+        }
     }
 
     fn try_parse<T>(

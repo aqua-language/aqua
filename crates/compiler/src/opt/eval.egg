@@ -11,9 +11,9 @@
 ;; Lookup variable in environment
 (function lookup (Env String) Expr :cost 1000)
 (rewrite (lookup (EnvCons x e env) x) e :ruleset eval)
-(rule ((= e1 (lookup (EnvCons x e2 env) x))
+(rule ((= e1 (lookup (EnvCons x e2 env) y))
        (!= x y))
-      ((union e1 (lookup env x))) :ruleset eval)
+      ((union e1 (lookup env y))) :ruleset eval)
 
 ;; ----------------------------------------------------------------------------
 

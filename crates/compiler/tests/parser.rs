@@ -1,96 +1,95 @@
+mod common;
 use compiler::ast::Expr;
 use compiler::ast::Pat;
 use compiler::ast::Program;
 use compiler::ast::Stmt;
 use compiler::ast::Type;
-use compiler::check;
-use compiler::dsl::block;
-use compiler::dsl::expr_and;
-use compiler::dsl::expr_array;
-use compiler::dsl::expr_assign;
-use compiler::dsl::expr_block;
-use compiler::dsl::expr_bool;
-use compiler::dsl::expr_break;
-use compiler::dsl::expr_call;
-use compiler::dsl::expr_char;
-use compiler::dsl::expr_continue;
-use compiler::dsl::expr_err;
-use compiler::dsl::expr_field;
-use compiler::dsl::expr_float;
-use compiler::dsl::expr_fun;
-use compiler::dsl::expr_fun_typed;
-use compiler::dsl::expr_if;
-use compiler::dsl::expr_if_else;
-use compiler::dsl::expr_index;
-use compiler::dsl::expr_int;
-use compiler::dsl::expr_match;
-use compiler::dsl::expr_or;
-use compiler::dsl::expr_query;
-use compiler::dsl::expr_return;
-use compiler::dsl::expr_string;
-use compiler::dsl::expr_tuple;
-use compiler::dsl::expr_unit;
-use compiler::dsl::expr_while;
-use compiler::dsl::index;
-use compiler::dsl::pat_bool;
-use compiler::dsl::pat_char;
-use compiler::dsl::pat_int;
-use compiler::dsl::pat_record;
-use compiler::dsl::pat_string;
-use compiler::dsl::pat_tuple;
-use compiler::dsl::pat_wild;
-use compiler::dsl::program;
-use compiler::dsl::query_compute;
-use compiler::dsl::query_from;
-use compiler::dsl::query_group;
-use compiler::dsl::query_into;
-use compiler::dsl::query_over;
-use compiler::dsl::query_select;
-use compiler::dsl::query_var;
-use compiler::dsl::query_where;
-use compiler::dsl::stmt_def;
-use compiler::dsl::stmt_enum;
-use compiler::dsl::stmt_err;
-use compiler::dsl::stmt_expr;
-use compiler::dsl::stmt_impl;
-use compiler::dsl::stmt_struct;
-use compiler::dsl::stmt_trait;
-use compiler::dsl::stmt_type;
-use compiler::dsl::stmt_var;
-use compiler::dsl::tr_def;
-use compiler::dsl::tr_type;
-use compiler::dsl::ty_err;
-use compiler::dsl::ty_fun;
-use compiler::dsl::ty_hole;
-use compiler::dsl::ty_tuple;
-use compiler::dsl::unresolved::bound;
-use compiler::dsl::unresolved::expr_add;
-use compiler::dsl::unresolved::expr_assoc;
-use compiler::dsl::unresolved::expr_call_direct;
-use compiler::dsl::unresolved::expr_def;
-use compiler::dsl::unresolved::expr_div;
-use compiler::dsl::unresolved::expr_eq;
-use compiler::dsl::unresolved::expr_ge;
-use compiler::dsl::unresolved::expr_gt;
-use compiler::dsl::unresolved::expr_le;
-use compiler::dsl::unresolved::expr_lt;
-use compiler::dsl::unresolved::expr_mul;
-use compiler::dsl::unresolved::expr_ne;
-use compiler::dsl::unresolved::expr_neg;
-use compiler::dsl::unresolved::expr_not;
-use compiler::dsl::unresolved::expr_struct;
-use compiler::dsl::unresolved::expr_sub;
-use compiler::dsl::unresolved::expr_unit_variant;
-use compiler::dsl::unresolved::expr_var;
-use compiler::dsl::unresolved::expr_variant;
-use compiler::dsl::unresolved::head;
-use compiler::dsl::unresolved::pat_enum;
-use compiler::dsl::unresolved::pat_struct;
-use compiler::dsl::unresolved::pat_unit_struct;
-use compiler::dsl::unresolved::pat_var;
-use compiler::dsl::unresolved::ty;
-use compiler::dsl::unresolved::ty_assoc;
-use compiler::dsl::unresolved::ty_con;
+
+use common::block;
+use common::expr_and;
+use common::expr_array;
+use common::expr_assign;
+use common::expr_block;
+use common::expr_bool;
+use common::expr_break;
+use common::expr_call;
+use common::expr_char;
+use common::expr_continue;
+use common::expr_err;
+use common::expr_field;
+use common::expr_float;
+use common::expr_fun;
+use common::expr_fun_typed;
+use common::expr_if;
+use common::expr_if_else;
+use common::expr_index;
+use common::expr_int;
+use common::expr_match;
+use common::expr_or;
+use common::expr_query;
+use common::expr_return;
+use common::expr_string;
+use common::expr_tuple;
+use common::expr_unit;
+use common::expr_while;
+use common::index;
+use common::pat_bool;
+use common::pat_char;
+use common::pat_int;
+use common::pat_record;
+use common::pat_string;
+use common::pat_tuple;
+use common::pat_wild;
+use common::program;
+use common::query_compute;
+use common::query_from;
+use common::query_group;
+use common::query_into;
+use common::query_over;
+use common::query_select;
+use common::query_var;
+use common::query_where;
+use common::stmt_def;
+use common::stmt_enum;
+use common::stmt_err;
+use common::stmt_expr;
+use common::stmt_impl;
+use common::stmt_struct;
+use common::stmt_trait;
+use common::stmt_type;
+use common::stmt_var;
+use common::tr_def;
+use common::tr_type;
+use common::ty_fun;
+use common::ty_tuple;
+use common::unresolved::bound;
+use common::unresolved::expr_add;
+use common::unresolved::expr_assoc;
+use common::unresolved::expr_call_direct;
+use common::unresolved::expr_def;
+use common::unresolved::expr_div;
+use common::unresolved::expr_eq;
+use common::unresolved::expr_ge;
+use common::unresolved::expr_gt;
+use common::unresolved::expr_le;
+use common::unresolved::expr_lt;
+use common::unresolved::expr_mul;
+use common::unresolved::expr_ne;
+use common::unresolved::expr_neg;
+use common::unresolved::expr_not;
+use common::unresolved::expr_struct;
+use common::unresolved::expr_sub;
+use common::unresolved::expr_unit_variant;
+use common::unresolved::expr_var;
+use common::unresolved::expr_variant;
+use common::unresolved::head;
+use common::unresolved::pat_enum;
+use common::unresolved::pat_struct;
+use common::unresolved::pat_unit_struct;
+use common::unresolved::pat_var;
+use common::unresolved::ty;
+use common::unresolved::ty_assoc;
+use common::unresolved::ty_con;
 
 #[test]
 fn test_parser_expr_int0() {
@@ -931,7 +930,7 @@ fn test_parser_stmt_impl3() {
 #[test]
 fn test_parser_stmt_var0() {
     let a = Stmt::parse("var x = 1;").unwrap();
-    let b = stmt_var("x", ty_hole(), expr_int("1"));
+    let b = stmt_var("x", Type::hole(), expr_int("1"));
     check!(a, b);
 }
 
@@ -946,8 +945,8 @@ fn test_parser_stmt_var1() {
 fn test_parser_stmt_var2() {
     let a = Program::parse("var x = 1; var y = x;").unwrap();
     let b = program([
-        stmt_var("x", ty_hole(), expr_int("1")),
-        stmt_var("y", ty_hole(), expr_var("x")),
+        stmt_var("x", Type::hole(), expr_int("1")),
+        stmt_var("y", Type::hole(), expr_var("x")),
     ]);
     check!(a, b);
 }
@@ -1734,7 +1733,7 @@ fn test_parser_recover2() {
 #[test]
 fn test_parser_recover3() {
     let a = Stmt::parse("def f(x: +): i32 = 1;").unwrap_err();
-    let b = stmt_def("f", [], [("x", ty_err())], ty("i32"), [], expr_int("1"));
+    let b = stmt_def("f", [], [("x", Type::err())], ty("i32"), [], expr_int("1"));
     check!(
         a,
         b,
@@ -1775,7 +1774,7 @@ fn test_parser_depth0() {
 #[ignore]
 #[test]
 fn test_parser_depth1() {
-    let r = format!("{}", "-1".repeat(10000));
+    let r = "-1".repeat(10000).to_string();
     let _ = Expr::parse(&r).unwrap();
 }
 

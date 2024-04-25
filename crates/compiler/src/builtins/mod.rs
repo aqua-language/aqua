@@ -36,7 +36,7 @@ use std::rc::Rc;
 
 #[derive(Clone, Debug)]
 pub enum Value {
-    Aggregator(Aggregator<Fun, Fun, Fun, Fun>),
+    Aggregator(Aggregator<Rc<Value>, Rc<Value>, Rc<Value>, Rc<Value>>),
     Array(Array),
     Blob(Blob),
     Bool(bool),
@@ -68,7 +68,7 @@ pub enum Value {
     Dataflow(Dataflow),
     String(runtime::builtins::im_string::String),
     Time(Time),
-    TimeSource(TimeSource<Fun>),
+    TimeSource(TimeSource<Rc<Value>>),
     Tuple(Tuple),
     U128(u128),
     U16(u16),
@@ -81,4 +81,10 @@ pub enum Value {
     Vec(runtime::builtins::vec::Vec<Value>),
     Writer(Writer),
     Instance(Instance),
+}
+
+impl Value {
+    fn rc(&self) -> Rc<Self> {
+        Rc::new(self.clone())
+    }
 }

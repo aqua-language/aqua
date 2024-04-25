@@ -31,7 +31,7 @@ impl Compiler {
     pub(super) fn declare_stream(&mut self) {
         self.declare_type("type Stream[T];", BuiltinType { rust: "Stream" });
         self.declare_def(
-            "def source[T](r: Reader, e: Encoding, t: TimeSource[T]): Stream[T];",
+            "def source[T](r: Reader, e: Encoding, t: fun(T):Time): Stream[T];",
             BuiltinDef {
                 rust: "Stream::source",
                 fun: |_ctx, _t, _v| {

@@ -5,7 +5,6 @@ use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Index;
 use crate::ast::Name;
-use crate::ast::Param;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Program;
@@ -200,11 +199,11 @@ impl<'a, 'b> Pretty<'a, 'b> {
         }
     }
 
-    fn param(&mut self, p: &Param) -> std::fmt::Result {
-        self.name(&p.name)?;
+    fn param(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
+        self.name(x)?;
         self.punct(":")?;
         self.space()?;
-        self.ty(&p.ty)
+        self.ty(t)
     }
 
     fn program(&mut self, p: &Program) -> std::fmt::Result {
@@ -273,8 +272,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.brace(|this| {
             if !s.defs.is_empty() || !s.types.is_empty() {
                 this.indented(|this| {
-                    this.newline_sep(&s.types, Self::stmt_type)?;
-                    this.newline_sep(&s.defs, Self::stmt_def)
+                    this.newline_sep(&s.types, |ctx, s| ctx.stmt_type(s))?;
+                    this.newline_sep(&s.defs, |ctx, s| ctx.stmt_def(s))
                 })?;
                 this.newline()?;
             }
@@ -354,8 +353,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.brace(|this| {
             if !s.defs.is_empty() || !s.types.is_empty() {
                 this.indented(|this| {
-                    this.newline_sep(&s.defs, Self::stmt_def_decl)?;
-                    this.newline_sep(&s.types, Self::stmt_type_decl)
+                    this.newline_sep(&s.defs, |ctx, s| ctx.stmt_def_decl(s))?;
+                    this.newline_sep(&s.types, |ctx, s| ctx.stmt_type_decl(s))
                 })?;
                 this.newline()?;
             }
@@ -888,17 +887,17 @@ impl<'a, 'b> Pretty<'a, 'b> {
 
     fn segment(&mut self, seg: &Segment) -> std::fmt::Result {
         self.name(&seg.name)?;
-        if !seg.types.is_empty() || !seg.named_types.is_empty() {
+        if !seg.ts.is_empty() || !seg.xts.is_empty() {
             self.brack(|this| {
-                if !seg.types.is_empty() {
-                    this.comma_sep(&seg.types, Self::ty)?;
+                if !seg.ts.is_empty() {
+                    this.comma_sep(&seg.ts, Self::ty)?;
                 }
-                if !seg.named_types.is_empty() {
-                    if !seg.types.is_empty() {
+                if !seg.xts.is_empty() {
+                    if !seg.ts.is_empty() {
                         this.punct(",")?;
                         this.space()?;
                     }
-                    this.comma_sep(seg.named_types.as_ref(), |this, (x, t)| {
+                    this.comma_sep(seg.xts.as_ref(), |this, (x, t)| {
                         this.name(x)?;
                         this.punct("=")?;
                         this.ty(t)

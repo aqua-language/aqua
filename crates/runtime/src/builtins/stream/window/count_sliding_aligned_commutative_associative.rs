@@ -33,13 +33,13 @@ impl<T: Data> Stream<T> {
                             s.push_back(data);
                         } else {
                             let agg = s.back_mut().unwrap();
-                            *agg = combine(&agg, &data);
+                            *agg = combine(agg, &data);
                         }
                         if n == size {
                             let agg = s.pop_front().unwrap();
                             let agg = s
                                 .range(0..(size / step) - 1)
-                                .fold(agg, |agg, data| combine(&agg, &data));
+                                .fold(agg, |agg, data| combine(&agg, data));
                             let data = lower(&agg);
                             tx.send(Event::Data(time, data)).await;
                             n -= step;

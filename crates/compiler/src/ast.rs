@@ -1,11 +1,11 @@
-use std::ops::Deref;
 use std::rc::Rc;
-
-use smol_str::SmolStr;
 
 use crate::builtins::Value;
 use crate::interpret::Context;
 use crate::lexer::Span;
+use crate::symbol::Symbol;
+
+pub use crate::map::Map;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Path {
@@ -16,8 +16,8 @@ pub struct Path {
 pub struct Segment {
     pub span: Span,
     pub name: Name,
-    pub types: Vec<Type>,
-    pub named_types: Map<Name, Type>,
+    pub ts: Vec<Type>,
+    pub xts: Map<Name, Type>,
 }
 
 impl Path {
@@ -36,73 +36,6 @@ impl Path {
         } else {
             None
         }
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Map<K, V>(Vec<(K, V)>);
-
-impl<K, V> Map<K, V> {
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
-    pub fn insert(&mut self, k: K, v: V) {
-        self.0.push((k, v))
-    }
-    pub fn get(&self, k: &K) -> Option<&V>
-    where
-        K: PartialEq,
-    {
-        self.0.iter().find(|(k1, _)| k1 == k).map(|(_, v)| v)
-    }
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-    pub fn iter(&self) -> impl Iterator<Item = &(K, V)> {
-        self.0.iter()
-    }
-}
-
-impl<K, V> AsRef<[(K, V)]> for Map<K, V> {
-    fn as_ref(&self) -> &[(K, V)] {
-        &self.0
-    }
-}
-
-impl<K, V> Deref for Map<K, V> {
-    type Target = [(K, V)];
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<K, V> IntoIterator for Map<K, V> {
-    type Item = (K, V);
-    type IntoIter = std::vec::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
-    }
-}
-
-impl<K, V> From<Vec<(K, V)>> for Map<K, V> {
-    fn from(v: Vec<(K, V)>) -> Self {
-        Self(v)
-    }
-}
-
-impl<const N: usize, K, V> From<[(K, V); N]> for Map<K, V> {
-    fn from(v: [(K, V); N]) -> Self {
-        Self(v.into_iter().collect())
-    }
-}
-
-impl<K, V> FromIterator<(K, V)> for Map<K, V> {
-    fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
-        Self(iter.into_iter().collect())
     }
 }
 
@@ -137,12 +70,12 @@ impl Expr {
 }
 
 impl Segment {
-    pub fn new(span: Span, name: Name, types: Vec<Type>, named_types: Map<Name, Type>) -> Self {
+    pub fn new(span: Span, name: Name, ts: Vec<Type>, xts: Map<Name, Type>) -> Self {
         Self {
             span,
             name,
-            types,
-            named_types,
+            ts,
+            xts,
         }
     }
 
@@ -151,32 +84,21 @@ impl Segment {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.types.is_empty()
+        self.ts.is_empty()
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Default, Ord, PartialOrd)]
-pub struct Uid(pub u16);
-
-impl Uid {
-    pub fn increment(self) -> Uid {
-        Uid(self.0 + 1)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct Name {
-    pub uid: Uid,
     pub span: Span,
-    pub data: SmolStr,
+    pub data: Symbol,
 }
 
 impl From<&str> for Name {
     fn from(s: &str) -> Name {
         Name {
             span: Span::default(),
-            data: SmolStr::from(s),
-            uid: Uid::default(),
+            data: Symbol::from(s),
         }
     }
 }
@@ -184,27 +106,21 @@ impl From<&str> for Name {
 impl From<String> for Name {
     fn from(s: String) -> Name {
         Name {
-            uid: Uid::default(),
             span: Span::default(),
-            data: SmolStr::from(s),
+            data: Symbol::from(s),
         }
     }
 }
 
 impl Name {
-    pub fn new(span: Span, data: impl Into<SmolStr>) -> Name {
+    pub fn new(span: Span, data: impl Into<Symbol>) -> Name {
         Name {
-            uid: Uid(0),
             span,
             data: data.into(),
         }
     }
-    pub fn new_unique(span: Span, uid: Uid, data: impl Into<SmolStr>) -> Name {
-        Name {
-            uid,
-            span,
-            data: data.into(),
-        }
+    pub fn suffix(self, suffix: impl std::fmt::Display) -> Name {
+        Name::new(self.span, self.data.suffix(suffix))
     }
 }
 
@@ -229,8 +145,8 @@ pub struct StmtImpl {
     pub generics: Vec<Name>,
     pub head: Bound,
     pub where_clause: Vec<Bound>,
-    pub defs: Vec<StmtDef>,
-    pub types: Vec<StmtType>,
+    pub defs: Vec<Rc<StmtDef>>,
+    pub types: Vec<Rc<StmtType>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -239,8 +155,8 @@ pub struct StmtTrait {
     pub name: Name,
     pub generics: Vec<Name>,
     pub where_clause: Vec<Bound>,
-    pub defs: Vec<TraitDef>,
-    pub types: Vec<TraitType>,
+    pub defs: Vec<Rc<TraitDef>>,
+    pub types: Vec<Rc<TraitType>>,
 }
 
 // A trait is like a predicate
@@ -252,6 +168,21 @@ pub enum Bound {
     Unresolved(Span, Path),
     Trait(Span, TraitBound),
     Err(Span),
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub struct Uid(usize);
+
+impl Uid {
+    pub fn incr(&mut self) {
+        self.0 += 1;
+    }
+}
+
+impl std::fmt::Display for Uid {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -289,11 +220,50 @@ pub enum Type {
     Err,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Param {
-    pub span: Span,
-    pub name: Name,
-    pub ty: Type,
+impl Type {
+    pub fn err() -> Type {
+        Type::Err
+    }
+
+    pub fn hole() -> Type {
+        Type::Hole
+    }
+
+    pub fn unit() -> Type {
+        Type::Tuple(Vec::new())
+    }
+
+    pub fn bool() -> Type {
+        Type::Cons("bool".into(), Vec::new())
+    }
+
+    pub fn i32() -> Type {
+        Type::Cons("i32".into(), Vec::new())
+    }
+
+    pub fn i64() -> Type {
+        Type::Cons("i64".into(), Vec::new())
+    }
+
+    pub fn f64() -> Type {
+        Type::Cons("f64".into(), Vec::new())
+    }
+
+    pub fn string() -> Type {
+        Type::Cons("string".into(), Vec::new())
+    }
+
+    pub fn char() -> Type {
+        Type::Cons("char".into(), Vec::new())
+    }
+
+    pub fn vec(t: Type) -> Type {
+        Type::Cons("Vec".into(), vec![t])
+    }
+
+    pub fn stream(t: Type) -> Type {
+        Type::Cons("Stream".into(), vec![t])
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -306,14 +276,14 @@ pub enum Candidate {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Stmt {
-    Var(StmtVar),
-    Def(StmtDef),
-    Trait(StmtTrait),
-    Impl(StmtImpl),
-    Struct(StmtStruct),
-    Enum(StmtEnum),
-    Type(StmtType),
-    Expr(Expr),
+    Var(Rc<StmtVar>),
+    Def(Rc<StmtDef>),
+    Trait(Rc<StmtTrait>),
+    Impl(Rc<StmtImpl>),
+    Struct(Rc<StmtStruct>),
+    Enum(Rc<StmtEnum>),
+    Type(Rc<StmtType>),
+    Expr(Rc<Expr>),
     Err(Span),
 }
 
@@ -366,7 +336,7 @@ pub struct TraitDef {
     pub span: Span,
     pub name: Name,
     pub generics: Vec<Name>,
-    pub params: Vec<Param>,
+    pub params: Map<Name, Type>,
     pub ty: Type,
     pub where_clause: Vec<Bound>,
 }
@@ -384,7 +354,7 @@ pub struct StmtDef {
     pub span: Span,
     pub name: Name,
     pub generics: Vec<Name>,
-    pub params: Vec<Param>,
+    pub params: Map<Name, Type>,
     pub ty: Type,
     pub where_clause: Vec<Bound>,
     pub body: StmtDefBody,
@@ -435,6 +405,36 @@ pub enum StmtTypeBody {
     Builtin(BuiltinType),
 }
 
+impl StmtDefBody {
+    pub fn as_expr(&self) -> &Expr {
+        let StmtDefBody::UserDefined(e) = self else {
+            unreachable!()
+        };
+        e
+    }
+    pub fn as_builtin(&self) -> &BuiltinDef {
+        let StmtDefBody::Builtin(b) = self else {
+            unreachable!()
+        };
+        b
+    }
+}
+
+impl StmtTypeBody {
+    pub fn as_ty(&self) -> &Type {
+        let StmtTypeBody::UserDefined(t) = self else {
+            unreachable!()
+        };
+        t
+    }
+    pub fn as_builtin(&self) -> &BuiltinType {
+        let StmtTypeBody::Builtin(b) = self else {
+            unreachable!()
+        };
+        b
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct BuiltinDef {
     // pub codegen: fn(&mut Formatter, &[Value]) -> Value,
@@ -456,10 +456,10 @@ pub struct Index {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Expr {
     Unresolved(Span, Type, Path),
-    Int(Span, Type, String),
-    Float(Span, Type, String),
+    Int(Span, Type, Symbol),
+    Float(Span, Type, Symbol),
     Bool(Span, Type, bool),
-    String(Span, Type, String),
+    String(Span, Type, Symbol),
     Char(Span, Type, char),
     Struct(Span, Type, Name, Vec<Type>, Map<Name, Expr>),
     Tuple(Span, Type, Vec<Expr>),
@@ -480,7 +480,7 @@ pub enum Expr {
     Continue(Span, Type),
     Break(Span, Type),
     While(Span, Type, Rc<Expr>, Block),
-    Fun(Span, Type, Vec<Param>, Type, Rc<Expr>),
+    Fun(Span, Type, Map<Name, Type>, Type, Rc<Expr>),
     For(Span, Type, Name, Rc<Expr>, Block),
     Err(Span, Type),
     Value(Type, Value),
@@ -551,8 +551,8 @@ impl StmtImpl {
         generics: Vec<Name>,
         head: Bound,
         where_clause: Vec<Bound>,
-        defs: Vec<StmtDef>,
-        types: Vec<StmtType>,
+        defs: Vec<Rc<StmtDef>>,
+        types: Vec<Rc<StmtType>>,
     ) -> StmtImpl {
         StmtImpl {
             span,
@@ -582,8 +582,8 @@ impl StmtTrait {
         name: Name,
         generics: Vec<Name>,
         bounds: Vec<Bound>,
-        defs: Vec<TraitDef>,
-        types: Vec<TraitType>,
+        defs: Vec<Rc<TraitDef>>,
+        types: Vec<Rc<TraitType>>,
     ) -> StmtTrait {
         StmtTrait {
             span,
@@ -606,12 +606,6 @@ impl TraitType {
     }
 }
 
-impl Param {
-    pub fn new(span: Span, name: Name, ty: Type) -> Param {
-        Param { span, name, ty }
-    }
-}
-
 impl StmtVar {
     pub fn new(span: Span, name: Name, ty: Type, expr: Expr) -> StmtVar {
         StmtVar {
@@ -628,7 +622,7 @@ impl StmtDef {
         span: Span,
         name: Name,
         generics: Vec<Name>,
-        params: Vec<Param>,
+        params: Map<Name, Type>,
         ty: Type,
         where_clause: Vec<Bound>,
         body: StmtDefBody,
@@ -672,7 +666,7 @@ impl TraitDef {
         span: Span,
         name: Name,
         generics: Vec<Name>,
-        params: Vec<Param>,
+        params: Map<Name, Type>,
         ty: Type,
         where_clause: Vec<Bound>,
     ) -> Self {
@@ -709,48 +703,48 @@ impl Bound {
 
 impl From<StmtVar> for Stmt {
     fn from(v: StmtVar) -> Stmt {
-        Stmt::Var(v)
+        Stmt::Var(Rc::new(v))
     }
 }
 
 impl From<StmtDef> for Stmt {
     fn from(d: StmtDef) -> Stmt {
-        Stmt::Def(d)
+        Stmt::Def(Rc::new(d))
     }
 }
 impl From<StmtImpl> for Stmt {
     fn from(i: StmtImpl) -> Stmt {
-        Stmt::Impl(i)
+        Stmt::Impl(Rc::new(i))
     }
 }
 
 impl From<Expr> for Stmt {
     fn from(e: Expr) -> Stmt {
-        Stmt::Expr(e)
+        Stmt::Expr(Rc::new(e))
     }
 }
 
 impl From<StmtStruct> for Stmt {
     fn from(s: StmtStruct) -> Stmt {
-        Stmt::Struct(s)
+        Stmt::Struct(Rc::new(s))
     }
 }
 
 impl From<StmtEnum> for Stmt {
     fn from(e: StmtEnum) -> Stmt {
-        Stmt::Enum(e)
+        Stmt::Enum(Rc::new(e))
     }
 }
 
 impl From<StmtType> for Stmt {
     fn from(t: StmtType) -> Stmt {
-        Stmt::Type(t)
+        Stmt::Type(Rc::new(t))
     }
 }
 
 impl From<StmtTrait> for Stmt {
     fn from(t: StmtTrait) -> Stmt {
-        Stmt::Trait(t)
+        Stmt::Trait(Rc::new(t))
     }
 }
 

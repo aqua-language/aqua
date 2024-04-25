@@ -12,7 +12,7 @@ pub struct Set<T: Eq + Hash>(pub(crate) UncheckedCell<HashSet<T>>);
 
 impl<T: Eq + Hash> Default for Set<T> {
     fn default() -> Self {
-        Self::new()
+        Self(UncheckedCell::new(HashSet::new()))
     }
 }
 

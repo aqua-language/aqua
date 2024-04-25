@@ -1,14 +1,19 @@
+mod common;
+
+use common::expr_int;
+use common::program;
+use common::stmt_def;
+
 use compiler::ast::Program;
-use compiler::check;
-use compiler::dsl::expr_int;
-use compiler::dsl::program;
-use compiler::dsl::stmt_def;
-use compiler::dsl::types::ty_i32;
+use compiler::ast::Type;
+
+use crate::common::expr_block;
+use crate::common::expr_call_direct;
 
 #[test]
 fn test_lift0() {
     let a = Program::lift("def g(): i32 = 1;").unwrap();
-    let b = program([stmt_def("g", [], [], ty_i32(), [], expr_int("1"))]);
+    let b = program([stmt_def("g", [], [], Type::i32(), [], expr_int("1"))]);
     check!(a, b);
 }
 
@@ -21,7 +26,17 @@ fn test_lift1() {
         }",
     )
     .unwrap();
-    let b = program([stmt_def("g", [], [], ty_i32(), [], expr_int("1"))]);
+    let b = program([
+        stmt_def("foo2", [], [], Type::i32(), [], expr_int("1")),
+        stmt_def(
+            "foo1",
+            [],
+            [],
+            Type::i32(),
+            [],
+            expr_block([], expr_call_direct("foo2", [], [])),
+        ),
+    ]);
     check!(a, b);
 }
 
@@ -34,19 +49,118 @@ fn test_lift2() {
         }",
     )
     .unwrap();
-    let b = program([stmt_def("g", [], [], ty_i32(), [], expr_int("1"))]);
+    let b = program([
+        stmt_def("foo_1", [], [], Type::i32(), [], expr_int("1")),
+        stmt_def(
+            "foo",
+            [],
+            [],
+            Type::i32(),
+            [],
+            expr_block([], expr_call_direct("foo_1", [], [])),
+        ),
+    ]);
     check!(a, b);
 }
 
 #[test]
 fn test_lift3() {
     let a = Program::lift(
-        "def foo(): i32 = 1;
-            def foo(): i32 = 1;
-            foo()
+        "def f(): i32 = 1;
+         def f(): i32 = 1;",
+    )
+    .unwrap();
+    let b = program([
+        stmt_def("f", [], [], Type::i32(), [], expr_int("1")),
+        stmt_def("f", [], [], Type::i32(), [], expr_int("1")),
+    ]);
+    check!(a, b);
+}
+
+#[test]
+fn test_lift4() {
+    let a = Program::lift(
+        "def f(): i32 = {
+            def f(): i32 = 1;
+            def f(): i32 = 2;
+            f()
+        }
+        def f(): i32 = 3;",
+    )
+    .unwrap();
+    let b = program([
+        stmt_def("f_2", [], [], Type::i32(), [], expr_int("1")),
+        stmt_def("f_2", [], [], Type::i32(), [], expr_int("2")),
+        stmt_def(
+            "f",
+            [],
+            [],
+            Type::i32(),
+            [],
+            expr_block([], expr_call_direct("f_2", [], [])),
+        ),
+        stmt_def("f", [], [], Type::i32(), [], expr_int("3")),
+    ]);
+    check!(a, b);
+}
+
+#[test]
+fn test_lift5() {
+    let a = Program::lift(
+        "def f(): i32 = {
+            def f(): i32 = {
+                def f(): i32 = 1;
+                2
+            }
+            3
         }",
     )
     .unwrap();
-    let b = program([stmt_def("g", [], [], ty_i32(), [], expr_int("1"))]);
+    let b = program([
+        stmt_def("f_2", [], [], Type::i32(), [], expr_int("1")),
+        stmt_def(
+            "f_1",
+            [],
+            [],
+            Type::i32(),
+            [],
+            expr_block([], expr_int("2")),
+        ),
+        stmt_def("f", [], [], Type::i32(), [], expr_block([], expr_int("3"))),
+    ]);
+    check!(a, b);
+}
+
+#[test]
+fn test_lift6() {
+    let a = Program::lift(
+        "def f(): i32 = {
+            def f(): i32 = {
+                def f(): i32 = 1;
+                f()
+            }
+            f()
+        }",
+    )
+    .unwrap();
+    let b = program([
+        stmt_def("f_2", [], [], Type::i32(), [], expr_int("1")),
+        stmt_def(
+            "f_1",
+            [],
+            [],
+            Type::i32(),
+            [],
+            expr_block([], expr_call_direct("f_2", [], [])),
+        ),
+        stmt_def(
+            "f",
+            [],
+            [],
+            Type::i32(),
+            [],
+            expr_block([], expr_call_direct("f_1", [], [])),
+        ),
+    ]);
     check!(a, b);
 }

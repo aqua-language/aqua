@@ -158,7 +158,7 @@ impl<'a, const N: usize> Deserializer<'a, N> {
         std::str::from_utf8(bytes)
             .unwrap()
             .parse::<T>()
-            .map_err(|e| Error::InvalidInt(e))
+            .map_err(Error::InvalidInt)
     }
 
     #[cfg(feature = "opt")]
@@ -173,7 +173,7 @@ impl<'a, const N: usize> Deserializer<'a, N> {
         std::str::from_utf8(bytes)
             .unwrap()
             .parse::<T>()
-            .map_err(|e| Error::InvalidFloat(e))
+            .map_err(Error::InvalidFloat)
     }
 
     fn read_bool(&mut self) -> Result<bool> {
@@ -206,8 +206,7 @@ impl<'a, const N: usize> Deserializer<'a, N> {
     }
 
     fn read_string(&mut self) -> Result<String> {
-        std::string::String::from_utf8(self.read_bytes()?.to_vec())
-            .map_err(Error::InvalidString)
+        std::string::String::from_utf8(self.read_bytes()?.to_vec()).map_err(Error::InvalidString)
     }
 }
 

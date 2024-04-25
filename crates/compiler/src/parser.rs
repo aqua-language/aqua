@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 //! https://dl.acm.org/doi/pdf/10.1145/947902.947905
 //!
 //! The standard method of adding error recovery to a recursive descent
@@ -34,9 +35,7 @@ use crate::ast::BuiltinDef;
 use crate::ast::BuiltinType;
 use crate::ast::Expr;
 use crate::ast::Index;
-use crate::ast::Map;
 use crate::ast::Name;
-use crate::ast::Param;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Program;
@@ -60,6 +59,7 @@ use crate::diag::Report;
 use crate::lexer::Span;
 use crate::lexer::Spanned;
 use crate::lexer::Token;
+use crate::map::Map;
 
 pub struct Parser<'a, I>
 where
@@ -462,35 +462,35 @@ where
         match t.v {
             Token::Def => {
                 let s = self.stmt_def(follow | Stmt::FOLLOW)?;
-                Ok(Spanned::new(s.s, Stmt::Def(s.v)))
+                Ok(Spanned::new(s.s, Stmt::Def(Rc::new(s.v))))
             }
             Token::Struct => {
                 let s = self.stmt_struct(follow | Stmt::FOLLOW)?;
-                Ok(Spanned::new(s.s, Stmt::Struct(s.v)))
+                Ok(Spanned::new(s.s, Stmt::Struct(Rc::new(s.v))))
             }
             Token::Enum => {
                 let s = self.stmt_enum(follow | Stmt::FOLLOW)?;
-                Ok(Spanned::new(s.s, Stmt::Enum(s.v)))
+                Ok(Spanned::new(s.s, Stmt::Enum(Rc::new(s.v))))
             }
             Token::Trait => {
                 let s = self.stmt_trait(follow | Stmt::FOLLOW)?;
-                Ok(Spanned::new(s.s, Stmt::Trait(s.v)))
+                Ok(Spanned::new(s.s, Stmt::Trait(Rc::new(s.v))))
             }
             Token::Impl => {
                 let s = self.stmt_impl(follow | Stmt::FOLLOW)?;
-                Ok(Spanned::new(s.s, Stmt::Impl(s.v)))
+                Ok(Spanned::new(s.s, Stmt::Impl(Rc::new(s.v))))
             }
             Token::Type => {
                 let s = self.stmt_type(follow | Stmt::FOLLOW)?;
-                Ok(Spanned::new(s.s, Stmt::Type(s.v)))
+                Ok(Spanned::new(s.s, Stmt::Type(Rc::new(s.v))))
             }
             Token::Var => {
                 let s = self.stmt_var(follow | Stmt::FOLLOW)?;
-                Ok(Spanned::new(s.s, Stmt::Var(s.v)))
+                Ok(Spanned::new(s.s, Stmt::Var(Rc::new(s.v))))
             }
             _ => {
                 let s = self.stmt_expr(follow | Stmt::FOLLOW)?;
-                Ok(Spanned::new(s.s, Stmt::Expr(s.v)))
+                Ok(Spanned::new(s.s, Stmt::Expr(Rc::new(s.v))))
             }
         }
     }
@@ -535,7 +535,7 @@ where
         let gs = self.generics(follow | Token::LBrace)?;
         let xts = self.ty_variants(follow)?;
         let s = t0.s + x.s;
-        Ok(Spanned::new(s, StmtEnum::new(s, x.v, gs, xts.into())))
+        Ok(Spanned::new(s, StmtEnum::new(s, x.v, gs, xts)))
     }
 
     fn stmt_type(&mut self, follow: Token) -> Result<Spanned<StmtType>, Span> {
@@ -576,8 +576,8 @@ where
         loop {
             let t = self.start(Token::RBrace | Token::Def | Token::Type, follow)?;
             match t.v {
-                Token::Def => defs.push(self.stmt_def_decl(follow)?.v),
-                Token::Type => tys.push(self.stmt_type_decl(follow)?.v),
+                Token::Def => defs.push(Rc::new(self.stmt_def_decl(follow)?.v)),
+                Token::Type => tys.push(Rc::new(self.stmt_type_decl(follow)?.v)),
                 _ => break,
             }
         }
@@ -590,7 +590,7 @@ where
         let t0 = self.expect(Token::Def, follow)?;
         let x = self.name(follow)?;
         let gs = self.generics(follow | Token::LParen)?;
-        let xts = self.paren_seq(Self::param, Type::FIRST, follow | Token::Colon)?;
+        let xts = self.params(follow | Token::Colon)?;
         self.expect(Token::Colon, follow)?;
         let t = self.ty(follow | Token::Where | Token::SemiColon)?;
         let bs = self.where_clause(follow | Token::SemiColon)?;
@@ -619,8 +619,8 @@ where
         loop {
             let t = self.start(Token::RBrace | Token::Def | Token::Type, follow)?;
             match t.v {
-                Token::Def => defs.push(self.stmt_def(follow)?.v),
-                Token::Type => tys.push(self.stmt_type(follow)?.v),
+                Token::Def => defs.push(Rc::new(self.stmt_def(follow)?.v)),
+                Token::Type => tys.push(Rc::new(self.stmt_type(follow)?.v)),
                 _ => break,
             }
         }
@@ -697,32 +697,34 @@ where
         .map(|x| x.and_then(|x| x.v).unwrap_or_default())
     }
 
-    fn params(&mut self, follow: Token) -> Result<Spanned<Vec<Param>>, Span> {
+    fn params(&mut self, follow: Token) -> Result<Spanned<Map<Name, Type>>, Span> {
         self.paren_seq(Self::param, Token::Name, follow)
+            .map(|x| x.map(|x| x.into_iter().collect()))
     }
 
-    fn param(&mut self, follow: Token) -> Result<Spanned<Param>, Span> {
+    fn param(&mut self, follow: Token) -> Result<Spanned<(Name, Type)>, Span> {
         let name = self.name(follow)?;
         self.expect(Token::Colon, follow)?;
         let ty = self.ty(follow)?;
         let s = name.s + ty.s;
-        Ok(Spanned::new(s, Param::new(s, name.v, ty.v)))
+        Ok(Spanned::new(s, (name.v, ty.v)))
     }
 
-    fn inferred_params(&mut self, follow: Token) -> Result<Spanned<Vec<Param>>, Span> {
+    fn inferred_params(&mut self, follow: Token) -> Result<Spanned<Map<Name, Type>>, Span> {
         self.paren_seq(Self::inferred_param, Token::Name, follow)
+            .map(|x| x.map(|x| x.into_iter().collect()))
     }
 
-    fn inferred_param(&mut self, follow: Token) -> Result<Spanned<Param>, Span> {
+    fn inferred_param(&mut self, follow: Token) -> Result<Spanned<(Name, Type)>, Span> {
         let x = self.name(follow)?;
         if self.start(follow | Token::Colon, follow)?.v == Token::Colon {
             self.skip();
             let t = self.ty(follow)?;
             let s = x.s + t.s;
-            Ok(Spanned::new(s, Param::new(s, x.v, t.v)))
+            Ok(Spanned::new(s, (x.v, t.v)))
         } else {
             let s = x.s;
-            Ok(Spanned::new(s, Param::new(s, x.v, Type::Hole)))
+            Ok(Spanned::new(s, (x.v, Type::Hole)))
         }
     }
 
@@ -781,7 +783,7 @@ where
             if self.eat(Token::Eq, follow)? {
                 let ty1 = self.ty(follow)?;
                 let s = ty0.s + ty1.s;
-                return Ok(Spanned::new(s, Either::B((name.clone(), ty1.v))));
+                return Ok(Spanned::new(s, Either::B((*name, ty1.v))));
             }
         }
         Ok(Spanned::new(ty0.s, Either::A(ty0.v)))
@@ -1038,7 +1040,7 @@ where
             Ok(Spanned::new(s, (x.v, p.v)))
         } else {
             let s = x.s;
-            let path = Path::new_name(x.v.clone());
+            let path = Path::new_name(x.v);
             let p = Pat::Unresolved(s, Type::Hole, path, None);
             Ok(Spanned::new(s, (x.v, p)))
         }
@@ -1066,11 +1068,6 @@ where
         loop {
             let t1 = self.start(Stmt::FIRST | Token::SemiColon | Token::RBrace, follow)?;
             let stmt = match t1.v {
-                // Token::Var => Stmt::Var(self.stmt_var(follow)?),
-                // Token::Impl => Stmt::Impl(self.stmt_impl(follow)?),
-                // Token::Trait => Stmt::Trait(self.stmt_trait(follow)?),
-                // Token::Struct => Stmt::Struct(self.stmt_struct(follow)?),
-                // Token::Enum => Stmt::Enum(self.stmt_enum(follow)?),
                 Token::SemiColon => {
                     while self.eat(Token::SemiColon, follow | Stmt::FIRST | Token::RBrace)? {}
                     continue;
@@ -1086,20 +1083,18 @@ where
                     if self.eat(Token::SemiColon, follow | Stmt::FIRST | Token::RBrace)? {
                         // {e;...}
                         while self.eat(Token::SemiColon, follow | Stmt::FIRST | Token::RBrace)? {}
-                        Stmt::Expr(expr.v)
+                        Stmt::Expr(Rc::new(expr.v))
+                    } else if expr.v.is_braced() && self.peek().v != Token::RBrace {
+                        // { { } ... }
+                        Stmt::Expr(Rc::new(expr.v))
                     } else {
-                        if expr.v.is_braced() && self.peek().v != Token::RBrace {
-                            // { { } ... }
-                            Stmt::Expr(expr.v)
-                        } else {
-                            // {e}
-                            let t1 = self.expect(Token::RBrace, follow)?;
-                            let s = t0.s + t1.s;
-                            return Ok(Spanned::new(s, Block::new(s, stmts, expr.v)));
-                        }
+                        // {e}
+                        let t1 = self.expect(Token::RBrace, follow)?;
+                        let s = t0.s + t1.s;
+                        return Ok(Spanned::new(s, Block::new(s, stmts, expr.v)));
                     }
                 }
-                _ => self.stmt(follow)?.v,
+                _ => self.stmt(follow | Token::RBrace)?.v,
             };
             stmts.push(stmt);
         }
@@ -1116,10 +1111,11 @@ where
 
     fn expr_bp(&mut self, follow: Token, min_bp: u8) -> Result<Spanned<Expr>, Span> {
         let mut lhs = self
-            .expr_lhs(follow | Expr::FOLLOW)
+            .expr_lhs(follow | Expr::FOLLOW | Stmt::FIRST)
             .unwrap_or_else(|s| Spanned::new(s, Expr::Err(s, Type::Hole)));
         loop {
-            let op = self.start(follow | Expr::FOLLOW | Stmt::FIRST, follow)?;
+            let follow = follow | Expr::FOLLOW | Stmt::FIRST;
+            let op = self.start(follow, follow)?;
             if let Some((lbp, ())) = op.v.postfix_bp() {
                 if lbp < min_bp {
                     break;
@@ -1153,17 +1149,14 @@ where
                         match t.v {
                             Token::Name => {
                                 let x = self.name(follow)?;
-                                let t = self.start(
-                                    follow | Token::LBrack | Token::LParen | Expr::FOLLOW,
-                                    follow,
-                                )?;
+                                let t =
+                                    self.start(follow | Token::LBrack | Token::LParen, follow)?;
                                 if t.v == Token::LBrack || t.v == Token::LParen {
                                     let tys = self.ty_args(follow | Token::LParen)?;
                                     let args = self.expr_args(follow)?;
                                     let s = lhs.s + args.s;
-                                    let es = std::iter::once(lhs.v)
-                                        .chain(args.v.into_iter())
-                                        .collect::<Vec<_>>();
+                                    let es =
+                                        std::iter::once(lhs.v).chain(args.v).collect::<Vec<_>>();
                                     let (ts, xts) = tys.map(|x| x.v).unwrap_or_default();
                                     let path =
                                         Path::new(vec![Segment::new(s, x.v, ts, xts.into())]);
@@ -1269,19 +1262,19 @@ where
                 self.skip();
                 let v = self.text(t0).to_owned();
                 let s = t0.s;
-                Ok(Spanned::new(s, Expr::Int(s, Type::Hole, v)))
+                Ok(Spanned::new(s, Expr::Int(s, Type::Hole, v.into())))
             }
             Token::Float => {
                 self.skip();
                 let v = self.text(t0).to_owned();
                 let s = t0.s;
-                Ok(Spanned::new(s, Expr::Float(s, Type::Hole, v)))
+                Ok(Spanned::new(s, Expr::Float(s, Type::Hole, v.into())))
             }
             Token::String => {
                 self.skip();
                 let v = self.text(t0).to_owned();
                 let s = t0.s;
-                Ok(Spanned::new(s, Expr::String(s, Type::Hole, v)))
+                Ok(Spanned::new(s, Expr::String(s, Type::Hole, v.into())))
             }
             Token::Char => {
                 self.skip();
@@ -1560,7 +1553,7 @@ where
                 Ok(Spanned::new(s, (x.v, e.v)))
             }
             _ => {
-                let path = Path::new_name(x.v.clone());
+                let path = Path::new_name(x.v);
                 let s = x.s;
                 Ok(Spanned::new(
                     s,

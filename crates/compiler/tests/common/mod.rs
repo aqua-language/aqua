@@ -1,32 +1,33 @@
+#![allow(unused)]
+
 use std::rc::Rc;
 
-use crate::ast::Arm;
-use crate::ast::Block;
-use crate::ast::Bound;
-use crate::ast::Expr;
-use crate::ast::Index;
-use crate::ast::Map;
-use crate::ast::Name;
-use crate::ast::Param;
-use crate::ast::Pat;
-use crate::ast::Program;
-use crate::ast::Query;
-use crate::ast::Stmt;
-use crate::ast::StmtDef;
-use crate::ast::StmtDefBody;
-use crate::ast::StmtEnum;
-use crate::ast::StmtImpl;
-use crate::ast::StmtStruct;
-use crate::ast::StmtTrait;
-use crate::ast::StmtType;
-use crate::ast::StmtTypeBody;
-use crate::ast::StmtVar;
-use crate::ast::TraitBound;
-use crate::ast::TraitDef;
-use crate::ast::TraitType;
-use crate::ast::Type;
+use compiler::ast::Arm;
+use compiler::ast::Block;
+use compiler::ast::Bound;
+use compiler::ast::Expr;
+use compiler::ast::Index;
+use compiler::ast::Map;
+use compiler::ast::Name;
+use compiler::ast::Pat;
+use compiler::ast::Program;
+use compiler::ast::Query;
+use compiler::ast::Stmt;
+use compiler::ast::StmtDef;
+use compiler::ast::StmtDefBody;
+use compiler::ast::StmtEnum;
+use compiler::ast::StmtImpl;
+use compiler::ast::StmtStruct;
+use compiler::ast::StmtTrait;
+use compiler::ast::StmtType;
+use compiler::ast::StmtTypeBody;
+use compiler::ast::StmtVar;
+use compiler::ast::TraitBound;
+use compiler::ast::TraitDef;
+use compiler::ast::TraitType;
+use compiler::ast::Type;
 
-use crate::lexer::Span;
+use compiler::lexer::Span;
 
 #[macro_export]
 macro_rules! check {
@@ -34,52 +35,65 @@ macro_rules! check {
         assert!($a == $b, "\n(a) {}\n\n(b) {}", $a, $b);
     };
     (@debug; $a:expr, $b:expr) => {
-        fn diff(a: impl std::fmt::Debug, b: impl std::fmt::Debug) -> String {
-            let a = format!("{:#?}", a);
-            let b = format!("{:#?}", b);
-            let mut output = String::new();
-            let diff = similar::TextDiff::from_lines(&a, &b);
-            for change in diff.iter_all_changes() {
-                let sign = match change.tag() {
-                    similar::ChangeTag::Delete => "A",
-                    similar::ChangeTag::Insert => "B",
-                    similar::ChangeTag::Equal => " ",
-                };
-                output.push_str(&format!("{}{}", sign, change));
-            }
-            output
-        }
-        assert!($a == $b, "\n{}", diff($a, $b));
+        assert!(
+            $a == $b,
+            "\n{}",
+            common::diff(format!("{:#?}", $a), format!("{:#?}", $b))
+        );
     };
     ($a:expr, $b:expr, $b_msg:literal) => {{
-        fn diff(a: impl std::fmt::Debug, b: impl std::fmt::Debug) -> String {
-            let a = format!("{:#?}", a);
-            let b = format!("{:#?}", b);
-            let mut output = String::new();
-            let diff = similar::TextDiff::from_lines(&a, &b);
-            for change in diff.iter_all_changes() {
-                let sign = match change.tag() {
-                    similar::ChangeTag::Delete => "-",
-                    similar::ChangeTag::Insert => "+",
-                    similar::ChangeTag::Equal => " ",
-                };
-                output.push_str(&format!("{}{}", sign, change));
-            }
-            output
-        }
         let b_msg = indoc::indoc!($b_msg);
-        assert!($a.val == $b, "{}", diff($a.val, $b));
-        assert!($a.msg == b_msg, "{}", diff($a.msg, b_msg));
+        assert!(
+            $a.val == $b,
+            "{}",
+            common::diff(format!("{:#?}", $a.val), format!("{:#?}", $b))
+        );
+        assert!(
+            $a.msg == b_msg,
+            "{}",
+            common::diff($a.msg, b_msg.to_string())
+        );
+    }};
+    (@typed; $a:expr, $b:expr) => {{
+        assert!(
+            $a == $b,
+            "\n{}",
+            common::diff(
+                $a.display_types().to_string(),
+                $b.display_types().to_string()
+            )
+        );
+    }};
+    (@typed; $a:expr, $b:expr, $b_msg:literal) => {{
+        let b_msg = indoc::indoc!($b_msg);
+        assert!(
+            $a.val == $b,
+            "{}",
+            common::diff(
+                $a.val.display_types().to_string(),
+                $b.display_types().to_string()
+            )
+        );
+        assert!(
+            $a.msg == b_msg,
+            "{}",
+            common::diff($a.msg, b_msg.to_string())
+        );
     }};
 }
 
-pub fn trim(s: &str) -> String {
-    // Trim space right before \n on each line
-    s.trim_end()
-        .lines()
-        .map(|line| line.trim_end().to_string())
-        .collect::<Vec<_>>()
-        .join("\n")
+pub fn diff(a: String, b: String) -> String {
+    let mut output = String::new();
+    let diff = similar::TextDiff::from_lines(&a, &b);
+    for change in diff.iter_all_changes() {
+        let sign = match change.tag() {
+            similar::ChangeTag::Delete => "A",
+            similar::ChangeTag::Insert => "B",
+            similar::ChangeTag::Equal => " ",
+        };
+        output.push_str(&format!("{}{}", sign, change));
+    }
+    output
 }
 
 pub fn program<const N: usize>(ss: [Stmt; N]) -> Program {
@@ -98,8 +112,8 @@ pub fn stmt_trait<const N: usize, const M: usize, const K: usize, const L: usize
         name(x),
         app(gs, name),
         vec(bounds),
-        vec(defs),
-        vec(types),
+        app(defs, Rc::new),
+        app(types, Rc::new),
     )
     .into()
 }
@@ -109,15 +123,11 @@ fn vec<const N: usize, T: Clone>(xs: [T; N]) -> Vec<T> {
 }
 
 fn map<const N: usize, K, V>(kvs: [(K, V); N]) -> Map<K, V> {
-    Map::from(kvs.into_iter().collect::<Vec<_>>())
+    kvs.into_iter().collect()
 }
 
-fn name_map<const N: usize, V>(xs: [(&'static str, V); N]) -> Map<Name, V> {
-    Map::from(
-        xs.into_iter()
-            .map(|(x, v)| (name(x), v))
-            .collect::<Vec<_>>(),
-    )
+fn name_map<const N: usize, V>(xvs: [(&'static str, V); N]) -> Map<Name, V> {
+    xvs.into_iter().map(|(x, v)| (name(x), v)).collect()
 }
 
 fn app<const N: usize, T, U: Clone>(xs: [T; N], f: impl Fn(T) -> U) -> Vec<U> {
@@ -147,20 +157,8 @@ pub fn stmt_impl<const N: usize, const M: usize, const K: usize, const L: usize>
         app(gs, name),
         head,
         vec(body),
-        app(defs, |s| {
-            if let Stmt::Def(s) = s {
-                s
-            } else {
-                unreachable!()
-            }
-        }),
-        app(types, |s| {
-            if let Stmt::Type(s) = s {
-                s
-            } else {
-                unreachable!()
-            }
-        }),
+        app(defs, |s| Rc::new(s.as_def().clone())),
+        app(types, |s| Rc::new(s.as_type().clone())),
     )
     .into()
 }
@@ -173,7 +171,14 @@ pub fn fact<const N: usize, const M: usize, const K: usize>(
     defs: [StmtDef; M],
     types: [StmtType; K],
 ) -> StmtImpl {
-    StmtImpl::new(span(), app(gs, name), head, vec([]), vec(defs), vec(types))
+    StmtImpl::new(
+        span(),
+        app(gs, name),
+        head,
+        vec([]),
+        app(defs, Rc::new),
+        app(types, Rc::new),
+    )
 }
 
 // Create a predicate:
@@ -207,16 +212,8 @@ pub fn ty(x: &'static str) -> Type {
     ty_con(x, [])
 }
 
-pub fn ty_err() -> Type {
-    Type::Err
-}
-
-pub fn ty_hole() -> Type {
-    Type::Hole
-}
-
-pub fn name(x: &'static str) -> Name {
-    Name::from(x)
+pub fn name(x: impl Into<Name>) -> Name {
+    x.into()
 }
 
 pub fn ty_con<const N: usize>(x: &'static str, types: [Type; N]) -> Type {
@@ -251,7 +248,7 @@ pub fn ty_assoc<const N: usize, const M: usize, const K: usize>(
 }
 
 pub fn pat_record<const N: usize>(xps: [(&'static str, Pat); N]) -> Pat {
-    Pat::Record(span(), ty_hole(), name_map(xps))
+    Pat::Record(span(), Type::hole(), name_map(xps))
 }
 
 pub mod unresolved {
@@ -262,27 +259,26 @@ pub mod unresolved {
     use super::map3;
     use super::name_map;
     use super::vec;
-    use crate::ast::Bound;
-    use crate::ast::Expr;
-    use crate::ast::Map;
-    use crate::ast::Name;
-    use crate::ast::Pat;
-    use crate::ast::Path;
-    use crate::ast::Segment;
-    use crate::ast::Type;
-    use crate::ast::UnresolvedPatField;
+    use compiler::ast::Bound;
+    use compiler::ast::Expr;
+    use compiler::ast::Map;
+    use compiler::ast::Name;
+    use compiler::ast::Pat;
+    use compiler::ast::Path;
+    use compiler::ast::Segment;
+    use compiler::ast::Type;
+    use compiler::ast::UnresolvedPatField;
 
     use super::app;
     use super::expr_call;
     use super::name;
     use super::span;
-    use super::ty_hole;
 
     // x
     pub fn expr_var(x: &'static str) -> Expr {
         Expr::Unresolved(
             span(),
-            ty_hole(),
+            Type::hole(),
             Path::new(vec([segment(x, vec([]), map([]))])),
         )
     }
@@ -295,7 +291,7 @@ pub mod unresolved {
     ) -> Expr {
         Expr::Call(
             span(),
-            ty_hole(),
+            Type::hole(),
             Rc::new(name_expr(x, ts)),
             app(xes, |(x, e)| expr_assign(expr_var(x), e)),
         )
@@ -306,7 +302,7 @@ pub mod unresolved {
     }
 
     fn name_expr<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
-        Expr::Unresolved(span(), ty_hole(), name_path(x, ts, []))
+        Expr::Unresolved(span(), Type::hole(), name_path(x, ts, []))
     }
 
     pub fn expr_variant<const N: usize, const M: usize>(
@@ -317,10 +313,10 @@ pub mod unresolved {
     ) -> Expr {
         Expr::Call(
             span(),
-            ty_hole(),
+            Type::hole(),
             Rc::new(Expr::Unresolved(
                 span(),
-                ty_hole(),
+                Type::hole(),
                 path([(x0, vec(ts), map([])), (x1, vec([]), map([]))]),
             )),
             vec(es),
@@ -334,7 +330,7 @@ pub mod unresolved {
     ) -> Expr {
         Expr::Unresolved(
             span(),
-            ty_hole(),
+            Type::hole(),
             path([(x0, vec(ts), map([])), (x1, vec([]), map([]))]),
         )
     }
@@ -354,7 +350,7 @@ pub mod unresolved {
     ) -> Expr {
         Expr::Unresolved(
             span(),
-            ty_hole(),
+            Type::hole(),
             path([(x0, vec(ts), name_map(xts)), (x1, vec([]), map([]))]),
         )
     }
@@ -362,7 +358,7 @@ pub mod unresolved {
     pub fn expr_binop(x0: &'static str, x1: &'static str, e0: Expr, e1: Expr) -> Expr {
         Expr::Call(
             span(),
-            ty_hole(),
+            Type::hole(),
             Rc::new(expr_assoc(x0, [], [], x1)),
             vec([e0, e1]),
         )
@@ -371,7 +367,7 @@ pub mod unresolved {
     pub fn expr_enum(x0: &'static str, x1: &'static str) -> Expr {
         Expr::Unresolved(
             span(),
-            ty_hole(),
+            Type::hole(),
             Path::new(vec([
                 segment(x0, vec([]), map([])),
                 segment(x1, vec([]), map([])),
@@ -382,7 +378,7 @@ pub mod unresolved {
     pub fn expr_unop(x0: &'static str, x1: &'static str, e: Expr) -> Expr {
         Expr::Call(
             span(),
-            ty_hole(),
+            Type::hole(),
             Rc::new(expr_assoc(x0, [], [], x1)),
             vec([e]),
         )
@@ -436,7 +432,7 @@ pub mod unresolved {
     }
 
     pub fn pat_var(x: &'static str) -> Pat {
-        Pat::Unresolved(span(), ty_hole(), name_path(x, [], []), None)
+        Pat::Unresolved(span(), Type::hole(), name_path(x, [], []), None)
     }
 
     pub fn pat_enum<const N: usize>(
@@ -447,7 +443,7 @@ pub mod unresolved {
     ) -> Pat {
         Pat::Unresolved(
             span(),
-            ty_hole(),
+            Type::hole(),
             path([(x0, vec(ts), map([])), (x1, vec([]), map([]))]),
             Some(vec([UnresolvedPatField::Unnamed(p)])),
         )
@@ -460,14 +456,14 @@ pub mod unresolved {
     ) -> Pat {
         Pat::Unresolved(
             span(),
-            ty_hole(),
+            Type::hole(),
             path([(x0, vec(ts), map([]))]),
             Some(app(xps, |(x, p)| UnresolvedPatField::Named(name(x), p))),
         )
     }
 
     pub fn pat_unit_struct<const N: usize>(x: &'static str, ts: [Type; N]) -> Pat {
-        Pat::Unresolved(span(), ty_hole(), path([(x, vec(ts), map([]))]), None)
+        Pat::Unresolved(span(), Type::hole(), path([(x, vec(ts), map([]))]), None)
     }
 
     pub fn ty_con<const N: usize>(x: &'static str, ts: [Type; N]) -> Type {
@@ -525,11 +521,11 @@ pub fn expr_assoc<const N: usize, const M: usize>(
     ts1: [Type; M],
 ) -> Expr {
     let b = trait_bound(x0, ts0, []);
-    Expr::Assoc(span(), ty_hole(), b, name(x1), vec(ts1))
+    Expr::Assoc(span(), Type::hole(), b, name(x1), vec(ts1))
 }
 
 pub fn expr_assign(e0: Expr, e1: Expr) -> Expr {
-    Expr::Assign(span(), ty_hole(), Rc::new(e0), Rc::new(e1))
+    Expr::Assign(span(), Type::hole(), Rc::new(e0), Rc::new(e1))
 }
 
 // pub fn stmt_mod<const N: usize>(x: &'static str, ss: [Stmt; N]) -> Stmt {
@@ -557,11 +553,11 @@ pub fn stmt_type<const N: usize>(
 }
 
 pub fn stmt_expr(e: Expr) -> Stmt {
-    Stmt::Expr(e)
+    Stmt::Expr(Rc::new(e))
 }
 
 pub fn expr_unit() -> Expr {
-    Expr::Tuple(span(), ty_hole(), vec([]))
+    Expr::Tuple(span(), Type::hole(), vec([]))
 }
 
 pub fn ty_unit() -> Type {
@@ -573,19 +569,19 @@ pub fn expr_struct<const N: usize, const M: usize>(
     ts: [Type; N],
     xes: [(&'static str, Expr); M],
 ) -> Expr {
-    Expr::Struct(span(), ty_hole(), name(x), vec(ts), name_map(xes))
+    Expr::Struct(span(), Type::hole(), name(x), vec(ts), name_map(xes))
 }
 
 pub fn expr_tuple<const N: usize>(es: [Expr; N]) -> Expr {
-    Expr::Tuple(span(), ty_hole(), vec(es))
+    Expr::Tuple(span(), Type::hole(), vec(es))
 }
 
 pub fn expr_array<const N: usize>(es: [Expr; N]) -> Expr {
-    Expr::Array(span(), ty_hole(), vec(es))
+    Expr::Array(span(), Type::hole(), vec(es))
 }
 
 pub fn expr_index(e1: Expr, i: Index) -> Expr {
-    Expr::Index(span(), ty_hole(), Rc::new(e1), i)
+    Expr::Index(span(), Type::hole(), Rc::new(e1), i)
 }
 
 pub fn index(i: &'static str) -> Index {
@@ -593,7 +589,7 @@ pub fn index(i: &'static str) -> Index {
 }
 
 pub fn expr_field(e: Expr, x: &'static str) -> Expr {
-    Expr::Field(span(), ty_hole(), Rc::new(e), name(x))
+    Expr::Field(span(), Type::hole(), Rc::new(e), name(x))
 }
 
 pub fn expr_enum<const N: usize>(
@@ -602,7 +598,14 @@ pub fn expr_enum<const N: usize>(
     x1: &'static str,
     e: Expr,
 ) -> Expr {
-    Expr::Enum(span(), ty_hole(), name(x0), vec(ts), name(x1), Rc::new(e))
+    Expr::Enum(
+        span(),
+        Type::hole(),
+        name(x0),
+        vec(ts),
+        name(x1),
+        Rc::new(e),
+    )
 }
 
 pub fn expr_body(e: Expr) -> StmtDefBody {
@@ -610,7 +613,7 @@ pub fn expr_body(e: Expr) -> StmtDefBody {
 }
 
 pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
-    x: &'static str,
+    x: impl Into<Name>,
     gs: [&'static str; N],
     ps: [(&'static str, Type); K],
     t: Type,
@@ -621,7 +624,7 @@ pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
         span(),
         name(x),
         app(gs, name),
-        app(ps, |(s, t)| Param::new(span(), name(s), t)),
+        params(ps),
         t,
         vec(qs),
         b.into(),
@@ -633,6 +636,10 @@ pub fn stmt_err() -> Stmt {
     Stmt::Err(span())
 }
 
+fn params<const N: usize>(xts: [(&'static str, Type); N]) -> Map<Name, Type> {
+    xts.into_iter().map(|(x, t)| (name(x), t)).collect()
+}
+
 pub fn tr_def<const N: usize, const M: usize, const K: usize>(
     x: &'static str,
     gs: [&'static str; N],
@@ -640,7 +647,7 @@ pub fn tr_def<const N: usize, const M: usize, const K: usize>(
     t: Type,
     qs: [Bound; M],
 ) -> TraitDef {
-    TraitDef::new(span(), name(x), app(gs, name), app(xts, param), t, vec(qs))
+    TraitDef::new(span(), name(x), app(gs, name), params(xts), t, vec(qs))
 }
 
 pub fn tr_type<const N: usize>(x: &'static str, gs: [&'static str; N]) -> TraitType {
@@ -664,13 +671,21 @@ pub fn stmt_enum<const N: usize, const M: usize>(
 }
 
 pub fn expr_call<const N: usize>(e: Expr, es: [Expr; N]) -> Expr {
-    Expr::Call(span(), ty_hole(), Rc::new(e), vec(es))
+    Expr::Call(span(), Type::hole(), Rc::new(e), vec(es))
+}
+
+pub fn expr_call_direct<const N: usize, const M: usize>(
+    x: &'static str,
+    ts: [Type; N],
+    es: [Expr; M],
+) -> Expr {
+    expr_call(expr_def(x, ts), es)
 }
 
 pub fn expr_and(e0: Expr, e1: Expr) -> Expr {
     Expr::Match(
         span(),
-        ty_hole(),
+        Type::hole(),
         Rc::new(e0),
         arms([(pat_bool(true), e1), (pat_wild(), expr_bool(false))]),
     )
@@ -679,50 +694,57 @@ pub fn expr_and(e0: Expr, e1: Expr) -> Expr {
 pub fn expr_or(e0: Expr, e1: Expr) -> Expr {
     Expr::Match(
         span(),
-        ty_hole(),
+        Type::hole(),
         Rc::new(e0),
         arms([(pat_bool(true), expr_bool(true)), (pat_wild(), e1)]),
     )
 }
 
 pub fn expr_var(x: &'static str) -> Expr {
-    Expr::Var(span(), ty_hole(), name(x))
+    Expr::Var(span(), Type::hole(), name(x))
 }
 
 pub fn pat_var(x: &'static str) -> Pat {
-    Pat::Var(span(), ty_hole(), name(x))
+    Pat::Var(span(), Type::hole(), name(x))
 }
 
 pub fn pat_int(i: &'static str) -> Pat {
-    Pat::Int(span(), ty_hole(), i.to_owned())
+    Pat::Int(span(), Type::hole(), i.to_owned())
 }
 
 pub fn pat_string(s: &'static str) -> Pat {
-    Pat::String(span(), ty_hole(), s.to_owned())
+    Pat::String(span(), Type::hole(), s.to_owned())
 }
 
 pub fn pat_unit() -> Pat {
-    Pat::Tuple(span(), ty_hole(), vec([]))
+    Pat::Tuple(span(), Type::hole(), vec([]))
 }
 
 pub fn pat_bool(b: bool) -> Pat {
-    Pat::Bool(span(), ty_hole(), b)
+    Pat::Bool(span(), Type::hole(), b)
 }
 
 pub fn pat_char(c: char) -> Pat {
-    Pat::Char(span(), ty_hole(), c)
+    Pat::Char(span(), Type::hole(), c)
 }
 
 pub fn pat_wild() -> Pat {
-    Pat::Wildcard(span(), ty_hole())
+    Pat::Wildcard(span(), Type::hole())
 }
 
 pub fn pat_tuple<const N: usize>(ps: [Pat; N]) -> Pat {
-    Pat::Tuple(span(), ty_hole(), vec(ps))
+    Pat::Tuple(span(), Type::hole(), vec(ps))
 }
 
 pub fn pat_enum<const N: usize>(x0: &'static str, ts: [Type; N], x1: &'static str, p: Pat) -> Pat {
-    Pat::Enum(span(), ty_hole(), name(x0), vec(ts), name(x1), Rc::new(p))
+    Pat::Enum(
+        span(),
+        Type::hole(),
+        name(x0),
+        vec(ts),
+        name(x1),
+        Rc::new(p),
+    )
 }
 
 pub fn pat_struct<const N: usize, const M: usize>(
@@ -730,7 +752,7 @@ pub fn pat_struct<const N: usize, const M: usize>(
     ts: [Type; N],
     xps: [(&'static str, Pat); M],
 ) -> Pat {
-    Pat::Struct(span(), ty_hole(), name(x), vec(ts), name_map(xps))
+    Pat::Struct(span(), Type::hole(), name(x), vec(ts), name_map(xps))
 }
 
 pub fn pat_annot(t: Type, p: Pat) -> Pat {
@@ -744,13 +766,13 @@ pub fn arms<const N: usize>(arms: [(Pat, Expr); N]) -> Vec<Arm> {
 }
 
 pub fn expr_match<const N: usize>(e: Expr, pes: [(Pat, Expr); N]) -> Expr {
-    Expr::Match(span(), ty_hole(), Rc::new(e), arms(pes))
+    Expr::Match(span(), Type::hole(), Rc::new(e), arms(pes))
 }
 
 pub fn expr_if(e0: Expr, b1: Block) -> Expr {
     Expr::Match(
         span(),
-        ty_hole(),
+        Type::hole(),
         Rc::new(e0),
         arms([
             (pat_bool(true), Expr::Block(span(), Type::Hole, b1)),
@@ -762,7 +784,7 @@ pub fn expr_if(e0: Expr, b1: Block) -> Expr {
 pub fn expr_if_else(e0: Expr, b1: Block, b2: Block) -> Expr {
     Expr::Match(
         span(),
-        ty_hole(),
+        Type::hole(),
         Rc::new(e0),
         arms([
             (pat_bool(true), Expr::Block(span(), Type::Hole, b1)),
@@ -772,27 +794,27 @@ pub fn expr_if_else(e0: Expr, b1: Block, b2: Block) -> Expr {
 }
 
 pub fn expr_def<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
-    Expr::Def(span(), ty_hole(), name(x), vec(ts))
+    Expr::Def(span(), Type::hole(), name(x), vec(ts))
 }
 
 pub fn expr_int(i: &'static str) -> Expr {
-    Expr::Int(span(), ty_hole(), i.to_owned())
+    Expr::Int(span(), Type::hole(), i.into())
 }
 
 pub fn expr_float(f: &'static str) -> Expr {
-    Expr::Float(span(), ty_hole(), f.to_owned())
+    Expr::Float(span(), Type::hole(), f.into())
 }
 
 pub fn expr_bool(b: bool) -> Expr {
-    Expr::Bool(span(), ty_hole(), b)
+    Expr::Bool(span(), Type::hole(), b)
 }
 
 pub fn expr_string(s: &'static str) -> Expr {
-    Expr::String(span(), ty_hole(), s.to_owned())
+    Expr::String(span(), Type::hole(), s.into())
 }
 
 pub fn expr_char(c: char) -> Expr {
-    Expr::Char(span(), ty_hole(), c)
+    Expr::Char(span(), Type::hole(), c)
 }
 
 pub fn block<const N: usize>(ss: [Stmt; N], e: Expr) -> Block {
@@ -800,67 +822,61 @@ pub fn block<const N: usize>(ss: [Stmt; N], e: Expr) -> Block {
 }
 
 pub fn expr_block<const N: usize>(ss: [Stmt; N], e: Expr) -> Expr {
-    Expr::Block(span(), ty_hole(), block(ss, e))
+    Expr::Block(span(), Type::hole(), block(ss, e))
 }
 
 pub fn spanned_expr_block<const N: usize>(span: Span, ss: [Stmt; N], e: Expr) -> Expr {
-    Expr::Block(span, ty_hole(), block(ss, e))
+    Expr::Block(span, Type::hole(), block(ss, e))
 }
 
 pub fn expr_err() -> Expr {
-    Expr::Err(span(), ty_hole())
+    Expr::Err(span(), Type::hole())
 }
 
 pub fn expr_fun<const N: usize>(ps: [&'static str; N], e: Expr) -> Expr {
     Expr::Fun(
         span(),
-        ty_hole(),
-        app(ps, |s| Param::new(span(), name(s), ty_hole())),
-        ty_hole(),
+        Type::hole(),
+        app(ps, |s| (name(s), Type::hole())).into(),
+        Type::hole(),
         Rc::new(e),
     )
 }
 
-fn param((x, t): (&'static str, Type)) -> Param {
-    Param::new(span(), name(x), t)
+fn param((x, t): (&'static str, Type)) -> (Name, Type) {
+    (name(x), t)
 }
 
 pub fn expr_fun_typed<const N: usize>(ps: [(&'static str, Type); N], t: Type, e: Expr) -> Expr {
-    Expr::Fun(
-        span(),
-        ty_hole(),
-        app(ps, |(s, t)| Param::new(span(), name(s), t)),
-        t,
-        Rc::new(e),
-    )
+    Expr::Fun(span(), Type::hole(), app(ps, param).into(), t, Rc::new(e))
 }
 
 pub fn expr_return(e: Expr) -> Expr {
-    Expr::Return(span(), ty_hole(), Rc::new(e))
+    Expr::Return(span(), Type::hole(), Rc::new(e))
 }
 
 pub fn expr_continue() -> Expr {
-    Expr::Continue(span(), ty_hole())
+    Expr::Continue(span(), Type::hole())
 }
 
 pub fn expr_break() -> Expr {
-    Expr::Break(span(), ty_hole())
+    Expr::Break(span(), Type::hole())
 }
 
 pub fn expr_query<const N: usize>(qs: [Query; N]) -> Expr {
-    Expr::Query(span(), ty_hole(), vec(qs))
+    Expr::Query(span(), Type::hole(), vec(qs))
 }
 
 pub fn query_select<const N: usize>(xes: [(&'static str, Expr); N]) -> Query {
-    Query::Select(span(), ty_hole(), name_map(xes))
+    Query::Select(span(), Type::hole(), name_map(xes))
 }
 
 pub fn query_where(e: Expr) -> Query {
-    Query::Where(span(), ty_hole(), Rc::new(e))
+    Query::Where(span(), Type::hole(), Rc::new(e))
 }
 
 pub fn query_from(x: &'static str, e: Expr) -> Query {
-    Query::From(span(), ty_hole(), name(x), Rc::new(e))
+    Query::From(span(), Type::hole(), name(x), Rc::new(e))
 }
 
 pub fn query_into<const N: usize, const M: usize>(
@@ -868,31 +884,31 @@ pub fn query_into<const N: usize, const M: usize>(
     ts: [Type; N],
     es: [Expr; M],
 ) -> Query {
-    Query::Into(span(), ty_hole(), name(x), vec(ts), vec(es))
+    Query::Into(span(), Type::hole(), name(x), vec(ts), vec(es))
 }
 
 pub fn query_var(x: &'static str, e: Expr) -> Query {
-    Query::Var(span(), ty_hole(), name(x), Rc::new(e))
+    Query::Var(span(), Type::hole(), name(x), Rc::new(e))
 }
 
 pub fn query_join(x: &'static str, e0: Expr, e1: Expr) -> Query {
-    Query::Join(span(), ty_hole(), name(x), Rc::new(e0), Rc::new(e1))
+    Query::Join(span(), Type::hole(), name(x), Rc::new(e0), Rc::new(e1))
 }
 
 pub fn query_group<const N: usize>(e: Expr, qs: [Query; N]) -> Query {
-    Query::Group(span(), ty_hole(), Rc::new(e), vec(qs))
+    Query::Group(span(), Type::hole(), Rc::new(e), vec(qs))
 }
 
 pub fn query_over<const N: usize>(e: Expr, qs: [Query; N]) -> Query {
-    Query::Over(span(), ty_hole(), Rc::new(e), vec(qs))
+    Query::Over(span(), Type::hole(), Rc::new(e), vec(qs))
 }
 
 pub fn query_compute(x: &'static str, e0: Expr, e1: Expr) -> Query {
-    Query::Compute(span(), ty_hole(), name(x), Rc::new(e0), Rc::new(e1))
+    Query::Compute(span(), Type::hole(), name(x), Rc::new(e0), Rc::new(e1))
 }
 
 pub fn expr_while(e: Expr, b: Block) -> Expr {
-    Expr::While(span(), ty_hole(), Rc::new(e), b)
+    Expr::While(span(), Type::hole(), Rc::new(e), b)
 }
 
 pub fn span() -> Span {
@@ -903,42 +919,13 @@ pub fn seg<const N: usize>(x: &'static str, ts: [Type; N]) -> (Name, Vec<Type>) 
     (name(x), vec(ts))
 }
 
-pub mod types {
-    use crate::ast::Type;
-
-    use super::ty;
-    use super::ty_con;
-
-    pub fn ty_vec(t: Type) -> Type {
-        ty_con("Vec", [t])
-    }
-
-    pub fn ty_stream(t: Type) -> Type {
-        ty_con("Stream", [t])
-    }
-
-    pub fn ty_i32() -> Type {
-        ty("i32")
-    }
-
-    pub fn ty_i64() -> Type {
-        ty("i64")
-    }
-
-    pub fn ty_bool() -> Type {
-        ty("bool")
-    }
-
-    pub fn ty_f32() -> Type {
-        ty("f32")
-    }
-}
-
 pub mod traits {
-    use crate::ast::Bound;
-    use crate::ast::Stmt;
-    use crate::ast::StmtImpl;
-    use crate::ast::Type;
+    use std::rc::Rc;
+
+    use compiler::ast::Bound;
+    use compiler::ast::Stmt;
+    use compiler::ast::StmtImpl;
+    use compiler::ast::Type;
 
     use super::app;
     use super::bound;
@@ -960,9 +947,13 @@ pub mod traits {
             app(gs, name),
             head,
             vec(where_clause),
-            app(defs, |s| s.as_def().clone()),
-            app(types, |s| s.as_type().clone()),
+            app(defs, |s| Rc::new(s.as_def().clone())),
+            app(types, |s| Rc::new(s.as_type().clone())),
         )
+    }
+
+    pub fn impls<const N: usize>(impls: [StmtImpl; N]) -> Vec<Rc<StmtImpl>> {
+        impls.into_iter().map(Rc::new).collect()
     }
 
     pub fn impl_clone<const N: usize, const M: usize>(

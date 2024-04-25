@@ -4,20 +4,23 @@ use crate::ast::Arm;
 use crate::ast::Block;
 use crate::ast::Bound;
 use crate::ast::Expr;
-use crate::ast::Map;
 use crate::ast::Name;
-use crate::ast::Param;
 use crate::ast::Pat;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtDefBody;
+use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
+use crate::ast::StmtStruct;
+use crate::ast::StmtTrait;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::TraitBound;
+use crate::ast::TraitDef;
 use crate::ast::Type;
+use crate::map::Map;
 
 impl Program {
     pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Program {
@@ -30,27 +33,22 @@ impl Type {
     pub fn apply(&self, sub: &[(Name, Type)]) -> Type {
         match self {
             Type::Cons(x, ts) => {
-                let x = x.clone();
                 let ts = ts.iter().map(|t| t.apply(sub)).collect::<Vec<_>>();
-                Type::Cons(x, ts)
+                Type::Cons(*x, ts)
             }
             Type::Var(x) => sub
                 .iter()
                 .find(|(n, _)| n == x)
                 .map(|(_, t)| t.apply(sub))
-                .unwrap_or_else(|| Type::Var(x.clone())),
+                .unwrap_or_else(|| Type::Var(*x)),
             Type::Assoc(b, x1, ts1) => {
                 let b = b.map_type(&|b| b.apply(sub));
-                let x1 = x1.clone();
                 let ts1 = ts1.iter().map(|t| t.apply(sub)).collect::<Vec<_>>();
-                Type::Assoc(b, x1, ts1)
+                Type::Assoc(b, *x1, ts1)
             }
             Type::Hole => unreachable!(),
             Type::Err => Type::Err,
-            Type::Generic(x) => {
-                let x = x.clone();
-                Type::Generic(x)
-            }
+            Type::Generic(x) => Type::Generic(*x),
             Type::Fun(ts, t) => {
                 let ts = ts.iter().map(|t| t.apply(sub)).collect();
                 let t = t.apply(sub);
@@ -61,13 +59,12 @@ impl Type {
                 Type::Tuple(ts)
             }
             Type::Record(xts) => {
-                let xts = xts.iter().map(|(x, t)| (x.clone(), t.apply(sub))).collect();
+                let xts = xts.iter().map(|(x, t)| (*x, t.apply(sub))).collect();
                 Type::Record(xts)
             }
             Type::Alias(x, ts) => {
-                let x = x.clone();
                 let ts = ts.iter().map(|t| t.apply(sub)).collect();
-                Type::Alias(x, ts)
+                Type::Alias(*x, ts)
             }
             Type::Unresolved(_) => unreachable!(),
             Type::Array(t, n) => {
@@ -82,23 +79,21 @@ impl Type {
     pub fn instantiate(&self, sub: &[(Name, Type)]) -> Type {
         match self {
             Type::Cons(x, ts) => {
-                let x = x.clone();
                 let ts = ts.iter().map(|t| t.instantiate(sub)).collect::<Vec<_>>();
-                Type::Cons(x, ts)
+                Type::Cons(*x, ts)
             }
-            Type::Var(x) => Type::Var(x.clone()),
+            Type::Var(x) => Type::Var(*x),
             Type::Assoc(b, x1, ts1) => {
                 let b = b.map_type(&|b| b.instantiate(sub));
-                let x1 = x1.clone();
                 let ts1 = ts1.iter().map(|t| t.instantiate(sub)).collect::<Vec<_>>();
-                Type::Assoc(b, x1, ts1)
+                Type::Assoc(b, *x1, ts1)
             }
             Type::Hole => unreachable!(),
             Type::Generic(x) => sub
                 .iter()
                 .find(|(n, _)| n == x)
                 .map(|(_, t)| t.clone())
-                .unwrap_or_else(|| Type::Var(x.clone())),
+                .unwrap_or_else(|| Type::Var(*x)),
             Type::Fun(ts, t) => {
                 let ts = ts.iter().map(|t| t.instantiate(sub)).collect();
                 let t = t.instantiate(sub);
@@ -109,16 +104,12 @@ impl Type {
                 Type::Tuple(ts)
             }
             Type::Record(xts) => {
-                let xts = xts
-                    .iter()
-                    .map(|(x, t)| (x.clone(), t.instantiate(sub)))
-                    .collect();
+                let xts = xts.iter().map(|(x, t)| (*x, t.instantiate(sub))).collect();
                 Type::Record(xts)
             }
             Type::Alias(x, ts) => {
-                let x = x.clone();
                 let ts = ts.iter().map(|t| t.instantiate(sub)).collect();
-                Type::Alias(x, ts)
+                Type::Alias(*x, ts)
             }
             Type::Err => Type::Err,
             Type::Unresolved(_) => unreachable!(),
@@ -135,14 +126,14 @@ impl Type {
 impl Stmt {
     pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Stmt {
         match self {
-            Stmt::Var(v) => Stmt::Var(v.map_type(f)),
-            Stmt::Def(d) => Stmt::Def(d.map_type(f)),
-            Stmt::Impl(i) => Stmt::Impl(i.map_type(f)),
-            Stmt::Expr(e) => Stmt::Expr(e.map_type(f)),
-            Stmt::Struct(s) => Stmt::Struct(s.clone()),
-            Stmt::Enum(s) => Stmt::Enum(s.clone()),
-            Stmt::Type(s) => Stmt::Type(s.clone()),
-            Stmt::Trait(s) => Stmt::Trait(s.clone()),
+            Stmt::Var(v) => Stmt::Var(Rc::new(v.map_type(f))),
+            Stmt::Def(d) => Stmt::Def(Rc::new(d.map_type(f))),
+            Stmt::Impl(i) => Stmt::Impl(Rc::new(i.map_type(f))),
+            Stmt::Expr(e) => Stmt::Expr(Rc::new(e.map_type(f))),
+            Stmt::Struct(s) => Stmt::Struct(Rc::new(s.map_type(f))),
+            Stmt::Enum(s) => Stmt::Enum(Rc::new(s.map_type(f))),
+            Stmt::Type(s) => Stmt::Type(Rc::new(s.map_type(f))),
+            Stmt::Trait(s) => Stmt::Trait(Rc::new(s.map_type(f))),
             Stmt::Err(_) => todo!(),
         }
     }
@@ -151,7 +142,7 @@ impl Stmt {
 impl StmtVar {
     pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtVar {
         let span = self.span;
-        let name = self.name.clone();
+        let name = self.name;
         let ty = f(&self.ty);
         let expr = self.expr.map_type(f);
         StmtVar::new(span, name, ty, expr)
@@ -161,10 +152,10 @@ impl StmtVar {
 impl StmtDef {
     pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtDef {
         let span = self.span;
-        let name = self.name.clone();
+        let name = self.name;
         let generics = self.generics.clone();
         let qs = self.where_clause.iter().map(|p| p.map_type(f)).collect();
-        let ps = self.params.iter().map(|p| p.map_type(f)).collect();
+        let ps = self.params.map_values(|t| f(&t));
         let t = f(&self.ty);
         let e = self.body.map_type(f);
         StmtDef::new(span, name, generics, ps, t, qs, e)
@@ -186,8 +177,8 @@ impl StmtImpl {
         let generics = self.generics.clone();
         let head = self.head.map_type(f);
         let body = self.where_clause.iter().map(|p| p.map_type(f)).collect();
-        let defs = self.defs.iter().map(|d| d.map_type(f)).collect();
-        let types = self.types.iter().map(|t| t.map_type(f)).collect();
+        let defs = self.defs.iter().map(|d| Rc::new(d.map_type(f))).collect();
+        let types = self.types.iter().map(|t| Rc::new(t.map_type(f))).collect();
         StmtImpl::new(span, generics, head, body, defs, types)
     }
 }
@@ -195,7 +186,7 @@ impl StmtImpl {
 impl StmtType {
     pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtType {
         let span = self.span;
-        let name = self.name.clone();
+        let name = self.name;
         let generics = self.generics.clone();
         let ty = self.body.map_type(f);
         StmtType::new(span, name, generics, ty)
@@ -211,6 +202,50 @@ impl StmtTypeBody {
     }
 }
 
+impl StmtStruct {
+    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtStruct {
+        let span = self.span;
+        let name = self.name;
+        let generics = self.generics.clone();
+        let fields = self.fields.iter().map(|(x, t)| (*x, f(t))).collect();
+        StmtStruct::new(span, name, generics, fields)
+    }
+}
+
+impl StmtEnum {
+    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtEnum {
+        let span = self.span;
+        let name = self.name;
+        let generics = self.generics.clone();
+        let variants = self.variants.iter().map(|(x, t)| (*x, f(t))).collect();
+        StmtEnum::new(span, name, generics, variants)
+    }
+}
+
+impl StmtTrait {
+    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtTrait {
+        let span = self.span;
+        let name = self.name;
+        let generics = self.generics.clone();
+        let where_clause = self.where_clause.iter().map(|b| b.map_type(f)).collect();
+        let defs = self.defs.iter().map(|d| Rc::new(d.map_type(f))).collect();
+        let types = self.types.clone();
+        StmtTrait::new(span, name, generics, where_clause, defs, types)
+    }
+}
+
+impl TraitDef {
+    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> TraitDef {
+        let span = self.span;
+        let name = self.name;
+        let generics = self.generics.clone();
+        let params = self.params.iter().map(|(x, t)| (*x, f(t))).collect();
+        let ty = f(&self.ty);
+        let where_clause = self.where_clause.iter().map(|b| b.map_type(f)).collect();
+        TraitDef::new(span, name, generics, params, ty, where_clause)
+    }
+}
+
 impl Bound {
     pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Bound {
         match self {
@@ -223,12 +258,12 @@ impl Bound {
 
 impl TraitBound {
     pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> TraitBound {
-        let x = self.name.clone();
+        let x = self.name;
         let ts = self.ts.iter().map(f).collect::<Vec<_>>();
         let xts = self
             .xts
             .iter()
-            .map(|(x, t)| (x.clone(), f(t)))
+            .map(|(x, t)| (*x, f(t)))
             .collect::<Map<_, _>>();
         TraitBound::new(x, ts, xts)
     }
@@ -253,14 +288,10 @@ impl Expr {
                 let v = v.clone();
                 Expr::String(s, t, v)
             }
-            Expr::Var(_, _, x) => {
-                let x = x.clone();
-                Expr::Var(s, t, x)
-            }
+            Expr::Var(_, _, x) => Expr::Var(s, t, *x),
             Expr::Def(_, _, x, ts) => {
-                let x = x.clone();
                 let ts = ts.iter().map(f).collect();
-                Expr::Def(s, t, x, ts)
+                Expr::Def(s, t, *x, ts)
             }
             Expr::Call(_, _, e, es) => {
                 let e = e.map_type(f);
@@ -273,25 +304,18 @@ impl Expr {
             }
             Expr::Query(..) => todo!(),
             Expr::Struct(_, _, x, ts, xts) => {
-                let x = x.clone();
                 let ts = ts.iter().map(f).collect();
-                let xts = xts
-                    .iter()
-                    .map(|(x, e)| (x.clone(), e.map_type(f)))
-                    .collect();
-                Expr::Struct(s, t, x, ts, xts)
+                let xts = xts.iter().map(|(x, e)| (*x, e.map_type(f))).collect();
+                Expr::Struct(s, t, *x, ts, xts)
             }
             Expr::Enum(_, _, x0, ts, x1, e) => {
-                let x0 = x0.clone();
                 let ts = ts.iter().map(f).collect();
-                let x1 = x1.clone();
                 let e = e.map_type(f);
-                Expr::Enum(s, t, x0, ts, x1, Rc::new(e))
+                Expr::Enum(s, t, *x0, ts, *x1, Rc::new(e))
             }
             Expr::Field(_, _, e, x) => {
                 let e = Rc::new(e.map_type(f));
-                let x = x.clone();
-                Expr::Field(s, t, e, x)
+                Expr::Field(s, t, e, *x)
             }
             Expr::Tuple(_, _, es) => {
                 let es = es.iter().map(|e| e.map_type(f)).collect();
@@ -299,9 +323,8 @@ impl Expr {
             }
             Expr::Assoc(_, _, b, x1, ts1) => {
                 let b = b.map_type(f);
-                let x1 = x1.clone();
                 let ts1 = ts1.iter().map(f).collect();
-                Expr::Assoc(s, t, b, x1, ts1)
+                Expr::Assoc(s, t, b, *x1, ts1)
             }
             Expr::Index(_, _, e, i) => {
                 let e = Rc::new(e.map_type(f));
@@ -324,7 +347,7 @@ impl Expr {
             Expr::Continue(_, _) => Expr::Continue(s, t),
             Expr::Break(_, _) => Expr::Break(s, t),
             Expr::Fun(_, _, ps, t1, e) => {
-                let ps = ps.iter().map(|p| p.map_type(f)).collect();
+                let ps = ps.map_values(|t| f(&t));
                 let t1 = f(t1);
                 let e = Rc::new(e.map_type(f));
                 Expr::Fun(s, t, ps, t1, e)
@@ -340,10 +363,7 @@ impl Expr {
                 Expr::While(s, t, e, b)
             }
             Expr::Record(_, _, xes) => {
-                let xes = xes
-                    .iter()
-                    .map(|(x, e)| (x.clone(), e.map_type(f)))
-                    .collect();
+                let xes = xes.iter().map(|(x, e)| (*x, e.map_type(f))).collect();
                 Expr::Record(s, t, xes)
             }
             Expr::Value(_, _) => todo!(),
@@ -377,26 +397,20 @@ impl Pat {
         let span = self.span();
         match self {
             Pat::Unresolved(..) => unreachable!(),
-            Pat::Var(_, _, x) => Pat::Var(span, t, x.clone()),
+            Pat::Var(_, _, x) => Pat::Var(span, t, *x),
             Pat::Tuple(_, _, es) => {
                 let es = es.iter().map(|e| e.map_type(f)).collect();
                 Pat::Tuple(span, t, es)
             }
             Pat::Struct(_, _, x, ts, xps) => {
-                let x = x.clone();
                 let ts = ts.iter().map(f).collect();
-                let xps = xps
-                    .iter()
-                    .map(|(x, p)| (x.clone(), p.map_type(f)))
-                    .collect();
-                Pat::Struct(span, t, x, ts, xps)
+                let xps = xps.iter().map(|(x, p)| (*x, p.map_type(f))).collect();
+                Pat::Struct(span, t, *x, ts, xps)
             }
             Pat::Enum(_, _, x0, ts, x1, p) => {
-                let x0 = x0.clone();
                 let ts = ts.iter().map(f).collect();
-                let x1 = x1.clone();
                 let p = Rc::new(p.map_type(f));
-                Pat::Enum(span, t, x0, ts, x1, p)
+                Pat::Enum(span, t, *x0, ts, *x1, p)
             }
             Pat::Int(_, _, v) => Pat::Int(span, t, v.clone()),
             Pat::String(_, _, v) => Pat::String(span, t, v.clone()),
@@ -404,10 +418,7 @@ impl Pat {
             Pat::Bool(_, _, v) => Pat::Bool(span, t, *v),
             Pat::Err(_, _) => Pat::Err(span, t),
             Pat::Record(_, _, xps) => {
-                let xps = xps
-                    .iter()
-                    .map(|(x, p)| (x.clone(), p.map_type(f)))
-                    .collect();
+                let xps = xps.iter().map(|(x, p)| (*x, p.map_type(f))).collect();
                 Pat::Record(span, t, xps)
             }
             Pat::Or(_, _, p0, p1) => {
@@ -417,14 +428,5 @@ impl Pat {
             }
             Pat::Char(_, _, c) => Pat::Char(span, t, *c),
         }
-    }
-}
-
-impl Param {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Param {
-        let span = self.span;
-        let name = self.name.clone();
-        let t = f(&self.ty);
-        Param::new(span, name, t)
     }
 }

@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::ast::Block;
-use crate::ast::Bound;
 use crate::ast::Expr;
+use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Program;
 use crate::ast::Stmt;
@@ -13,16 +14,10 @@ use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtVar;
 use crate::ast::Type;
-use crate::ast::Uid;
-use crate::builtins::Fun;
-use crate::builtins::Record;
-use crate::builtins::Tuple;
-use crate::builtins::Value;
-use crate::builtins::Variant;
 
 #[derive(Debug, Default)]
 pub struct Context {
-    ids: HashMap<(Name, Vec<Type>), Uid>,
+    ids: HashMap<Name, HashMap<Vec<Type>, Name>>,
     defs: HashMap<Name, StmtDef>,
     structs: HashMap<Name, StmtStruct>,
     enums: HashMap<Name, StmtEnum>,
@@ -35,20 +30,20 @@ pub struct Context {
 struct Stack(Vec<Scope>);
 
 #[derive(Debug, Default)]
-struct Scope(Vec<(Name, Binding)>);
+struct Scope(Map<Name, Type>);
 
-#[derive(Debug)]
-enum Binding {
-    Generic(Type),
-    Var(Type),
-}
+impl Stack {
+    fn bind(&mut self, x: Name, t: Type) {
+        self.0.last_mut().unwrap().0.insert(x, t);
+    }
 
-impl Context {
-    fn monomorphise(&mut self, name: Name, ts: Vec<Type>) {
-        self.ids
-            .entry((name, ts))
-            .and_modify(|uid| *uid = uid.increment())
-            .or_insert_with(|| name.uid);
+    fn get(&self, x: &Name) -> Type {
+        self.0
+            .iter()
+            .rev()
+            .find_map(|s| s.0.get(x))
+            .unwrap()
+            .clone()
     }
 }
 
@@ -57,12 +52,33 @@ impl Context {
         Self::default()
     }
 
-    pub fn interpret(&mut self, p: &Program) {
+    pub fn monomorphise(&mut self, p: &Program) -> Program {
         p.stmts.iter().for_each(|stmt| self.decl_stmt(stmt));
-        p.stmts.iter().for_each(|stmt| self.stmt(stmt));
+        let stmts = p
+            .stmts
+            .iter()
+            .filter_map(|stmt| self.expr_stmt(stmt))
+            .collect();
+        Program::new(stmts)
     }
 
-    // First pass: Declare all items so that they can later be instantiated
+    fn mangled(&self, name: &Name, ts: &Vec<Type>) -> Option<Name> {
+        self.ids
+            .get(name)
+            .and_then(|instances| instances.get(ts).copied())
+    }
+
+    fn mangle(&mut self, x: Name, ts: Vec<Type>) -> Name {
+        self.ids
+            .get_mut(&x)
+            .map(|insts| {
+                let len = insts.len();
+                insts.entry(ts).or_insert_with(|| x.suffix(len))
+            })
+            .copied()
+            .unwrap()
+    }
+
     fn decl_stmt(&mut self, s: &Stmt) {
         match s {
             Stmt::Var(_) => {}
@@ -77,26 +93,32 @@ impl Context {
         }
     }
 
-    fn stmt(&mut self, s: &Stmt) {
+    fn expr_stmt(&mut self, s: &Stmt) -> Option<Stmt> {
         match s {
-            Stmt::Var(s) => self.stmt_var(s),
-            Stmt::Def(s) => self.stmt_def(s),
-            Stmt::Trait(_) => {}
-            Stmt::Impl(s) => self.stmt_impl(s),
-            Stmt::Struct(_) => {}
-            Stmt::Enum(_) => {}
-            Stmt::Type(_) => {}
-            Stmt::Expr(s) => self.stmt_expr(s),
+            Stmt::Var(s) => Some(Stmt::Var(Rc::new(self.stmt_var(s)))),
+            Stmt::Def(_) => None,
+            Stmt::Trait(_) => None,
+            Stmt::Impl(_) => None,
+            Stmt::Struct(_) => None,
+            Stmt::Enum(_) => None,
+            Stmt::Type(_) => None,
+            Stmt::Expr(e) => Some(Stmt::Expr(Rc::new(self.expr(e)))),
             Stmt::Err(_) => unreachable!(),
         }
     }
 
-    fn stmt_var(&mut self, s: &StmtVar) -> StmtVar {
-        let span = s.span;
-        let x = s.name.clone();
-        let t = self.ty(&s.ty);
-        let e = self.expr(&s.expr);
-        StmtVar::new(span, x, t, e)
+    fn stmt(&mut self, s: &Stmt) -> Stmt {
+        match s {
+            Stmt::Var(s) => Stmt::Var(Rc::new(self.stmt_var(s))),
+            Stmt::Def(_) => unreachable!(),
+            Stmt::Trait(_) => unreachable!(),
+            Stmt::Impl(_) => unreachable!(),
+            Stmt::Struct(_) => unreachable!(),
+            Stmt::Enum(_) => unreachable!(),
+            Stmt::Type(_) => unreachable!(),
+            Stmt::Expr(e) => Stmt::Expr(Rc::new(self.expr(e))),
+            Stmt::Err(_) => unreachable!(),
+        }
     }
 
     fn decl_stmt_def(&mut self, s: &StmtDef) {
@@ -112,17 +134,117 @@ impl Context {
     }
 
     fn decl_stmt_impl(&mut self, s: &StmtImpl) {
-        self.stmts.push(tb.clone(), s.clone());
+        self.impls.push(s.clone());
     }
 
-    fn stmt_expr(&mut self, _: &Expr) {
+    fn stmt_var(&mut self, s: &StmtVar) -> StmtVar {
+        let span = s.span;
+        let x = s.name.clone();
+        let t = self.ty(&s.ty);
+        let e = self.expr(&s.expr);
+        StmtVar::new(span, x, t, e)
+    }
+
+    fn stmt_def(&mut self, s: &StmtDef, ts: &Vec<Type>) -> Name {
+        self.mangled(&s.name, ts).unwrap_or_else(|| {
+            self.scoped(|ctx| {
+                let x = ctx.mangle(s.name, ts.clone());
+                s.generics
+                    .iter()
+                    .zip(ts)
+                    .for_each(|(g, t)| ctx.stack.bind(g.clone(), t.clone()));
+                let span = s.span;
+                let ps = s.params.map_values(|t| ctx.ty(&t));
+                let t = ctx.ty(&s.ty);
+                let b = StmtDefBody::UserDefined(ctx.expr(s.body.as_expr()));
+                ctx.stmts.push(Stmt::Def(Rc::new(StmtDef::new(
+                    span,
+                    x,
+                    vec![],
+                    ps,
+                    t,
+                    vec![],
+                    b,
+                ))));
+                x
+            })
+        })
+    }
+
+    fn stmt_struct(&mut self, x: &Name, ts: &Vec<Type>) -> Name {
+        let s = self.structs.get(x).unwrap().clone();
+        self.mangled(&s.name, ts).unwrap_or_else(|| {
+            self.scoped(|ctx| {
+                let x = ctx.mangle(s.name, ts.clone());
+                s.generics
+                    .iter()
+                    .zip(ts)
+                    .for_each(|(g, t)| ctx.stack.bind(g.clone(), t.clone()));
+                let span = s.span;
+                let fields = s
+                    .fields
+                    .iter()
+                    .map(|(x, t)| (x.clone(), ctx.ty(t)))
+                    .collect();
+                ctx.stmts.push(Stmt::Struct(Rc::new(StmtStruct::new(
+                    span,
+                    x,
+                    vec![],
+                    fields,
+                ))));
+                x
+            })
+        })
+    }
+
+    fn stmt_enum(&mut self, x: &Name, ts: &Vec<Type>) -> Name {
+        let s = self.enums.get(x).unwrap().clone();
+        self.mangled(&s.name, ts).unwrap_or_else(|| {
+            self.scoped(|ctx| {
+                let x = ctx.mangle(s.name, ts.clone());
+                s.generics
+                    .iter()
+                    .zip(ts)
+                    .for_each(|(g, t)| ctx.stack.bind(*g, t.clone()));
+                let span = s.span;
+                let variants = s.variants.map_values(|t| ctx.ty(t));
+                ctx.stmts.push(Stmt::Enum(Rc::new(StmtEnum::new(
+                    span,
+                    x,
+                    vec![],
+                    variants,
+                ))));
+                x
+            })
+        })
+    }
+
+    fn _stmt_impl(&mut self, _s: &StmtImpl, _ts: &Vec<Type>) -> StmtImpl {
+        // let span = s.span;
+        // let tb = s.trait_bound.clone();
+        // let x = s.name.clone();
+        // let ts = s.params.clone();
+        // let defs = s.defs.iter().map(|d| self.stmt_def(d)).collect();
+        // StmtImpl::new(span, tb, x, ts, defs)
         todo!()
+    }
+
+    fn scoped<F, T>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Self) -> T,
+    {
+        self.stack.0.push(Scope::default());
+        let result = f(self);
+        self.stack.0.pop();
+        result
     }
 
     fn block(&mut self, b: &Block) -> Block {
         self.scoped(|this| {
-            b.stmts.iter().for_each(|s| this.stmt(s));
-            this.expr(&b.expr)
+            let span = b.span;
+            let stmts = b.stmts.iter().map(|s| this.stmt(s)).collect();
+            let expr = this.expr(&b.expr);
+            Block::new(span, stmts, expr)
         })
     }
 
@@ -137,100 +259,67 @@ impl Context {
             Expr::Char(_, _, v) => Expr::Char(s, t, v.clone()),
             Expr::String(_, _, v) => Expr::String(s, t, v.clone()),
             Expr::Struct(_, _, x, ts, xes) => {
-                let x = self.ids.get_def(x).clone();
+                let x = self.stmt_struct(x, ts);
                 let xvs = xes.iter().map(|(n, e)| (n.clone(), self.expr(e))).collect();
-                Expr::Struct(s, t, xvs)
+                Expr::Struct(s, t, x, vec![], xvs)
             }
             Expr::Tuple(_, _, es) => {
                 let vs = es.iter().map(|e| self.expr(e)).collect();
-                Value::from(Tuple::new(vs))
+                Expr::Tuple(s, t, vs)
             }
             Expr::Record(_, _, xes) => {
-                let xvs = xes.iter().map(|(n, e)| (n.clone(), self.expr(e))).collect();
-                Value::from(Record::new(xvs))
+                let vs = xes.iter().map(|(n, e)| (n.clone(), self.expr(e))).collect();
+                Expr::Record(s, t, vs)
             }
-            Expr::Enum(_, _, _, _, x1, e) => {
-                let v = self.expr(e);
-                Value::from(Variant::new(x1.clone(), v))
+            Expr::Enum(_, _, x, ts, x1, e) => {
+                let x = self.stmt_enum(x, ts);
+                let e = self.expr(e);
+                Expr::Enum(s, t, x, vec![], *x1, Rc::new(e))
             }
             Expr::Field(_, _, e, x) => {
-                let rec = self.expr(e).as_record();
-                rec[x].clone()
+                let e = self.expr(e);
+                Expr::Field(s, t, Rc::new(e), *x)
             }
             Expr::Index(_, _, e, i) => {
-                let tup = self.expr(e).as_tuple();
-                tup[i].clone()
+                let e = self.expr(e);
+                Expr::Index(s, t, Rc::new(e), *i)
             }
-            Expr::Var(_, _, x) => self.stack.get_val(x).clone(),
-            Expr::Def(_, _, x, ts) => Value::from(Fun::new_def(x.clone(), ts.clone())),
-            Expr::Assoc(_, _, tb, x, ts) => {
-                Value::from(Fun::new_assoc(tb.clone(), x.clone(), ts.clone()))
-            }
-            Expr::Call(_, _, e, es) => {
-                let f = self.expr(e).as_function();
-                let vs = es.iter().map(|e| self.expr(e)).collect::<Vec<_>>();
-                match f {
-                    Fun::Def(x, ts) => {
-                        let s = self.stack.get_def(&x).clone();
-                        match s.body {
-                            StmtDefBody::UserDefined(e) => self.scoped(|ctx| {
-                                for (p, v) in s.params.iter().zip(vs) {
-                                    ctx.stack.bind_val(p.name.clone(), v)
-                                }
-                                ctx.expr(&e)
-                            }),
-                            StmtDefBody::Builtin(builtin) => (builtin.fun)(self, &ts, &vs),
-                        }
+            Expr::Var(_, _, x) => Expr::Var(s, t, *x),
+            Expr::Def(_, _, x, ts) => {
+                let ts = ts.iter().map(|t| self.ty(t)).collect::<Vec<_>>();
+                let stmt = self.defs.get(&x).unwrap();
+                match &stmt.body {
+                    StmtDefBody::UserDefined(_) => {
+                        let x = self.stmt_def(&stmt.clone(), &ts);
+                        Expr::Def(s, t, x, vec![])
                     }
-                    Fun::Assoc(tb, x, _) => {
-                        println!("Looking for: {}", tb);
-                        let s = self.stack.impls.get(&Wrapper(tb)).unwrap().clone();
-                        println!("Found: {}", s);
-                        let s = s.defs.iter().find(|d| d.name == x).unwrap();
-                        self.scoped(|ctx| {
-                            for (p, v) in s.params.iter().zip(vs) {
-                                ctx.stack.bind_val(p.name.clone(), v)
-                            }
-                            ctx.expr(&e)
-                        })
-                    }
+                    StmtDefBody::Builtin(_) => Expr::Def(s, t, *x, ts),
                 }
             }
-            Expr::Block(_, _, b) => self.block(b),
-            Expr::Query(_, _, _) => todo!(),
-            Expr::Match(_, _, _e, _pes) => {
-                todo!()
-                // let mut iter = pes.iter();
-                // let (Pat::Enum(_, _, _, _, x_then, p), e_then) = iter.next().unwrap() else {
-                //     unreachable!();
-                // };
-                // let Pat::Var(_, _, x_var) = p.as_ref() else {
-                //     unreachable!();
-                // };
-                // let (Pat::Wildcard(_, _), e_else) = iter.next().unwrap() else {
-                //     unreachable!()
-                // };
-                // let Value::Variant(v) = self.expr(e) else {
-                //     unreachable!();
-                // };
-                // if *x_then == v.name {
-                //     let v = v.value.as_ref().clone();
-                //     self.stack.bind(x_var.clone(), Binding::Var(v));
-                //     self.expr(e_then)
-                // } else {
-                //     self.expr(e_else)
-                // }
+            Expr::Assoc(_, _, tb, x, ts) => {
+                let x = self.mangle(*x, ts.clone());
+                Expr::Assoc(s, t, tb.clone(), x, vec![])
             }
+            Expr::Call(_, _, e, es) => {
+                let e = self.expr(e);
+                let vs = es.iter().map(|e| self.expr(e)).collect();
+                Expr::Call(s, t, Rc::new(e), vs)
+            }
+            Expr::Block(_, _, b) => {
+                let b = self.block(b);
+                Expr::Block(s, t, b)
+            }
+            Expr::Query(_, _, _) => todo!(),
+            Expr::Match(_, _, _e, _pes) => todo!(),
             Expr::Array(_, _, _) => todo!(),
             Expr::Assign(_, _, _, _) => todo!(),
             Expr::Return(_, _, _) => unreachable!(),
             Expr::Continue(_, _) => unreachable!(),
             Expr::Break(_, _) => unreachable!(),
-            Expr::While(_, _, e0, b) => {
-                while self.expr(e0).as_bool() {
-                    self.block(b);
-                }
-                Value::from(Tuple::new(vec![]))
+            Expr::While(_, _, e, b) => {
+                let e = self.expr(e);
+                let b = self.block(b);
+                Expr::While(s, t, Rc::new(e), b)
             }
             Expr::Fun(_, _, _, _, _) => unreachable!(),
             Expr::Err(_, _) => unreachable!(),
@@ -239,5 +328,34 @@ impl Context {
         }
     }
 
-    fn ty(&mut self, t: &Type) -> Type {}
+    fn ty(&mut self, t: &Type) -> Type {
+        match t {
+            Type::Unresolved(_) => unreachable!(),
+            Type::Cons(x, ts) => {
+                let x = self.mangle(*x, ts.clone());
+                Type::Cons(x, vec![])
+            }
+            Type::Alias(..) => unreachable!(),
+            Type::Assoc(_, _, _) => todo!(),
+            Type::Var(_) => unreachable!(),
+            Type::Generic(x) => self.stack.get(x),
+            Type::Fun(ts, t) => {
+                let ts = ts.iter().map(|t| self.ty(t)).collect();
+                let t = self.ty(t);
+                Type::Fun(ts, Rc::new(t))
+            }
+            Type::Tuple(ts) => {
+                let ts = ts.iter().map(|t| self.ty(t)).collect();
+                Type::Tuple(ts)
+            }
+            Type::Record(xts) => {
+                let xts = xts.iter().map(|(x, t)| (x.clone(), self.ty(t))).collect();
+                Type::Record(xts)
+            }
+            Type::Array(_, _) => todo!(),
+            Type::Never => Type::Never,
+            Type::Hole => Type::Hole,
+            Type::Err => unreachable!(),
+        }
+    }
 }

@@ -1,7 +1,0 @@
-[package]
-name = "opt"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-egg = "0.9.5"

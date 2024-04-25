@@ -8,15 +8,15 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
 pub struct Variant {
-    pub name: Name,
-    pub value: Rc<Value>,
+    pub x: Name,
+    pub v: Rc<Value>,
 }
 
 impl Variant {
-    pub fn new(name: Name, value: Value) -> Variant {
+    pub fn new(x: Name, v: Value) -> Variant {
         Variant {
-            name,
-            value: Rc::new(value),
+            x,
+            v: Rc::new(v),
         }
     }
 }

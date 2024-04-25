@@ -225,11 +225,11 @@ impl Context {
 
     fn stmt_var(&mut self, s: &StmtVar) {
         let value = self.expr(&s.expr);
-        self.stack.bind_val(s.name.clone(), value);
+        self.stack.bind_val(s.name, value);
     }
 
     fn decl_stmt_def(&mut self, s: &StmtDef) {
-        self.stack.bind_def(s.name.clone(), s.clone());
+        self.stack.bind_def(s.name, s.clone());
     }
 
     fn decl_stmt_impl(&mut self, s: &StmtImpl) {
@@ -258,14 +258,14 @@ impl Context {
                     unreachable!();
                 };
                 match x.data.as_str() {
-                    "i8" => Value::I8(v.parse().unwrap()),
-                    "i16" => Value::I16(v.parse().unwrap()),
-                    "i32" => Value::I32(v.parse().unwrap()),
-                    "i64" => Value::I64(v.parse().unwrap()),
-                    "u8" => Value::U8(v.parse().unwrap()),
-                    "u16" => Value::U16(v.parse().unwrap()),
-                    "u32" => Value::U32(v.parse().unwrap()),
-                    "u64" => Value::U64(v.parse().unwrap()),
+                    "i8" => Value::I8(v.as_str().parse().unwrap()),
+                    "i16" => Value::I16(v.as_str().parse().unwrap()),
+                    "i32" => Value::I32(v.as_str().parse().unwrap()),
+                    "i64" => Value::I64(v.as_str().parse().unwrap()),
+                    "u8" => Value::U8(v.as_str().parse().unwrap()),
+                    "u16" => Value::U16(v.as_str().parse().unwrap()),
+                    "u32" => Value::U32(v.as_str().parse().unwrap()),
+                    "u64" => Value::U64(v.as_str().parse().unwrap()),
                     _ => unreachable!(),
                 }
             }
@@ -274,8 +274,8 @@ impl Context {
                     unreachable!();
                 };
                 match x.data.as_str() {
-                    "f32" => Value::F32(v.parse().unwrap()),
-                    "f64" => Value::F64(v.parse().unwrap()),
+                    "f32" => Value::F32(v.as_str().parse().unwrap()),
+                    "f64" => Value::F64(v.as_str().parse().unwrap()),
                     _ => unreachable!(),
                 }
             }
@@ -283,7 +283,7 @@ impl Context {
             Expr::Char(_, _, v) => Value::Char(*v),
             Expr::String(_, _, v) => Value::from(runtime::prelude::String::from(v.as_str())),
             Expr::Struct(_, _, _, _, xes) => {
-                let xvs = xes.iter().map(|(n, e)| (n.clone(), self.expr(e))).collect();
+                let xvs = xes.iter().map(|(n, e)| (*n, self.expr(e))).collect();
                 Value::from(Record::new(xvs))
             }
             Expr::Tuple(_, _, es) => {
@@ -291,12 +291,12 @@ impl Context {
                 Value::from(Tuple::new(vs))
             }
             Expr::Record(_, _, xes) => {
-                let xvs = xes.iter().map(|(n, e)| (n.clone(), self.expr(e))).collect();
+                let xvs = xes.iter().map(|(n, e)| (*n, self.expr(e))).collect();
                 Value::from(Record::new(xvs))
             }
             Expr::Enum(_, _, _, _, x1, e) => {
                 let v = self.expr(e);
-                Value::from(Variant::new(x1.clone(), v))
+                Value::from(Variant::new(*x1, v))
             }
             Expr::Field(_, _, e, x) => {
                 let rec = self.expr(e).as_record();
@@ -307,10 +307,8 @@ impl Context {
                 tup[i].clone()
             }
             Expr::Var(_, _, x) => self.stack.get_val(x).clone(),
-            Expr::Def(_, _, x, ts) => Value::from(Fun::new_def(x.clone(), ts.clone())),
-            Expr::Assoc(_, _, tb, x, ts) => {
-                Value::from(Fun::new_assoc(tb.clone(), x.clone(), ts.clone()))
-            }
+            Expr::Def(_, _, x, ts) => Value::from(Fun::new_def(*x, ts.clone())),
+            Expr::Assoc(_, _, tb, x, ts) => Value::from(Fun::new_assoc(tb.clone(), *x, ts.clone())),
             Expr::Call(_, _, e, es) => {
                 let f = self.expr(e).as_function();
                 let vs = es.iter().map(|e| self.expr(e)).collect::<Vec<_>>();
@@ -319,8 +317,8 @@ impl Context {
                         let s = self.stack.get_def(&x).clone();
                         match s.body {
                             StmtDefBody::UserDefined(e) => self.scoped(|ctx| {
-                                for (p, v) in s.params.iter().zip(vs) {
-                                    ctx.stack.bind_val(p.name.clone(), v)
+                                for (x, v) in s.params.keys().zip(vs) {
+                                    ctx.stack.bind_val(*x, v)
                                 }
                                 ctx.expr(&e)
                             }),
@@ -333,10 +331,10 @@ impl Context {
                         println!("Found: {}", s);
                         let s = s.defs.iter().find(|d| d.name == x).unwrap();
                         self.scoped(|ctx| {
-                            for (p, v) in s.params.iter().zip(vs) {
-                                ctx.stack.bind_val(p.name.clone(), v)
+                            for (x, v) in s.params.keys().zip(vs) {
+                                ctx.stack.bind_val(*x, v)
                             }
-                            ctx.expr(&e)
+                            ctx.expr(e)
                         })
                     }
                 }

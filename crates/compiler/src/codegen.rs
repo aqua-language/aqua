@@ -4,7 +4,6 @@ use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::Index;
 use crate::ast::Name;
-use crate::ast::Param;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Program;
@@ -75,11 +74,11 @@ impl<'a, 'b> Rust<'a, 'b> {
         self.newline_sep(&p.stmts, Self::stmt)
     }
 
-    fn param(&mut self, p: &Param) -> std::fmt::Result {
-        self.name(&p.name)?;
+    fn param(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
+        self.name(x)?;
         self.punct(":")?;
         self.space()?;
-        self.ty(&p.ty)
+        self.ty(t)
     }
 
     fn stmt(&mut self, s: &Stmt) -> std::fmt::Result {
@@ -189,8 +188,8 @@ impl<'a, 'b> Rust<'a, 'b> {
         self.space()?;
         self.brace(|this| {
             this.indented(|this| {
-                this.newline_sep(&s.defs, Self::stmt_def_decl)?;
-                this.newline_sep(&s.types, Self::stmt_type_decl)
+                this.newline_sep(&s.defs, |ctx, s| ctx.stmt_def_decl(s))?;
+                this.newline_sep(&s.types, |ctx, s| ctx.stmt_type_decl(s))
             })
         })
     }

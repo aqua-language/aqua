@@ -1,11 +1,14 @@
+mod common;
+
+use common::ty;
+use common::ty_con;
+use common::ty_var;
+use compiler::ast::Map;
 use compiler::infer::unify;
-use compiler::dsl::ty;
-use compiler::dsl::ty_con;
-use compiler::dsl::ty_var;
 
 #[test]
 fn test_unify_atom0() {
-    let mut sub = vec![];
+    let mut sub = Map::new();
     let t0 = ty("i32");
     let t1 = ty("i32");
     assert!(unify(&mut sub, &t0, &t1).is_ok());
@@ -14,7 +17,7 @@ fn test_unify_atom0() {
 
 #[test]
 fn test_unify_atom1() {
-    let mut sub = vec![];
+    let mut sub = Map::new();
     let t0 = ty("i32");
     let t1 = ty("i64");
     assert_eq!(unify(&mut sub, &t0, &t1), Err((ty("i32"), ty("i64"))));
@@ -23,7 +26,7 @@ fn test_unify_atom1() {
 
 #[test]
 fn test_unify_var0() {
-    let mut sub = vec![];
+    let mut sub = Map::new();
     let t0 = ty_var("?T");
     let t1 = ty("i32");
     assert!(unify(&mut sub, &t0, &t1).is_ok());
@@ -31,7 +34,7 @@ fn test_unify_var0() {
 
 #[test]
 fn test_unify_var1() {
-    let mut sub = vec![];
+    let mut sub = Map::new();
     let t0 = ty("i32");
     let t1 = ty_var("?T");
     assert!(unify(&mut sub, &t0, &t1).is_ok());
@@ -39,7 +42,7 @@ fn test_unify_var1() {
 
 #[test]
 fn test_unify_var2() {
-    let mut sub = vec![];
+    let mut sub = Map::new();
     let t0 = ty_var("?T");
     let t1 = ty_var("?U");
     assert!(unify(&mut sub, &t0, &t1).is_ok());
@@ -47,7 +50,7 @@ fn test_unify_var2() {
 
 #[test]
 fn test_unify_var3() {
-    let mut sub = vec![("T".into(), ty("i32")), ("U".into(), ty("i32"))];
+    let mut sub = Map::from([("T".into(), ty("i32")), ("U".into(), ty("i32"))]);
     let t0 = ty_var("?T");
     let t1 = ty_var("?U");
     assert!(unify(&mut sub, &t0, &t1).is_ok());
@@ -55,7 +58,7 @@ fn test_unify_var3() {
 
 #[test]
 fn test_unify_tc0() {
-    let mut sub = vec![("T".into(), ty("i32"))];
+    let mut sub = Map::from([("T".into(), ty("i32"))]);
     let t0 = ty_con("Vec", [ty_var("?T")]);
     let t1 = ty_con("Vec", [ty("i32")]);
     assert!(unify(&mut sub, &t0, &t1).is_ok());
@@ -63,7 +66,7 @@ fn test_unify_tc0() {
 
 #[test]
 fn test_unify_tc1() {
-    let mut sub = Vec::new();
+    let mut sub = Map::new();
     let t0 = ty_con("Vec", [ty_var("?T")]);
     let t1 = ty_con("Vec", [ty_var("?U")]);
     assert!(unify(&mut sub, &t0, &t1).is_ok());
@@ -71,7 +74,7 @@ fn test_unify_tc1() {
 
 #[test]
 fn test_unify_tc2() {
-    let mut sub = vec![("T".into(), ty("i32"))];
+    let mut sub = Map::from([("T".into(), ty("i32"))]);
     let t0 = ty_con("Vec", [ty_con("Vec", [ty_var("?T")])]);
     let t1 = ty_con("Vec", [ty_con("Vec", [ty_var("?U")])]);
     assert!(unify(&mut sub, &t0, &t1).is_ok());
@@ -79,7 +82,7 @@ fn test_unify_tc2() {
 
 #[test]
 fn test_unify_tc3() {
-    let mut sub = vec![("T".into(), ty_con("Vec", [ty("i32")]))];
+    let mut sub = Map::from([("T".into(), ty_con("Vec", [ty("i32")]))]);
     let t0 = ty_con("Vec", [ty_var("?T")]);
     let t1 = ty_con("Vec", [ty_con("Vec", [ty("i32")])]);
     assert!(unify(&mut sub, &t0, &t1).is_ok());
@@ -87,7 +90,7 @@ fn test_unify_tc3() {
 
 #[test]
 fn test_unify_tc4() {
-    let mut sub = vec![("?T".into(), ty("i32"))];
+    let mut sub = Map::from([("?T".into(), ty("i32"))]);
     let t0 = ty_con("Vec", [ty_var("?T")]);
     let t1 = ty_con("Vec", [ty("i64")]);
     assert_eq!(

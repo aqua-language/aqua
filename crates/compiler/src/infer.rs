@@ -18,9 +18,8 @@ use crate::ast::StmtType;
 use crate::ast::StmtVar;
 use crate::ast::Type;
 use crate::diag::Report;
-use crate::dsl::ty;
-use crate::dsl::ty_unit;
 use crate::lexer::Span;
+use crate::map::Map;
 
 impl Default for Context {
     fn default() -> Self {
@@ -32,18 +31,18 @@ impl Default for Context {
 pub struct Context {
     tvars: usize,
     stack: Vec<Scope>,
-    pub impls: Vec<StmtImpl>,
-    defs: HashMap<Name, StmtDef>,
-    structs: HashMap<Name, StmtStruct>,
-    enums: HashMap<Name, StmtEnum>,
-    traits: HashMap<Name, StmtTrait>,
-    types: HashMap<Name, StmtType>,
+    pub impls: Vec<Rc<StmtImpl>>,
+    defs: HashMap<Name, Rc<StmtDef>>,
+    structs: HashMap<Name, Rc<StmtStruct>>,
+    enums: HashMap<Name, Rc<StmtEnum>>,
+    traits: HashMap<Name, Rc<StmtTrait>>,
+    types: HashMap<Name, Rc<StmtType>>,
     pub report: Report,
 }
 
 #[derive(Default, Debug)]
 pub struct Scope {
-    binds: Vec<(Name, Binding)>,
+    binds: Map<Name, Binding>,
 }
 
 impl Scope {
@@ -56,11 +55,6 @@ impl Scope {
 pub enum Binding {
     Var(Span, Type),
     Type(Span, Vec<Name>),
-    // TypeAlias(Span, Type, Vec<Name>),
-    // Def(Span, Vec<Name>, Vec<Bound>, Vec<Type>, Type),
-    // Struct(Span, Vec<Name>, Vec<(Name, Type)>),
-    // Enum(Span, Vec<Name>, Vec<(Name, Type)>),
-    // Trait(StmtTrait),
 }
 
 impl Context {
@@ -110,7 +104,7 @@ impl Context {
     }
 
     pub fn bind(&mut self, name: Name, b: Binding) {
-        self.stack.last_mut().unwrap().binds.push((name, b));
+        self.stack.last_mut().unwrap().binds.insert(name, b);
     }
 
     pub fn scope<T>(&mut self, f: impl FnOnce(&mut Context) -> T) -> T {
@@ -122,7 +116,7 @@ impl Context {
 
     pub fn infer(&mut self, p: &Program) -> Program {
         let mut goals = Vec::new();
-        let mut sub = Vec::new();
+        let mut sub = Map::new();
         let program = p.annotate(self);
         program.stmts.iter().for_each(|s| self.declare_stmt(s));
         let stmts = program
@@ -148,34 +142,34 @@ impl Context {
         match s {
             Stmt::Var(_) => {}
             Stmt::Def(s) => {
-                self.defs.insert(s.name.clone(), s.clone());
+                self.defs.insert(s.name, s.clone());
             }
             Stmt::Impl(s) => {
                 self.impls.push(s.clone());
             }
             Stmt::Expr(_) => {}
             Stmt::Struct(s) => {
-                self.structs.insert(s.name.clone(), s.clone());
+                self.structs.insert(s.name, s.clone());
             }
             Stmt::Enum(s) => {
-                self.enums.insert(s.name.clone(), s.clone());
+                self.enums.insert(s.name, s.clone());
             }
             Stmt::Type(s) => {
-                self.types.insert(s.name.clone(), s.clone());
+                self.types.insert(s.name, s.clone());
             }
             Stmt::Trait(s) => {
-                self.traits.insert(s.name.clone(), s.clone());
+                self.traits.insert(s.name, s.clone());
             }
             Stmt::Err(_) => todo!(),
         }
     }
 
-    pub fn stmt(&mut self, s: &Stmt, sub: &mut Vec<(Name, Type)>, goals: &mut Vec<Bound>) -> Stmt {
+    pub fn stmt(&mut self, s: &Stmt, sub: &mut Map<Name, Type>, goals: &mut Vec<Bound>) -> Stmt {
         match s {
-            Stmt::Var(s) => Stmt::Var(self.stmt_var(s, sub, goals)),
-            Stmt::Def(s) => Stmt::Def(self.stmt_def(s)),
-            Stmt::Impl(s) => Stmt::Impl(self.stmt_impl(s)),
-            Stmt::Expr(e) => Stmt::Expr(self.expr(e, sub, goals)),
+            Stmt::Var(s) => Stmt::Var(Rc::new(self.stmt_var(s, sub, goals))),
+            Stmt::Def(s) => Stmt::Def(Rc::new(self.stmt_def(s))),
+            Stmt::Impl(s) => Stmt::Impl(Rc::new(self.stmt_impl(s))),
+            Stmt::Expr(e) => Stmt::Expr(Rc::new(self.expr(e, sub, goals))),
             Stmt::Struct(s) => Stmt::Struct(s.clone()),
             Stmt::Enum(s) => Stmt::Enum(s.clone()),
             Stmt::Type(s) => Stmt::Type(s.clone()),
@@ -187,20 +181,24 @@ impl Context {
     pub fn stmt_var(
         &mut self,
         s: &StmtVar,
-        sub: &mut Vec<(Name, Type)>,
+        sub: &mut Map<Name, Type>,
         goals: &mut Vec<Bound>,
     ) -> StmtVar {
         let e = self.expr(&s.expr, sub, goals);
         self.recover(s.span, e.span(), unify(sub, &s.ty, e.ty()));
-        self.bind(s.name.clone(), Binding::Var(s.span, s.ty.clone()));
-        StmtVar::new(e.span(), s.name.clone(), s.ty.clone(), e)
+        self.bind(s.name, Binding::Var(s.span, s.ty.clone()));
+        StmtVar::new(e.span(), s.name, s.ty.clone(), e)
     }
 
     pub fn stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
         let span = s.span;
         let generics = s.generics.clone();
         let head = s.head.clone();
-        let defs = s.defs.iter().map(|d| self.stmt_def(d)).collect::<Vec<_>>();
+        let defs = s
+            .defs
+            .iter()
+            .map(|d| Rc::new(self.stmt_def(d)))
+            .collect::<Vec<_>>();
         let types = s.types.clone();
         let where_clause = s.where_clause.clone();
         StmtImpl::new(span, generics, head, where_clause, defs, types)
@@ -210,10 +208,10 @@ impl Context {
         self.scope(|ctx| {
             match &s.body {
                 StmtDefBody::UserDefined(e) => {
-                    let mut sub = vec![];
+                    let mut sub = Map::new();
                     let mut goals = vec![];
-                    for p in &s.params {
-                        ctx.bind(p.name.clone(), Binding::Var(p.span, p.ty.clone()));
+                    for (x, t) in &s.params {
+                        ctx.bind(*x, Binding::Var(x.span, t.clone()));
                     }
                     let e1 = ctx.expr(e, &mut sub, &mut goals);
                     ctx.recover(s.span, e1.span(), unify(&mut sub, &s.ty, e1.ty()));
@@ -226,7 +224,7 @@ impl Context {
                     }
                     StmtDef::new(
                         s.span,
-                        s.name.clone(),
+                        s.name,
                         s.generics.clone(),
                         s.params.clone(),
                         s.ty.clone(),
@@ -237,7 +235,7 @@ impl Context {
                 }
                 StmtDefBody::Builtin(b) => StmtDef::new(
                     s.span,
-                    s.name.clone(),
+                    s.name,
                     s.generics.clone(),
                     s.params.clone(),
                     s.ty.clone(),
@@ -248,37 +246,37 @@ impl Context {
         })
     }
 
-    fn block(&mut self, b: &Block, sub: &mut Vec<(Name, Type)>, goals: &mut Vec<Bound>) -> Block {
+    fn block(&mut self, b: &Block, sub: &mut Map<Name, Type>, goals: &mut Vec<Bound>) -> Block {
         let span = b.span;
         let ss = b.stmts.iter().map(|s| self.stmt(s, sub, goals)).collect();
         let e = self.expr(&b.expr, sub, goals);
         Block::new(span, ss, e)
     }
 
-    pub fn expr(&mut self, e: &Expr, sub: &mut Vec<(Name, Type)>, goals: &mut Vec<Bound>) -> Expr {
+    pub fn expr(&mut self, e: &Expr, sub: &mut Map<Name, Type>, goals: &mut Vec<Bound>) -> Expr {
         let s = e.span();
         match e {
             Expr::Unresolved(..) => unreachable!(),
             Expr::Int(_, t0, v) => {
-                let t1 = ty("i32");
+                let t1 = Type::i32();
                 let v = v.clone();
                 self.recover(s, s, unify(sub, t0, &t1));
                 Expr::Int(s, t0.apply(sub), v)
             }
             Expr::Float(_, t0, v) => {
-                let t1 = ty("f32");
+                let t1 = Type::f64();
                 let v = v.clone();
                 self.recover(s, s, unify(sub, t0, &t1));
                 Expr::Float(s, t0.apply(sub), v)
             }
             Expr::Bool(_, t0, v) => {
-                let t1 = ty("bool");
+                let t1 = Type::bool();
                 let v = *v;
                 self.recover(s, s, unify(sub, t0, &t1));
                 Expr::Bool(s, t0.apply(sub), v)
             }
             Expr::String(_, t0, v) => {
-                let t1 = ty("String");
+                let t1 = Type::string();
                 let v = v.clone();
                 self.recover(s, s, unify(sub, t0, &t1));
                 Expr::String(s, t0.apply(sub), v)
@@ -301,14 +299,15 @@ impl Context {
                     let e = self.expr(&e, sub, goals);
                     self.recover(e.span(), stmt.span, unify(sub, e.ty(), &t2));
                 }
-                let t1 = Type::Cons(x.clone(), ts.clone());
+                let t1 = Type::Cons(*x, ts.clone());
                 self.recover(s, stmt.span, unify(sub, t0, &t1));
-                Expr::Struct(s, t0.apply(sub), x.clone(), ts.clone(), xes.clone())
+                Expr::Struct(s, t0.apply(sub), *x, ts.clone(), xes.clone())
             }
             Expr::Enum(_, t0, x, ts, x1, e) => {
                 let stmt = self.enums.get(x).unwrap().clone();
                 let gsub = stmt
                     .generics
+                    .clone()
                     .into_iter()
                     .zip(ts.clone())
                     .collect::<Vec<_>>();
@@ -320,16 +319,9 @@ impl Context {
                     .instantiate(&gsub);
                 let e = self.expr(e, sub, goals);
                 self.recover(e.span(), stmt.span, unify(sub, e.ty(), &t2));
-                let t1 = Type::Cons(x.clone(), ts.clone());
+                let t1 = Type::Cons(*x, ts.clone());
                 self.recover(s, stmt.span, unify(sub, t0, &t1));
-                Expr::Enum(
-                    s,
-                    t0.apply(sub),
-                    x.clone(),
-                    ts.clone(),
-                    x1.clone(),
-                    e.into(),
-                )
+                Expr::Enum(s, t0.apply(sub), *x, ts.clone(), *x1, e.into())
             }
             Expr::Tuple(_, t0, es) => {
                 let es = es
@@ -346,19 +338,20 @@ impl Context {
                     unreachable!()
                 };
                 self.recover(s, s1, unify(sub, t0, &t1));
-                Expr::Var(s, t0.apply(sub), x.clone())
+                Expr::Var(s, t0.apply(sub), *x)
             }
             Expr::Def(_, t0, x, ts0) => {
                 let stmt = self.defs.get(x).unwrap().clone();
                 let gsub = stmt
                     .generics
+                    .clone()
                     .into_iter()
                     .zip(ts0.clone())
                     .collect::<Vec<_>>();
                 let ts = stmt
                     .params
-                    .iter()
-                    .map(|p| p.ty.instantiate(&gsub))
+                    .values()
+                    .map(|t| t.instantiate(&gsub))
                     .collect::<Vec<_>>();
                 let t1 = stmt.ty.instantiate(&gsub);
                 let preds = stmt
@@ -369,7 +362,7 @@ impl Context {
                 goals.extend(preds);
                 let t2 = Type::Fun(ts, Rc::new(t1));
                 self.recover(s, stmt.span, unify(sub, t0, &t2));
-                Expr::Def(s, t0.apply(sub), x.clone(), ts0.clone())
+                Expr::Def(s, t0.apply(sub), *x, ts0.clone())
             }
             Expr::Call(_, t0, e, es) => {
                 let e = self.expr(e, sub, goals);
@@ -396,6 +389,7 @@ impl Context {
                         let stmt = self.structs.get(&x0).unwrap().clone();
                         let gsub = stmt
                             .generics
+                            .clone()
                             .into_iter()
                             .zip(ts.clone())
                             .collect::<Vec<_>>();
@@ -406,7 +400,7 @@ impl Context {
                             .unwrap()
                             .instantiate(&gsub);
                         self.recover(s, e.span(), unify(sub, t0, &t1));
-                        Expr::Field(s, t0.apply(sub), e.into(), x.clone())
+                        Expr::Field(s, t0.apply(sub), e.into(), *x)
                     }
                     Type::Record(xts) => {
                         let t1 = xts
@@ -415,7 +409,7 @@ impl Context {
                             .unwrap()
                             .clone();
                         self.recover(s, e.span(), unify(sub, t0, &t1));
-                        Expr::Field(s, t0.apply(sub), e.into(), x.clone())
+                        Expr::Field(s, t0.apply(sub), e.into(), *x)
                     }
                     _ => {
                         self.report.err(
@@ -423,7 +417,7 @@ impl Context {
                             "Unknown type",
                             format!("Type {t} must be known at this point."),
                         );
-                        return Expr::Err(s, t.clone());
+                        Expr::Err(s, t.clone())
                     }
                 }
             }
@@ -450,7 +444,7 @@ impl Context {
                 Expr::Index(s, t0.apply(sub), e.into(), *i)
             }
             Expr::Assoc(span, t0, b, x1, ts1) => {
-                let stmt = self.traits.get(&b.name).unwrap();
+                let stmt = self.traits.get(&b.name).unwrap_or_else(|| panic!("Unknown trait {b}"));
                 let d = stmt.defs.iter().find(|d| &d.name == x1).unwrap();
                 let gs0 = stmt.generics.clone();
                 let gs1 = d.generics.clone();
@@ -459,14 +453,14 @@ impl Context {
                     .chain(gs1)
                     .zip(b.ts.clone().into_iter().chain(ts1.clone()))
                     .collect::<Vec<_>>();
-                let param_ts = d.params.iter().map(|p| p.ty.clone()).collect::<Vec<_>>();
+                let param_ts = d.params.values().map(|t| t.clone()).collect::<Vec<_>>();
                 let return_t = d.ty.clone();
                 let fun_t = Type::Fun(param_ts, Rc::new(return_t)).instantiate(&gsub0);
                 self.recover(s, e.span(), unify(sub, t0, &fun_t));
                 let b = b.map_type(&|t| t.apply(sub));
                 let ts1 = ts1.iter().map(|t| t.apply(sub)).collect::<Vec<_>>();
                 goals.push(Bound::Trait(*span, b.clone()));
-                Expr::Assoc(s, t0.apply(sub), b, x1.clone(), ts1)
+                Expr::Assoc(s, t0.apply(sub), b, *x1, ts1)
             }
             Expr::Array(_, t0, es) => {
                 let es = es
@@ -489,7 +483,7 @@ impl Context {
                 let e0 = self.expr(e0, sub, goals);
                 let e1 = self.expr(e1, sub, goals);
                 self.recover(s, e0.span(), unify(sub, e0.ty(), e1.ty()));
-                self.recover(s, e0.span(), unify(sub, t0, &ty_unit()));
+                self.recover(s, e0.span(), unify(sub, t0, &Type::unit()));
                 Expr::Assign(s, t0.apply(sub), Rc::new(e0), Rc::new(e1))
             }
             Expr::Return(_, _, _) => unreachable!(),
@@ -511,7 +505,7 @@ impl Context {
         &mut self,
         goal: &Bound,
         where_clause: &[Bound],
-        sub0: &mut Vec<(Name, Type)>,
+        sub0: &mut Map<Name, Type>,
     ) -> Option<Candidate> {
         let mut solutions = vec![];
         for tr in where_clause {
@@ -543,7 +537,7 @@ impl Context {
 }
 
 // Checks if i0 and i1 match, and if so, returns a substitution.
-fn matches(s: &mut Vec<(Name, Type)>, b0: &Bound, b1: &Bound) -> bool {
+fn matches(s: &mut Map<Name, Type>, b0: &Bound, b1: &Bound) -> bool {
     match (b0, b1) {
         (Bound::Trait(_, b0), Bound::Trait(_, b1)) => {
             b0.name == b1.name
@@ -565,7 +559,7 @@ fn matches(s: &mut Vec<(Name, Type)>, b0: &Bound, b1: &Bound) -> bool {
 }
 
 #[track_caller]
-pub fn unify(s0: &mut Vec<(Name, Type)>, t0: &Type, t1: &Type) -> Result<(), (Type, Type)> {
+pub fn unify(s0: &mut Map<Name, Type>, t0: &Type, t1: &Type) -> Result<(), (Type, Type)> {
     let t0 = t0.apply(s0);
     let t1 = t1.apply(s0);
     let Some(s1) = mgu(&t0, &t1) else {
@@ -575,7 +569,7 @@ pub fn unify(s0: &mut Vec<(Name, Type)>, t0: &Type, t1: &Type) -> Result<(), (Ty
     Ok(())
 }
 
-fn compose(s0: Vec<(Name, Type)>, s1: Vec<(Name, Type)>) -> Vec<(Name, Type)> {
+fn compose(s0: Map<Name, Type>, s1: Map<Name, Type>) -> Map<Name, Type> {
     s1.into_iter()
         .map(|(x, t)| (x, t.apply(&s0)))
         .chain(s0.clone())
@@ -585,23 +579,25 @@ fn compose(s0: Vec<(Name, Type)>, s1: Vec<(Name, Type)>) -> Vec<(Name, Type)> {
 fn mgu_fold<'a>(
     ts0: impl IntoIterator<Item = &'a Type>,
     ts1: impl IntoIterator<Item = &'a Type>,
-) -> Option<Vec<(Name, Type)>> {
-    ts0.into_iter().zip(ts1).try_fold(vec![], |s0, (t0, t1)| {
-        let t0 = t0.apply(&s0);
-        let t1 = t1.apply(&s0);
-        let s1 = mgu(&t0, &t1)?;
-        Some(compose(s1, s0))
-    })
+) -> Option<Map<Name, Type>> {
+    ts0.into_iter()
+        .zip(ts1)
+        .try_fold(Map::new(), |s0, (t0, t1)| {
+            let t0 = t0.apply(&s0);
+            let t1 = t1.apply(&s0);
+            let s1 = mgu(&t0, &t1)?;
+            Some(compose(s1, s0))
+        })
 }
 
-fn mgu(t0: &Type, t1: &Type) -> Option<Vec<(Name, Type)>> {
+fn mgu(t0: &Type, t1: &Type) -> Option<Map<Name, Type>> {
     match (t0, t1) {
         (Type::Cons(x0, ts0), Type::Cons(x1, ts1)) => {
             (x0 == x1 && ts0.len() == ts1.len()).then(|| mgu_fold(ts0, ts1))?
         }
         (Type::Var(x), t) | (t, Type::Var(x)) => (t0 != t1)
-            .then(|| vec![(x.clone(), t.clone())])
-            .or_else(|| Some(vec![])),
+            .then(|| Map::singleton(*x, t.clone()))
+            .or_else(|| Some(Map::new())),
         (Type::Fun(ts0, t0), Type::Fun(ts1, t1)) => (ts0.len() == ts1.len()).then(|| {
             mgu_fold(
                 ts0.iter().chain([t0.as_ref()]),
@@ -610,8 +606,8 @@ fn mgu(t0: &Type, t1: &Type) -> Option<Vec<(Name, Type)>> {
         })?,
         (Type::Tuple(ts0), Type::Tuple(ts1)) => (ts0.len() == ts1.len())
             .then(|| mgu_fold(ts0.iter().chain(ts1), ts1.iter().chain(ts0)))?,
-        (Type::Err, _) | (_, Type::Err) => Some(vec![]),
-        (Type::Generic(x0), Type::Generic(x1)) => (x0 == x1).then(Vec::new),
+        (Type::Err, _) | (_, Type::Err) => Some(Map::new()),
+        (Type::Generic(x0), Type::Generic(x1)) => (x0 == x1).then(Map::new),
         (Type::Assoc(tb, x, _), t2) | (t2, Type::Assoc(tb, x, _)) => {
             let t3 = tb
                 .xts
@@ -631,7 +627,7 @@ impl Context {
         let sub = s
             .generics
             .iter()
-            .map(|q| (q.clone(), self.new_tyvar()))
+            .map(|x| (*x, self.new_tyvar()))
             .collect::<Vec<_>>();
 
         let head = s.head.map_type(&|t| t.instantiate(&sub));
@@ -643,12 +639,12 @@ impl Context {
         let stmt_defs = s
             .defs
             .iter()
-            .map(|s| s.map_type(&|t| t.apply(&sub)))
+            .map(|s| Rc::new(s.map_type(&|t| t.apply(&sub))))
             .collect::<Vec<_>>();
         let stmt_types = s
             .types
             .iter()
-            .map(|s| s.map_type(&|t| t.apply(&sub)))
+            .map(|s| Rc::new(s.map_type(&|t| t.apply(&sub))))
             .collect::<Vec<_>>();
 
         StmtImpl::new(s.span, vec![], head, body, stmt_defs, stmt_types)

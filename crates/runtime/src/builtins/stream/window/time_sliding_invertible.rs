@@ -40,7 +40,7 @@ impl<T: Data> Stream<T> {
                             let wr = WindowRange::of(*entry.key(), duration, step);
                             if wr.t1 < time {
                                 for (_, p) in buffer.range(..wr.t1) {
-                                    agg = combine(&agg, &p);
+                                    agg = combine(&agg, p);
                                 }
                                 let data = lower(&agg, wr);
                                 tx.send(Event::Data(wr.t1, data.deep_clone())).await;

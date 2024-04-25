@@ -4,7 +4,6 @@ use crate::ast::Arm;
 use crate::ast::Block;
 use crate::ast::Bound;
 use crate::ast::Expr;
-use crate::ast::Param;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Program;
@@ -34,26 +33,18 @@ impl Type {
     pub fn annotate(&self, ctx: &mut Context) -> Type {
         match self {
             Type::Cons(x, ts) => {
-                let x = x.clone();
                 let ts = map(ts, |t| t.annotate(ctx));
-                Type::Cons(x, ts)
+                Type::Cons(*x, ts)
             }
             Type::Assoc(b, x1, ts1) => {
                 let b = b.annotate(ctx);
-                let x1 = x1.clone();
                 let ts1 = map(ts1, |t| t.annotate(ctx));
-                Type::Assoc(b, x1, ts1)
+                Type::Assoc(b, *x1, ts1)
             }
-            Type::Var(x) => {
-                let x = x.clone();
-                Type::Var(x)
-            }
+            Type::Var(x) => Type::Var(*x),
             Type::Hole => ctx.new_tyvar(),
             Type::Err => Type::Err,
-            Type::Generic(x) => {
-                let x = x.clone();
-                Type::Generic(x)
-            }
+            Type::Generic(x) => Type::Generic(*x),
             Type::Fun(ts, t) => {
                 let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
                 let t = Rc::new(t.annotate(ctx));
@@ -64,16 +55,12 @@ impl Type {
                 Type::Tuple(ts)
             }
             Type::Record(xts) => {
-                let xts = xts
-                    .iter()
-                    .map(|(x, t)| (x.clone(), t.annotate(ctx)))
-                    .collect();
+                let xts = xts.iter().map(|(x, t)| (*x, t.annotate(ctx))).collect();
                 Type::Record(xts)
             }
             Type::Alias(x, ts) => {
-                let x = x.clone();
                 let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
-                Type::Alias(x, ts)
+                Type::Alias(*x, ts)
             }
             Type::Unresolved(p) => {
                 let p = p.annotate(ctx);
@@ -98,12 +85,12 @@ impl Path {
 
 impl Segment {
     pub fn annotate(&self, ctx: &mut Context) -> Segment {
-        let x = self.name.clone();
-        let ts = self.types.iter().map(|t| t.annotate(ctx)).collect();
+        let x = self.name;
+        let ts = self.ts.iter().map(|t| t.annotate(ctx)).collect();
         let xts = self
-            .named_types
+            .xts
             .iter()
-            .map(|(x, t)| (x.clone(), t.annotate(ctx)))
+            .map(|(x, t)| (*x, t.annotate(ctx)))
             .collect();
         Segment::new(self.span, x, ts, xts)
     }
@@ -121,35 +108,35 @@ impl Stmt {
         match self {
             Stmt::Var(v) => {
                 let v = v.annotate(ctx);
-                Stmt::Var(v)
+                Stmt::Var(Rc::new(v))
             }
             Stmt::Def(d) => {
                 let d = d.annotate(ctx);
-                Stmt::Def(d)
+                Stmt::Def(Rc::new(d))
             }
             Stmt::Impl(i) => {
                 let i = i.annotate(ctx);
-                Stmt::Impl(i)
+                Stmt::Impl(Rc::new(i))
             }
             Stmt::Expr(e) => {
                 let e = e.annotate(ctx);
-                Stmt::Expr(e)
+                Stmt::Expr(Rc::new(e))
             }
             Stmt::Struct(s) => {
                 let s = s.annotate(ctx);
-                Stmt::Struct(s)
+                Stmt::Struct(Rc::new(s))
             }
             Stmt::Enum(e) => {
                 let e = e.annotate(ctx);
-                Stmt::Enum(e)
+                Stmt::Enum(Rc::new(e))
             }
             Stmt::Type(s) => {
                 let s = s.annotate(ctx);
-                Stmt::Type(s)
+                Stmt::Type(Rc::new(s))
             }
             Stmt::Trait(s) => {
                 let s = s.annotate(ctx);
-                Stmt::Trait(s)
+                Stmt::Trait(Rc::new(s))
             }
             Stmt::Err(_) => todo!(),
         }
@@ -159,12 +146,12 @@ impl Stmt {
 impl StmtStruct {
     pub fn annotate(&self, ctx: &mut Context) -> StmtStruct {
         let span = self.span;
-        let name = self.name.clone();
+        let name = self.name;
         let generics = self.generics.clone();
         let fields = self
             .fields
             .iter()
-            .map(|(x, t)| (x.clone(), t.annotate(ctx)))
+            .map(|(x, t)| (*x, t.annotate(ctx)))
             .collect();
         StmtStruct::new(span, name, generics, fields)
     }
@@ -173,7 +160,7 @@ impl StmtStruct {
 impl StmtType {
     pub fn annotate(&self, ctx: &mut Context) -> StmtType {
         let span = self.span;
-        let name = self.name.clone();
+        let name = self.name;
         let generics = self.generics.clone();
         let ty = self.body.annotate(ctx);
         StmtType::new(span, name, generics, ty)
@@ -195,12 +182,12 @@ impl StmtTypeBody {
 impl StmtEnum {
     pub fn annotate(&self, ctx: &mut Context) -> StmtEnum {
         let span = self.span;
-        let name = self.name.clone();
+        let name = self.name;
         let generics = self.generics.clone();
         let variants = self
             .variants
             .iter()
-            .map(|(x, t)| (x.clone(), t.annotate(ctx)))
+            .map(|(x, t)| (*x, t.annotate(ctx)))
             .collect();
         StmtEnum::new(span, name, generics, variants)
     }
@@ -209,7 +196,7 @@ impl StmtEnum {
 impl StmtVar {
     pub fn annotate(&self, ctx: &mut Context) -> StmtVar {
         let span = self.span;
-        let x = self.name.clone();
+        let x = self.name;
         let t = self.ty.annotate(ctx);
         let e = self.expr.annotate(ctx);
         StmtVar::new(span, x, t, e)
@@ -219,10 +206,10 @@ impl StmtVar {
 impl StmtDef {
     pub fn annotate(&self, ctx: &mut Context) -> StmtDef {
         let span = self.span;
-        let name = self.name.clone();
+        let name = self.name;
         let generics = self.generics.clone();
         let preds = self.where_clause.iter().map(|p| p.annotate(ctx)).collect();
-        let params = self.params.iter().map(|p| p.annotate(ctx)).collect();
+        let params = self.params.map_values(|t| t.annotate(ctx));
         let ty = self.ty.annotate(ctx);
         let body = self.body.annotate(ctx);
         StmtDef::new(span, name, generics, params, ty, preds, body)
@@ -247,8 +234,8 @@ impl StmtImpl {
         let generics = self.generics.clone();
         let head = self.head.annotate(ctx);
         let body = self.where_clause.iter().map(|p| p.annotate(ctx)).collect();
-        let defs = self.defs.iter().map(|d| d.annotate(ctx)).collect();
-        let tys = self.types.iter().map(|t| t.annotate(ctx)).collect();
+        let defs = self.defs.iter().map(|d| Rc::new(d.as_ref().annotate(ctx))).collect();
+        let tys = self.types.iter().map(|t| Rc::new(t.as_ref().annotate(ctx))).collect();
         StmtImpl::new(span, generics, head, body, defs, tys)
     }
 }
@@ -257,9 +244,9 @@ impl StmtTrait {
     fn annotate(&self, ctx: &mut Context) -> StmtTrait {
         let span = self.span;
         let generics = self.generics.clone();
-        let name = self.name.clone();
+        let name = self.name;
         let body = self.where_clause.iter().map(|p| p.annotate(ctx)).collect();
-        let defs = self.defs.iter().map(|d| d.annotate(ctx)).collect();
+        let defs = self.defs.iter().map(|d| Rc::new(d.as_ref().annotate(ctx))).collect();
         let assocs = self.types.clone();
         StmtTrait::new(span, name, generics, body, defs, assocs)
     }
@@ -268,10 +255,10 @@ impl StmtTrait {
 impl TraitDef {
     pub fn annotate(&self, ctx: &mut Context) -> TraitDef {
         let span = self.span;
-        let name = self.name.clone();
+        let name = self.name;
         let generics = self.generics.clone();
         let where_clause = self.where_clause.iter().map(|p| p.annotate(ctx)).collect();
-        let params = self.params.iter().map(|p| p.annotate(ctx)).collect();
+        let params = self.params.map_values(|t| t.annotate(ctx));
         let ty = self.ty.annotate(ctx);
         TraitDef::new(span, name, generics, params, ty, where_clause)
     }
@@ -296,14 +283,10 @@ impl Expr {
                 let v = v.clone();
                 Expr::String(s, t, v)
             }
-            Expr::Var(_, _, x) => {
-                let x = x.clone();
-                Expr::Var(s, t, x)
-            }
+            Expr::Var(_, _, x) => Expr::Var(s, t, *x),
             Expr::Def(_, _, x, ts) => {
-                let x = x.clone();
                 let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
-                Expr::Def(s, t, x, ts)
+                Expr::Def(s, t, *x, ts)
             }
             Expr::Call(_, _, e, es) => {
                 let e = Rc::new(e.annotate(ctx));
@@ -317,25 +300,18 @@ impl Expr {
             }
             Expr::Query(..) => todo!(),
             Expr::Struct(_, _, x, ts, xes) => {
-                let x = x.clone();
                 let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
-                let xes = xes
-                    .iter()
-                    .map(|(x, e)| (x.clone(), e.annotate(ctx)))
-                    .collect();
-                Expr::Struct(s, ctx.new_tyvar(), x, ts, xes)
+                let xes = xes.iter().map(|(x, e)| (*x, e.annotate(ctx))).collect();
+                Expr::Struct(s, ctx.new_tyvar(), *x, ts, xes)
             }
             Expr::Enum(_, _, x0, ts0, x1, e) => {
-                let x0 = x0.clone();
                 let ts0 = ts0.iter().map(|t| t.annotate(ctx)).collect();
-                let x1 = x1.clone();
                 let e = Rc::new(e.annotate(ctx));
-                Expr::Enum(s, t, x0, ts0, x1, e)
+                Expr::Enum(s, t, *x0, ts0, *x1, e)
             }
             Expr::Field(_, _, e, x) => {
                 let e = Rc::new(e.annotate(ctx));
-                let x = x.clone();
-                Expr::Field(s, t, e, x)
+                Expr::Field(s, t, e, *x)
             }
             Expr::Tuple(_, _, es) => {
                 let es = es.iter().map(|e| e.annotate(ctx)).collect();
@@ -343,9 +319,8 @@ impl Expr {
             }
             Expr::Assoc(_, _, b, x1, ts1) => {
                 let b = b.annotate(ctx);
-                let x1 = x1.clone();
                 let ts1 = ts1.iter().map(|t| t.annotate(ctx)).collect();
-                Expr::Assoc(s, t, b, x1, ts1)
+                Expr::Assoc(s, t, b, *x1, ts1)
             }
             Expr::Index(_, _, e, i) => {
                 let e = Rc::new(e.annotate(ctx));
@@ -371,7 +346,7 @@ impl Expr {
             Expr::Continue(_, _) => Expr::Continue(s, t),
             Expr::Break(_, _) => Expr::Break(s, t),
             Expr::Fun(_, _, ps, t1, e) => {
-                let ps = ps.iter().map(|p| p.annotate(ctx)).collect();
+                let ps = ps.map_values(|t| t.annotate(ctx));
                 let t1 = t1.annotate(ctx);
                 let e = Rc::new(e.annotate(ctx));
                 Expr::Fun(s, t, ps, t1, e)
@@ -387,10 +362,7 @@ impl Expr {
                 Expr::While(s, t, e, b)
             }
             Expr::Record(_, _, xes) => {
-                let xes = xes
-                    .iter()
-                    .map(|(x, e)| (x.clone(), e.annotate(ctx)))
-                    .collect();
+                let xes = xes.iter().map(|(x, e)| (*x, e.annotate(ctx))).collect();
                 Expr::Record(s, t, xes)
             }
             Expr::Value(_, _) => todo!(),
@@ -428,28 +400,20 @@ impl Pat {
                     .map(|args| args.iter().map(|arg| arg.annotate(ctx)).collect());
                 Pat::Unresolved(s, t, path, args)
             }
-            Pat::Var(_, _, x) => {
-                let x = x.clone();
-                Pat::Var(s, t, x)
-            }
+            Pat::Var(_, _, x) => Pat::Var(s, t, *x),
             Pat::Tuple(_, _, ps) => {
                 let ps = ps.iter().map(|p| p.annotate(ctx)).collect();
                 Pat::Tuple(s, t, ps)
             }
             Pat::Struct(_, _, x, ts, xps) => {
-                let x = x.clone();
                 let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
-                let xps = xps
-                    .iter()
-                    .map(|(x, p)| (x.clone(), p.annotate(ctx)))
-                    .collect();
-                Pat::Struct(s, t, x, ts, xps)
+                let xps = xps.iter().map(|(x, p)| (*x, p.annotate(ctx))).collect();
+                Pat::Struct(s, t, *x, ts, xps)
             }
             Pat::Enum(_, _, x0, ts, x1, p) => {
-                let x0 = x0.clone();
                 let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
                 let p = p.annotate(ctx);
-                Pat::Enum(s, t, x0, ts, x1.clone(), Rc::new(p))
+                Pat::Enum(s, t, *x0, ts, *x1, Rc::new(p))
             }
             Pat::Int(_, _, v) => {
                 let v = v.clone();
@@ -463,10 +427,7 @@ impl Pat {
             Pat::Bool(_, _, v) => Pat::Bool(s, t, *v),
             Pat::Err(_, _) => Pat::Err(s, t),
             Pat::Record(_, _, xps) => {
-                let xps = xps
-                    .iter()
-                    .map(|(x, p)| (x.clone(), p.annotate(ctx)))
-                    .collect();
+                let xps = xps.iter().map(|(x, p)| (*x, p.annotate(ctx))).collect();
                 Pat::Record(s, t, xps)
             }
             Pat::Or(_, _, p0, p1) => {
@@ -484,22 +445,13 @@ impl UnresolvedPatField {
         match self {
             UnresolvedPatField::Named(x, p) => {
                 let p = p.annotate(ctx);
-                UnresolvedPatField::Named(x.clone(), p)
+                UnresolvedPatField::Named(*x, p)
             }
             UnresolvedPatField::Unnamed(p) => {
                 let p = p.annotate(ctx);
                 UnresolvedPatField::Unnamed(p)
             }
         }
-    }
-}
-
-impl Param {
-    pub fn annotate(&self, ctx: &mut Context) -> Param {
-        let span = self.span;
-        let name = self.name.clone();
-        let ty = self.ty.annotate(ctx);
-        Param::new(span, name, ty)
     }
 }
 
@@ -522,12 +474,12 @@ impl Bound {
 
 impl TraitBound {
     pub fn annotate(&self, ctx: &mut Context) -> TraitBound {
-        let x = self.name.clone();
+        let x = self.name;
         let ts = self.ts.iter().map(|t| t.annotate(ctx)).collect();
         let xts = self
             .xts
             .iter()
-            .map(|(x, t)| (x.clone(), t.annotate(ctx)))
+            .map(|(x, t)| (*x, t.annotate(ctx)))
             .collect();
         TraitBound::new(x, ts, xts)
     }

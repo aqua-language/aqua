@@ -101,9 +101,8 @@ pub(crate) fn derive_extract_timestamp(input: syn::DeriveInput) -> TokenStream {
             .find_map(|f| {
                 f.attrs
                     .iter()
-                    .find_map(|attr| attr.path().is_ident("timestamp").then(|| Some(f)))
+                    .find_map(|attr| attr.path().is_ident("timestamp").then_some(f))
             })
-            .flatten()
     } else {
         None
     };

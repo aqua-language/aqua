@@ -9,7 +9,6 @@ use builtins::Value;
 use config::Config;
 use diag::Report;
 use diag::Sources;
-use dsl::trim;
 use lexer::Lexer;
 use parser::Parser;
 
@@ -21,7 +20,6 @@ pub mod diag;
 pub mod display;
 // pub mod ffi;
 pub mod builtins;
-pub mod dsl;
 pub mod infer;
 pub mod interpret;
 pub mod lexer;
@@ -31,10 +29,14 @@ pub mod parser;
 pub mod print;
 pub mod resolve;
 
+pub mod map;
+// pub mod monomorphise;
+pub mod monomorphise;
 #[cfg(feature = "optimiser")]
 pub mod opt;
+pub mod symbol;
+// pub mod union_find;
 // mod visitor;
-// pub mod monomorphise;
 
 #[derive(Debug)]
 pub struct Compiler {
@@ -45,6 +47,7 @@ pub struct Compiler {
     lift: lift::Context,
     infer: infer::Context,
     interpret: interpret::Context,
+    monomorphise: monomorphise::Context,
     report: Report,
     pub config: Config,
 }
@@ -71,6 +74,7 @@ impl Compiler {
             resolve: resolve::Context::new(),
             lift: lift::Context::new(),
             infer: infer::Context::new(),
+            monomorphise: monomorphise::Context::new(),
             interpret: interpret::Context::new(),
             report: Report::new(),
             config,
@@ -87,8 +91,9 @@ impl Compiler {
         self.report.merge(&mut self.lift.report);
         let program = self.infer.infer(&program);
         self.report.merge(&mut self.infer.report);
-        self.interpret.interpret(&program);
-        self.report.merge(&mut self.interpret.report);
+        let _program = self.monomorphise.monomorphise(&program);
+        // self.interpret.interpret(&program);
+        // self.report.merge(&mut self.interpret.report);
         self
         // let result = self.inferrer.infer(&result);
         // let result = self.inferrer.infer(&result);
@@ -133,6 +138,12 @@ impl Compiler {
         self.recover(result)
     }
 
+    pub fn monomorphise(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
+        let result = self.infer(name, input)?;
+        let result = self.monomorphise.monomorphise(&result);
+        self.recover(result)
+    }
+
     pub fn interpret(&mut self, name: &str, input: &str) -> Result<Value, Recovered<Value>> {
         let mut result = self.infer(name, input).unwrap();
         let stmt = result.stmts.pop().unwrap();
@@ -154,6 +165,15 @@ impl Compiler {
     pub fn report(&mut self) -> String {
         trim(&self.report.string(&mut self.sources).unwrap())
     }
+}
+
+pub fn trim(s: &str) -> String {
+    // Trim space right before \n on each line
+    s.trim_end()
+        .lines()
+        .map(|line| line.trim_end().to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 impl Stmt {
@@ -194,6 +214,9 @@ impl Program {
     }
     pub fn infer(input: &str) -> Result<Program, Recovered<Program>> {
         Compiler::default().init().infer("test", input)
+    }
+    pub fn monomorphise(input: &str) -> Result<Program, Recovered<Program>> {
+        Compiler::default().init().monomorphise("test", input)
     }
     pub fn interpret(input: &str) -> Result<Value, Recovered<Value>> {
         Compiler::default().init().interpret("test", input)

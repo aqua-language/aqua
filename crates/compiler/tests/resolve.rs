@@ -1,42 +1,42 @@
+mod common;
+
+use common::bound;
+use common::bound_err;
+use common::expr_assoc;
+use common::expr_block;
+use common::expr_call;
+use common::expr_def;
+use common::expr_enum;
+use common::expr_err;
+use common::expr_int;
+use common::expr_struct;
+use common::expr_tuple;
+use common::expr_var;
+use common::program;
+use common::stmt_def;
+use common::stmt_enum;
+use common::stmt_expr;
+use common::stmt_impl;
+use common::stmt_struct;
+use common::stmt_trait;
+use common::stmt_type;
+use common::stmt_var;
+use common::tr_def;
+use common::tr_type;
+use common::ty;
+use common::ty_alias;
+use common::ty_assoc;
+use common::ty_con;
+use common::ty_gen;
+use common::ty_tuple;
 use compiler::ast::Program;
-use compiler::check;
-use compiler::dsl::bound;
-use compiler::dsl::bound_err;
-use compiler::dsl::expr_assoc;
-use compiler::dsl::expr_call;
-use compiler::dsl::expr_def;
-use compiler::dsl::expr_enum;
-use compiler::dsl::expr_err;
-use compiler::dsl::expr_int;
-use compiler::dsl::expr_struct;
-use compiler::dsl::expr_tuple;
-use compiler::dsl::expr_var;
-use compiler::dsl::program;
-use compiler::dsl::stmt_def;
-use compiler::dsl::stmt_enum;
-use compiler::dsl::stmt_expr;
-use compiler::dsl::stmt_impl;
-use compiler::dsl::stmt_struct;
-use compiler::dsl::stmt_trait;
-use compiler::dsl::stmt_type;
-use compiler::dsl::stmt_var;
-use compiler::dsl::tr_def;
-use compiler::dsl::tr_type;
-use compiler::dsl::ty;
-use compiler::dsl::ty_alias;
-use compiler::dsl::ty_assoc;
-use compiler::dsl::ty_con;
-use compiler::dsl::ty_err;
-use compiler::dsl::ty_gen;
-use compiler::dsl::ty_hole;
-use compiler::dsl::ty_tuple;
-use compiler::dsl::types::ty_i32;
+use compiler::ast::Type;
 
 #[test]
 fn test_resolve_var0() {
     let a = Program::resolve("var x = 0; x;").unwrap();
     let b = program([
-        stmt_var("x", ty_hole(), expr_int("0")),
+        stmt_var("x", Type::hole(), expr_int("0")),
         stmt_expr(expr_var("x")),
     ]);
     check!(a, b);
@@ -46,7 +46,7 @@ fn test_resolve_var0() {
 fn test_resolve_var_err0() {
     let a = Program::resolve("var x = 0; y;").unwrap_err();
     let b = program([
-        stmt_var("x", ty_hole(), expr_int("0")),
+        stmt_var("x", Type::hole(), expr_int("0")),
         stmt_expr(expr_err()),
     ]);
     check!(
@@ -66,7 +66,7 @@ fn test_resolve_var_err0() {
 fn test_resolve_def0() {
     let a = Program::resolve("def f(): i32 = 0; f();").unwrap();
     let b = program([
-        stmt_def("f", [], [], ty_i32(), [], expr_int("0")),
+        stmt_def("f", [], [], Type::i32(), [], expr_int("0")),
         stmt_expr(expr_call(expr_def("f", []), [])),
     ]);
     check!(@debug; a, b);
@@ -78,8 +78,8 @@ fn test_resolve_def1() {
     let b = program([stmt_def(
         "f",
         [],
-        [("x", ty_i32())],
-        ty_i32(),
+        [("x", Type::i32())],
+        Type::i32(),
         [],
         expr_var("x"),
     )]);
@@ -92,8 +92,8 @@ fn test_resolve_def2() {
     let b = program([stmt_def(
         "f",
         [],
-        [("x", ty_i32())],
-        ty_i32(),
+        [("x", Type::i32())],
+        Type::i32(),
         [],
         expr_call(expr_def("f", []), [expr_var("x")]),
     )]);
@@ -101,9 +101,39 @@ fn test_resolve_def2() {
 }
 
 #[test]
+fn test_resolve_def3() {
+    let a = Program::resolve(
+        "def f(x: i32): i32 = {
+             def g(y: i32): i32 = 1;
+             g(x)
+         }",
+    )
+    .unwrap();
+    let b = program([stmt_def(
+        "f",
+        [],
+        [("x", Type::i32())],
+        Type::i32(),
+        [],
+        expr_block(
+            [stmt_def(
+                "g",
+                [],
+                [("y", Type::i32())],
+                Type::i32(),
+                [],
+                expr_int("1"),
+            )],
+            expr_call(expr_def("g", []), [expr_var("x")]),
+        ),
+    )]);
+    check!(a, b);
+}
+
+#[test]
 fn test_resolve_def_param1() {
     let a = Program::resolve("def f(): i32 = x;").unwrap_err();
-    let b = program([stmt_def("f", [], [], ty_i32(), [], expr_err())]);
+    let b = program([stmt_def("f", [], [], Type::i32(), [], expr_err())]);
     check!(
         a,
         b,
@@ -139,7 +169,7 @@ fn test_resolve_type0() {
     )
     .unwrap();
     let b = program([
-        stmt_type("T", [], ty_i32()),
+        stmt_type("T", [], Type::i32()),
         stmt_var("x", ty_alias("T", []), expr_int("0")),
     ]);
     check!(a, b);
@@ -153,10 +183,10 @@ fn test_resolve_type1() {
     )
     .unwrap();
     let b = program([
-        stmt_type("T", ["U"], ty_tuple([ty_i32(), ty_gen("U")])),
+        stmt_type("T", ["U"], ty_tuple([Type::i32(), ty_gen("U")])),
         stmt_var(
             "x",
-            ty_alias("T", [ty_i32()]),
+            ty_alias("T", [Type::i32()]),
             expr_tuple([expr_int("0"), expr_int("0")]),
         ),
     ]);
@@ -171,8 +201,8 @@ fn test_resolve_type2() {
     )
     .unwrap_err();
     let b = program([
-        stmt_type("T", ["U"], ty_tuple([ty_i32(), ty_gen("U")])),
-        stmt_var("x", ty_err(), expr_tuple([expr_int("0"), expr_int("0")])),
+        stmt_type("T", ["U"], ty_tuple([Type::i32(), ty_gen("U")])),
+        stmt_var("x", Type::err(), expr_tuple([expr_int("0"), expr_int("0")])),
     ]);
     check!(
         a,
@@ -228,7 +258,10 @@ fn test_resolve_trait_assoc0() {
             [("x", ty_gen("T"))],
             ty_gen("T"),
             [bound("Trait", [ty_gen("T")], [])],
-            expr_call(expr_assoc("Trait", [ty_hole()], "f", []), [expr_var("x")]),
+            expr_call(
+                expr_assoc("Trait", [Type::hole()], "f", []),
+                [expr_var("x")],
+            ),
         ),
     ]);
     check!(a, b);
@@ -255,13 +288,13 @@ fn test_resolve_trait_impl0() {
         ),
         stmt_impl(
             [],
-            bound("Trait", [ty_i32()], []),
+            bound("Trait", [Type::i32()], []),
             [],
             [stmt_def(
                 "f",
                 [],
-                [("x", ty_i32())],
-                ty_i32(),
+                [("x", Type::i32())],
+                Type::i32(),
                 [],
                 expr_var("x"),
             )],
@@ -287,7 +320,7 @@ fn test_resolve_trait_impl1() {
         stmt_trait("Trait", ["T"], [], [], [tr_type("f", [])]),
         stmt_impl(
             [],
-            bound("Trait", [ty_i32()], []),
+            bound("Trait", [Type::i32()], []),
             [],
             [],
             [stmt_type("A", ["U"], ty_gen("U"))],
@@ -322,8 +355,8 @@ fn test_resolve_trait_impl2() {
             [stmt_def(
                 "g",
                 [],
-                [("x", ty_i32())],
-                ty_i32(),
+                [("x", Type::i32())],
+                Type::i32(),
                 [],
                 expr_var("x"),
             )],
@@ -333,12 +366,12 @@ fn test_resolve_trait_impl2() {
     check!(
         a,
         b,
-        "Error: Wrong defs implemented for Trait. Found { `g` }, expected { `f` }
+        "Error: Wrong defs implemented for Trait. Found { g }, expected { f }
             ╭─[test:4:6]
             │
           4 │ impl Trait[i32] {
             │      ──┬──
-            │        ╰──── Expected { `f` }.
+            │        ╰──── Expected { f }.
          ───╯"
     );
 }
@@ -361,8 +394,8 @@ fn test_resolve_struct1() {
         stmt_struct("S", ["T"], [("x", ty_gen("T"))]),
         stmt_var(
             "s",
-            ty_con("S", [ty_i32()]),
-            expr_struct("S", [ty_i32()], [("x", expr_int("0"))]),
+            ty_con("S", [Type::i32()]),
+            expr_struct("S", [Type::i32()], [("x", expr_int("0"))]),
         ),
     ]);
     check!(a, b);
@@ -376,7 +409,7 @@ fn test_resolve_struct2() {
     )
     .unwrap_err();
     let b = program([
-        stmt_struct("S", [], [("x", ty_i32())]),
+        stmt_struct("S", [], [("x", Type::i32())]),
         stmt_expr(expr_err()),
     ]);
     check!(
@@ -417,8 +450,8 @@ fn test_resolve_struct4() {
         stmt_struct("S", ["T"], [("x", ty_gen("T"))]),
         stmt_var(
             "s",
-            ty_hole(),
-            expr_struct("S", [ty_hole()], [("x", expr_int("0"))]),
+            Type::hole(),
+            expr_struct("S", [Type::hole()], [("x", expr_int("0"))]),
         ),
     ]);
     check!(a, b);
@@ -442,8 +475,8 @@ fn test_resolve_enum1() {
         stmt_enum("E", ["T"], [("A", ty_gen("T"))]),
         stmt_var(
             "e",
-            ty_con("E", [ty_i32()]),
-            expr_enum("E", [ty_i32()], "A", expr_int("0")),
+            ty_con("E", [Type::i32()]),
+            expr_enum("E", [Type::i32()], "A", expr_int("0")),
         ),
     ]);
     check!(a, b);
@@ -457,8 +490,15 @@ fn test_resolve_unordered0() {
     )
     .unwrap();
     let b = program([
-        stmt_def("f", [], [], ty_i32(), [], expr_call(expr_def("g", []), [])),
-        stmt_def("g", [], [], ty_i32(), [], expr_int("0")),
+        stmt_def(
+            "f",
+            [],
+            [],
+            Type::i32(),
+            [],
+            expr_call(expr_def("g", []), []),
+        ),
+        stmt_def("g", [], [], Type::i32(), [], expr_int("0")),
     ]);
     check!(a, b);
 }
@@ -471,8 +511,22 @@ fn test_resolve_unordered1() {
     )
     .unwrap();
     let b = program([
-        stmt_def("f", [], [], ty_i32(), [], expr_call(expr_def("g", []), [])),
-        stmt_def("g", [], [], ty_i32(), [], expr_call(expr_def("f", []), [])),
+        stmt_def(
+            "f",
+            [],
+            [],
+            Type::i32(),
+            [],
+            expr_call(expr_def("g", []), []),
+        ),
+        stmt_def(
+            "g",
+            [],
+            [],
+            Type::i32(),
+            [],
+            expr_call(expr_def("f", []), []),
+        ),
     ]);
     check!(a, b);
 }
@@ -505,7 +559,7 @@ fn test_resolve_expr_assoc0() {
             "Trait",
             [],
             [],
-            [tr_def("f", [], [("x", ty_i32())], ty_i32(), [])],
+            [tr_def("f", [], [("x", Type::i32())], Type::i32(), [])],
             [],
         ),
         stmt_expr(expr_call(expr_assoc("Trait", [], "f", []), [expr_int("0")])),
@@ -527,7 +581,7 @@ fn test_resolve_expr_assoc1() {
             "Trait",
             [],
             [],
-            [tr_def("f", [], [("x", ty_i32())], ty_i32(), [])],
+            [tr_def("f", [], [("x", Type::i32())], Type::i32(), [])],
             [],
         ),
         stmt_expr(expr_call(expr_assoc("Trait", [], "f", []), [expr_int("0")])),
@@ -553,7 +607,7 @@ fn test_resolve_expr_assoc2() {
             [],
         ),
         stmt_expr(expr_call(
-            expr_assoc("Trait", [ty_i32()], "f", []),
+            expr_assoc("Trait", [Type::i32()], "f", []),
             [expr_int("0")],
         )),
     ]);
@@ -571,7 +625,11 @@ fn test_resolve_type_assoc0() {
     .unwrap();
     let b = program([
         stmt_trait("Trait", [], [], [], [tr_type("A", [])]),
-        stmt_type("B", [], ty_assoc("Trait", [], [("A", ty_hole())], "A", [])),
+        stmt_type(
+            "B",
+            [],
+            ty_assoc("Trait", [], [("A", Type::hole())], "A", []),
+        ),
     ]);
     check!(a, b);
 }
@@ -590,7 +648,7 @@ fn test_resolve_type_assoc1() {
         stmt_type(
             "B",
             [],
-            ty_assoc("Trait", [ty_i32()], [("A", ty_hole())], "A", []),
+            ty_assoc("Trait", [Type::i32()], [("A", Type::hole())], "A", []),
         ),
     ]);
     check!(a, b);
@@ -610,7 +668,13 @@ fn test_resolve_type_assoc2() {
         stmt_type(
             "B",
             [],
-            ty_assoc("Trait", [ty_i32()], [("A", ty_hole())], "A", [ty_i32()]),
+            ty_assoc(
+                "Trait",
+                [Type::i32()],
+                [("A", Type::hole())],
+                "A",
+                [Type::i32()],
+            ),
         ),
     ]);
     check!(a, b);

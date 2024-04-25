@@ -16,9 +16,9 @@ impl Compiler {
             BuiltinDef {
                 rust: "Aggregator::incremental",
                 fun: |_ctx, _t, v| {
-                    let a0 = v[0].as_function();
-                    let a1 = v[1].as_function();
-                    let a2 = v[2].as_function();
+                    let a0 = v[0].rc();
+                    let a1 = v[1].rc();
+                    let a2 = v[2].rc();
                     Aggregator::Incremental {
                         lift: a0,
                         combine: a1,
@@ -34,7 +34,7 @@ impl Compiler {
             BuiltinDef {
                 rust: "Aggregator::holistic",
                 fun: |_ctx, _t, v| {
-                    let a0 = v[0].as_function();
+                    let a0 = v[0].rc();
                     Aggregator::Holistic { compute: a0 }.into()
                 },
             },

@@ -7,14 +7,13 @@ use serde::de::VariantAccess;
 use serde::de::Visitor;
 use serde::Deserialize;
 use serde::Deserializer;
-use smol_str::SmolStr;
 
 use crate::ast::Name;
 use crate::ast::Type;
-use crate::ast::Uid;
 use crate::builtins::Array;
 use crate::builtins::Record;
 use crate::lexer::Span;
+use crate::symbol::Symbol;
 
 use super::Tuple;
 use super::Value;
@@ -343,9 +342,8 @@ impl<'de> Deserialize<'de> for Name {
         D: serde::Deserializer<'de>,
     {
         String::deserialize(deserializer).map(|data| Self {
-            uid: Uid::default(),
             span: Span::default(),
-            data: SmolStr::from(data),
+            data: Symbol::from(data),
         })
     }
 }
