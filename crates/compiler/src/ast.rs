@@ -155,8 +155,8 @@ pub struct StmtTrait {
     pub name: Name,
     pub generics: Vec<Name>,
     pub where_clause: Vec<Bound>,
-    pub defs: Vec<Rc<TraitDef>>,
-    pub types: Vec<Rc<TraitType>>,
+    pub defs: Vec<Rc<StmtTraitDef>>,
+    pub types: Vec<Rc<StmtTraitType>>,
 }
 
 // A trait is like a predicate
@@ -325,14 +325,14 @@ impl Stmt {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct TraitType {
+pub struct StmtTraitType {
     pub span: Span,
     pub name: Name,
     pub generics: Vec<Name>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct TraitDef {
+pub struct StmtTraitDef {
     pub span: Span,
     pub name: Name,
     pub generics: Vec<Name>,
@@ -515,8 +515,8 @@ pub enum Pat {
     Struct(Span, Type, Name, Vec<Type>, Map<Name, Pat>),
     Record(Span, Type, Map<Name, Pat>),
     Enum(Span, Type, Name, Vec<Type>, Name, Rc<Pat>),
-    Int(Span, Type, String),
-    String(Span, Type, String),
+    Int(Span, Type, Symbol),
+    String(Span, Type, Symbol),
     Char(Span, Type, char),
     Bool(Span, Type, bool),
     Wildcard(Span, Type),
@@ -582,8 +582,8 @@ impl StmtTrait {
         name: Name,
         generics: Vec<Name>,
         bounds: Vec<Bound>,
-        defs: Vec<Rc<TraitDef>>,
-        types: Vec<Rc<TraitType>>,
+        defs: Vec<Rc<StmtTraitDef>>,
+        types: Vec<Rc<StmtTraitType>>,
     ) -> StmtTrait {
         StmtTrait {
             span,
@@ -596,7 +596,7 @@ impl StmtTrait {
     }
 }
 
-impl TraitType {
+impl StmtTraitType {
     pub fn new(span: Span, name: Name, generics: Vec<Name>) -> Self {
         Self {
             span,
@@ -661,7 +661,7 @@ impl StmtEnum {
     }
 }
 
-impl TraitDef {
+impl StmtTraitDef {
     pub fn new(
         span: Span,
         name: Name,

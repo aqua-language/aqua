@@ -20,8 +20,8 @@ use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::TraitBound;
-use crate::ast::TraitDef;
-use crate::ast::TraitType;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
 use crate::ast::Type;
 use crate::ast::UnresolvedPatField;
 use crate::diag::Report;
@@ -290,7 +290,7 @@ impl Context {
         })
     }
 
-    fn trait_def(&mut self, s: &TraitDef) -> TraitDef {
+    fn trait_def(&mut self, s: &StmtTraitDef) -> StmtTraitDef {
         self.scoped(|ctx| {
             s.generics
                 .iter()
@@ -301,7 +301,7 @@ impl Context {
             let params = s.params.iter().map(|p| ctx.param(p)).collect();
             let ty = ctx.ty(&s.ty);
             let where_clause = s.where_clause.iter().map(|p| ctx.bound(p)).collect();
-            TraitDef::new(span, name, generics, params, ty, where_clause)
+            StmtTraitDef::new(span, name, generics, params, ty, where_clause)
         })
     }
 
@@ -1199,7 +1199,7 @@ impl Segment {
         }
     }
 
-    fn try_instantiate_named(&self, expected: &[Rc<TraitType>]) -> Option<Map<Name, Type>> {
+    fn try_instantiate_named(&self, expected: &[Rc<StmtTraitType>]) -> Option<Map<Name, Type>> {
         if self
             .xts
             .iter()
@@ -1231,7 +1231,7 @@ fn fields_are_defined<T>(expected: &Map<Name, Type>, provided: &Map<Name, T>) ->
         && expected.keys().all(|x| provided.contains_key(x))
 }
 
-fn types_are_defined(expected: &[Rc<TraitType>], provided: &[Rc<StmtType>]) -> bool {
+fn types_are_defined(expected: &[Rc<StmtTraitType>], provided: &[Rc<StmtType>]) -> bool {
     provided.iter().all(|x| {
         expected
             .iter()
@@ -1243,7 +1243,7 @@ fn types_are_defined(expected: &[Rc<TraitType>], provided: &[Rc<StmtType>]) -> b
     })
 }
 
-fn defs_are_defined(expected: &[Rc<TraitDef>], provided: &[Rc<StmtDef>]) -> bool {
+fn defs_are_defined(expected: &[Rc<StmtTraitDef>], provided: &[Rc<StmtDef>]) -> bool {
     provided.iter().all(|x| {
         expected
             .iter()

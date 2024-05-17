@@ -82,7 +82,7 @@ impl Compiler {
         // self.declare_duration();
         // self.declare_encoding();
         self.declare_f32();
-        // self.declare_f64();
+        self.declare_f64();
         // self.declare_file();
         // self.declare_function();
         // self.declare_i128();

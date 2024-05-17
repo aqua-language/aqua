@@ -17,58 +17,100 @@ use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::TraitBound;
-use crate::ast::TraitDef;
-use crate::ast::TraitType;
 use crate::ast::Type;
 use crate::ast::UnresolvedPatField;
 use crate::builtins::Value;
 use crate::print::Print;
 
-pub struct Wrapper<T>(T);
+pub struct Verbose<T>(T);
 
 impl Program {
-    pub fn display_types(&self) -> Wrapper<&Self> {
-        Wrapper(self)
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
     }
 }
 
 impl StmtImpl {
-    pub fn display_types(&self) -> Wrapper<&Self> {
-        Wrapper(self)
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
     }
 }
 
 impl Expr {
-    pub fn display_types(&self) -> Wrapper<&Self> {
-        Wrapper(self)
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
     }
 }
 
-impl<'a> std::fmt::Display for Wrapper<&'a Program> {
+impl Pat {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl Stmt {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl Type {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl<'a> std::fmt::Display for Verbose<&'a Program> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut p = Pretty::new(f);
-        p.type_info = true;
+        p.verbose = true;
         p.program(self.0)
     }
 }
 
-impl std::fmt::Display for Wrapper<&StmtImpl> {
+impl std::fmt::Display for Verbose<&StmtImpl> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut p = Pretty::new(f);
-        p.type_info = true;
+        p.verbose = true;
         p.stmt_impl(self.0)
     }
 }
 
-impl std::fmt::Display for Wrapper<&Expr> {
+impl std::fmt::Display for Verbose<&Expr> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut p = Pretty::new(f);
-        p.type_info = true;
+        p.verbose = true;
         p.expr(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&Pat> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut p = Pretty::new(f);
+        p.verbose = true;
+        p.pat(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&Stmt> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut p = Pretty::new(f);
+        p.verbose = true;
+        p.stmt(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&Type> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut p = Pretty::new(f);
+        p.verbose = true;
+        p.ty(self.0)
     }
 }
 
@@ -186,7 +228,7 @@ pub struct Pretty<'a, 'b> {
     f: &'a mut std::fmt::Formatter<'b>,
     noindent: bool,
     indent_level: usize,
-    type_info: bool,
+    verbose: bool,
 }
 
 impl<'a, 'b> Pretty<'a, 'b> {
@@ -195,7 +237,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
             f,
             noindent: false,
             indent_level: 0,
-            type_info: false,
+            verbose: false,
         }
     }
 
@@ -282,13 +324,12 @@ impl<'a, 'b> Pretty<'a, 'b> {
     }
 
     fn where_clause(&mut self, ts: &[Bound]) -> std::fmt::Result {
-        if !ts.is_empty() {
-            self.space()?;
-            self.kw("where")?;
-            self.space()?;
-            self.comma_sep(ts, Self::bound)?;
-        }
-        Ok(())
+        self.if_nonempty(ts, |this, ts| {
+            this.space()?;
+            this.kw("where")?;
+            this.space()?;
+            this.comma_sep(ts, Self::bound)
+        })
     }
 
     fn stmt_expr(&mut self, s: &Expr) -> std::fmt::Result {
@@ -312,11 +353,10 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.generics(&s.generics)?;
         self.space()?;
         self.brace(|this| {
-            if !s.variants.is_empty() {
-                this.indented(|this| this.newline_comma_sep(s.variants.as_ref(), Self::variant))?;
-                this.newline()?;
-            }
-            Ok(())
+            this.if_nonempty(&s.variants, |this, s| {
+                this.indented(|this| this.newline_sep(s, Self::variant))?;
+                this.newline()
+            })
         })
     }
 
@@ -362,7 +402,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         })
     }
 
-    fn stmt_def_decl(&mut self, s: &TraitDef) -> std::fmt::Result {
+    fn stmt_def_decl(&mut self, s: &StmtTraitDef) -> std::fmt::Result {
         self.kw("def")?;
         self.space()?;
         self.name(&s.name)?;
@@ -374,27 +414,24 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.punct(";")
     }
 
-    fn stmt_type_decl(&mut self, s: &TraitType) -> std::fmt::Result {
+    fn stmt_type_decl(&mut self, s: &StmtTraitType) -> std::fmt::Result {
         self.kw("type")?;
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
-        self.space()?;
         self.punct(";")
     }
 
     fn generics(&mut self, gs: &[Name]) -> std::fmt::Result {
-        if !gs.is_empty() {
-            self.brack(|this| this.comma_sep(gs, Self::name))?;
-        }
-        Ok(())
+        self.if_nonempty(gs, |this, gs| {
+            this.brack(|this| this.comma_sep(gs, Self::name))
+        })
     }
 
     fn type_args(&mut self, ts: &[Type]) -> std::fmt::Result {
-        if !ts.is_empty() {
-            self.brack(|this| this.comma_sep(ts, Self::ty))?;
-        }
-        Ok(())
+        self.if_nonempty(ts, |this, ts| {
+            this.brack(|this| this.comma_sep(ts, Self::ty))
+        })
     }
 
     fn expr_args(&mut self, es: &[Expr]) -> std::fmt::Result {
@@ -533,9 +570,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.block(b)?;
             }
             Expr::Char(_, _, c) => {
-                self.lit("'")?;
-                self.lit(c)?;
-                self.lit("'")?;
+                self.char(*c)?;
             }
         }
         Ok(())
@@ -564,20 +599,18 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.name(&b.name)?;
         if !b.ts.is_empty() || !b.xts.is_empty() {
             self.brack(|this| {
-                if !b.ts.is_empty() {
-                    this.comma_sep(&b.ts, Self::ty)?;
-                }
-                if !b.xts.is_empty() {
-                    if !b.ts.is_empty() {
+                this.if_nonempty(&b.ts, |this, ts| this.comma_sep(ts, Self::ty))?;
+                this.if_nonempty(&b.xts, |this, xts| {
+                    this.if_nonempty(&b.ts, |this, ts| {
                         this.punct(",")?;
-                        this.space()?;
-                    }
-                    this.comma_sep(b.xts.as_ref(), |this, (x, t)| {
+                        this.space()
+                    })?;
+                    this.comma_sep(xts, |this, (x, t)| {
                         this.name(x)?;
                         this.punct("=")?;
                         this.ty(t)
-                    })?;
-                }
+                    })
+                })?;
                 Ok(())
             })?;
         }
@@ -585,7 +618,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
     }
 
     fn expr(&mut self, expr: &Expr) -> std::fmt::Result {
-        if self.type_info {
+        if self.verbose {
             self.paren(|this| {
                 this._expr(expr)?;
                 this.punct(":")?;
@@ -719,7 +752,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         }
         Ok(())
     }
-
+    
     fn agg(&mut self, (x, e0, e1): &(Name, Expr, Expr)) -> std::fmt::Result {
         self.name(x)?;
         self.punct("=")?;
@@ -792,11 +825,10 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Type::Array(t, n) => {
                 self.brack(|ctx| {
                     ctx.ty(t)?;
-                    if let Some(n) = n {
+                    ctx.if_some(n, |ctx, n| {
                         ctx.punct(";")?;
-                        ctx.lit(n)?;
-                    }
-                    Ok(())
+                        ctx.lit(n)
+                    })
                 })?;
             }
             Type::Never => {
@@ -807,7 +839,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
     }
 
     fn pat(&mut self, p: &Pat) -> std::fmt::Result {
-        if self.type_info {
+        if self.verbose {
             self.paren(|this| {
                 this._pat(p)?;
                 this.punct(":")?;
@@ -822,8 +854,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
         match p {
             Pat::Unresolved(_, _, path, args) => {
                 self.unresolved_path(path)?;
-                if let Some(args) = &args {
-                    self.paren(|this| {
+                self.if_some(args, |this, args| {
+                    this.paren(|this| {
                         this.sep(",", true, args, |this, p| match p {
                             UnresolvedPatField::Named(x, p) => {
                                 this.name(x)?;
@@ -832,8 +864,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
                             }
                             UnresolvedPatField::Unnamed(p) => this.pat(p),
                         })
-                    })?;
-                }
+                    })
+                })?;
             }
             Pat::Var(_, _, x) => {
                 self.name(x)?;
@@ -889,21 +921,18 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.name(&seg.name)?;
         if !seg.ts.is_empty() || !seg.xts.is_empty() {
             self.brack(|this| {
-                if !seg.ts.is_empty() {
-                    this.comma_sep(&seg.ts, Self::ty)?;
-                }
-                if !seg.xts.is_empty() {
-                    if !seg.ts.is_empty() {
+                this.if_nonempty(&seg.ts, |this, ts| this.comma_sep(ts, Self::ty))?;
+                this.if_nonempty(&seg.xts, |this, xts| {
+                    this.if_nonempty(&seg.ts, |this, ts| {
                         this.punct(",")?;
-                        this.space()?;
-                    }
-                    this.comma_sep(seg.xts.as_ref(), |this, (x, t)| {
+                        this.space()
+                    })?;
+                    this.comma_sep(xts, |this, (x, t)| {
                         this.name(x)?;
                         this.punct("=")?;
                         this.ty(t)
-                    })?;
-                }
-                Ok(())
+                    })
+                })
             })?;
         }
         Ok(())

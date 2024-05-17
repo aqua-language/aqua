@@ -6,7 +6,7 @@ use egglog::ast::GenericRunConfig;
 use egglog::ast::GenericSchedule;
 use symbol_table::GlobalSymbol;
 
-const LIB: &'static str = include_str!("opt/lib.egg");
+const LIB: &str = include_str!("opt/lib.egg");
 
 pub struct Optimiser {
     egraph: egglog::EGraph,

@@ -69,7 +69,7 @@ fn test_resolve_def0() {
         stmt_def("f", [], [], Type::i32(), [], expr_int("0")),
         stmt_expr(expr_call(expr_def("f", []), [])),
     ]);
-    check!(@debug; a, b);
+    check!(a, b);
 }
 
 #[test]

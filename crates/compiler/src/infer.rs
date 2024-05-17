@@ -103,11 +103,11 @@ impl Context {
             .unwrap_or_else(|| panic!("Unknown variable {x1}"))
     }
 
-    pub fn bind(&mut self, name: Name, b: Binding) {
-        self.stack.last_mut().unwrap().binds.insert(name, b);
+    pub fn bind(&mut self, x: Name, b: Binding) {
+        self.stack.last_mut().unwrap().binds.insert(x, b);
     }
 
-    pub fn scope<T>(&mut self, f: impl FnOnce(&mut Context) -> T) -> T {
+    pub fn scoped<T>(&mut self, f: impl FnOnce(&mut Context) -> T) -> T {
         self.stack.push(Scope::new());
         let v = f(self);
         self.stack.pop();
@@ -135,7 +135,9 @@ impl Context {
                     .err(goal.span(), "Unsolved goal", "Could not solve goal");
             }
         }
-        Program::new(stmts).map_type(&|t| t.apply(&sub))
+        let p = Program::new(stmts).map_type(&|t| t.apply(&sub));
+        println!("{}", p.verbose());
+        p
     }
 
     pub fn declare_stmt(&mut self, s: &Stmt) {
@@ -205,7 +207,7 @@ impl Context {
     }
 
     pub fn stmt_def(&mut self, s: &StmtDef) -> StmtDef {
-        self.scope(|ctx| {
+        self.scoped(|ctx| {
             match &s.body {
                 StmtDefBody::UserDefined(e) => {
                     let mut sub = Map::new();
@@ -259,15 +261,13 @@ impl Context {
             Expr::Unresolved(..) => unreachable!(),
             Expr::Int(_, t0, v) => {
                 let t1 = Type::i32();
-                let v = v.clone();
                 self.recover(s, s, unify(sub, t0, &t1));
-                Expr::Int(s, t0.apply(sub), v)
+                Expr::Int(s, t0.apply(sub), *v)
             }
             Expr::Float(_, t0, v) => {
                 let t1 = Type::f64();
-                let v = v.clone();
                 self.recover(s, s, unify(sub, t0, &t1));
-                Expr::Float(s, t0.apply(sub), v)
+                Expr::Float(s, t0.apply(sub), *v)
             }
             Expr::Bool(_, t0, v) => {
                 let t1 = Type::bool();
@@ -277,9 +277,8 @@ impl Context {
             }
             Expr::String(_, t0, v) => {
                 let t1 = Type::string();
-                let v = v.clone();
                 self.recover(s, s, unify(sub, t0, &t1));
-                Expr::String(s, t0.apply(sub), v)
+                Expr::String(s, t0.apply(sub), *v)
             }
             Expr::Struct(_, t0, x, ts, xes) => {
                 let stmt = self.structs.get(x).unwrap().clone();
@@ -444,7 +443,10 @@ impl Context {
                 Expr::Index(s, t0.apply(sub), e.into(), *i)
             }
             Expr::Assoc(span, t0, b, x1, ts1) => {
-                let stmt = self.traits.get(&b.name).unwrap_or_else(|| panic!("Unknown trait {b}"));
+                let stmt = self
+                    .traits
+                    .get(&b.name)
+                    .unwrap_or_else(|| panic!("Unknown trait {b}"));
                 let d = stmt.defs.iter().find(|d| &d.name == x1).unwrap();
                 let gs0 = stmt.generics.clone();
                 let gs1 = d.generics.clone();
@@ -453,7 +455,7 @@ impl Context {
                     .chain(gs1)
                     .zip(b.ts.clone().into_iter().chain(ts1.clone()))
                     .collect::<Vec<_>>();
-                let param_ts = d.params.values().map(|t| t.clone()).collect::<Vec<_>>();
+                let param_ts = d.params.values().cloned().collect::<Vec<_>>();
                 let return_t = d.ty.clone();
                 let fun_t = Type::Fun(param_ts, Rc::new(return_t)).instantiate(&gsub0);
                 self.recover(s, e.span(), unify(sub, t0, &fun_t));
@@ -547,6 +549,14 @@ fn matches(s: &mut Map<Name, Type>, b0: &Bound, b1: &Bound) -> bool {
                     .iter()
                     .zip(b0.ts.iter())
                     .all(|(t0, t1)| unify(s, t0, t1).is_ok())
+                && b0
+                    .xts
+                    .iter()
+                    .zip(b1.xts.iter())
+                    .all(|((x0, t0), (x1, t1))| {
+                        assert!(x0 == x1);
+                        unify(s, t0, t1).is_ok()
+                    })
         }
         (Bound::Unresolved(..), _) | (_, Bound::Unresolved(..)) => unreachable!(),
         (Bound::Err(..), _) | (_, Bound::Err(..)) => true,
@@ -609,11 +619,7 @@ fn mgu(t0: &Type, t1: &Type) -> Option<Map<Name, Type>> {
         (Type::Err, _) | (_, Type::Err) => Some(Map::new()),
         (Type::Generic(x0), Type::Generic(x1)) => (x0 == x1).then(Map::new),
         (Type::Assoc(tb, x, _), t2) | (t2, Type::Assoc(tb, x, _)) => {
-            let t3 = tb
-                .xts
-                .iter()
-                .find_map(|(x0, t0)| (x0 == x).then_some(t0))
-                .unwrap();
+            let t3 = tb.xts.get(x).unwrap();
             mgu(t2, t3)
         }
         (Type::Hole, _) | (_, Type::Hole) => unreachable!(),

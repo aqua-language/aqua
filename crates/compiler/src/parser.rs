@@ -51,8 +51,8 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
-use crate::ast::TraitDef;
-use crate::ast::TraitType;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
 use crate::ast::Type;
 use crate::ast::UnresolvedPatField;
 use crate::diag::Report;
@@ -586,7 +586,7 @@ where
         Ok(Spanned::new(s, StmtTrait::new(s, x.v, gs, bs, defs, tys)))
     }
 
-    fn stmt_def_decl(&mut self, follow: Token) -> Result<Spanned<TraitDef>, Span> {
+    fn stmt_def_decl(&mut self, follow: Token) -> Result<Spanned<StmtTraitDef>, Span> {
         let t0 = self.expect(Token::Def, follow)?;
         let x = self.name(follow)?;
         let gs = self.generics(follow | Token::LParen)?;
@@ -596,16 +596,16 @@ where
         let bs = self.where_clause(follow | Token::SemiColon)?;
         let t1 = self.expect(Token::SemiColon, follow)?;
         let s = t0.s + t1.s;
-        Ok(Spanned::new(s, TraitDef::new(s, x.v, gs, xts.v, t.v, bs)))
+        Ok(Spanned::new(s, StmtTraitDef::new(s, x.v, gs, xts.v, t.v, bs)))
     }
 
-    fn stmt_type_decl(&mut self, follow: Token) -> Result<Spanned<TraitType>, Span> {
+    fn stmt_type_decl(&mut self, follow: Token) -> Result<Spanned<StmtTraitType>, Span> {
         let t0 = self.expect(Token::Type, follow)?;
         let x = self.name(follow)?;
         let gs = self.generics(follow | Token::Eq | Token::SemiColon)?;
         let t1 = self.expect(Token::SemiColon, follow)?;
         let s = t0.s + t1.s;
-        Ok(Spanned::new(s, TraitType::new(s, x.v, gs)))
+        Ok(Spanned::new(s, StmtTraitType::new(s, x.v, gs)))
     }
 
     pub fn stmt_impl(&mut self, follow: Token) -> Result<Spanned<StmtImpl>, Span> {
@@ -946,12 +946,12 @@ where
             }
             Token::Int => {
                 let t = self.next();
-                let v = self.text(t).to_owned();
+                let v = self.text(t).into();
                 Pat::Int(t.s, Type::Hole, v)
             }
             Token::String => {
                 let t = self.next();
-                let v = self.text(t).to_owned();
+                let v = self.text(t).into();
                 Pat::String(t.s, Type::Hole, v)
             }
             Token::Char => {

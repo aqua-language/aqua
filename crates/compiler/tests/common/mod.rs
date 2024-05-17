@@ -23,8 +23,8 @@ use compiler::ast::StmtType;
 use compiler::ast::StmtTypeBody;
 use compiler::ast::StmtVar;
 use compiler::ast::TraitBound;
-use compiler::ast::TraitDef;
-use compiler::ast::TraitType;
+use compiler::ast::StmtTraitDef;
+use compiler::ast::StmtTraitType;
 use compiler::ast::Type;
 
 use compiler::lexer::Span;
@@ -32,52 +32,31 @@ use compiler::lexer::Span;
 #[macro_export]
 macro_rules! check {
     ($a:expr, $b:expr) => {
-        assert!($a == $b, "\n(a) {}\n\n(b) {}", $a, $b);
+        assert!($a == $b, "{}", {
+            let a_str = format!("{}", $a);
+            let b_str = format!("{}", $b);
+            if a_str != b_str {
+                common::diff(a_str, b_str)
+            } else {
+                let a_str = format!("{}", $a.verbose());
+                let b_str = format!("{}", $b.verbose());
+                if a_str != b_str {
+                    common::diff(a_str, b_str)
+                } else {
+                    let a_str = format!("{:#?}", $a);
+                    let b_str = format!("{:#?}", $b);
+                    common::diff(a_str, b_str)
+                }
+            }
+        });
     };
-    (@debug; $a:expr, $b:expr) => {
+    ($a:expr, $b:expr, $msg:literal) => {{
+        let msg = indoc::indoc!($msg);
+        check!($a.val, $b);
         assert!(
-            $a == $b,
-            "\n{}",
-            common::diff(format!("{:#?}", $a), format!("{:#?}", $b))
-        );
-    };
-    ($a:expr, $b:expr, $b_msg:literal) => {{
-        let b_msg = indoc::indoc!($b_msg);
-        assert!(
-            $a.val == $b,
+            $a.msg == msg,
             "{}",
-            common::diff(format!("{:#?}", $a.val), format!("{:#?}", $b))
-        );
-        assert!(
-            $a.msg == b_msg,
-            "{}",
-            common::diff($a.msg, b_msg.to_string())
-        );
-    }};
-    (@typed; $a:expr, $b:expr) => {{
-        assert!(
-            $a == $b,
-            "\n{}",
-            common::diff(
-                $a.display_types().to_string(),
-                $b.display_types().to_string()
-            )
-        );
-    }};
-    (@typed; $a:expr, $b:expr, $b_msg:literal) => {{
-        let b_msg = indoc::indoc!($b_msg);
-        assert!(
-            $a.val == $b,
-            "{}",
-            common::diff(
-                $a.val.display_types().to_string(),
-                $b.display_types().to_string()
-            )
-        );
-        assert!(
-            $a.msg == b_msg,
-            "{}",
-            common::diff($a.msg, b_msg.to_string())
+            common::diff($a.msg, msg.to_string())
         );
     }};
 }
@@ -104,8 +83,8 @@ pub fn stmt_trait<const N: usize, const M: usize, const K: usize, const L: usize
     x: &'static str,
     gs: [&'static str; N],
     bounds: [Bound; M],
-    defs: [TraitDef; K],
-    types: [TraitType; L],
+    defs: [StmtTraitDef; K],
+    types: [StmtTraitType; L],
 ) -> Stmt {
     StmtTrait::new(
         span(),
@@ -646,12 +625,12 @@ pub fn tr_def<const N: usize, const M: usize, const K: usize>(
     xts: [(&'static str, Type); K],
     t: Type,
     qs: [Bound; M],
-) -> TraitDef {
-    TraitDef::new(span(), name(x), app(gs, name), params(xts), t, vec(qs))
+) -> StmtTraitDef {
+    StmtTraitDef::new(span(), name(x), app(gs, name), params(xts), t, vec(qs))
 }
 
-pub fn tr_type<const N: usize>(x: &'static str, gs: [&'static str; N]) -> TraitType {
-    TraitType::new(span(), name(x), app(gs, name))
+pub fn tr_type<const N: usize>(x: &'static str, gs: [&'static str; N]) -> StmtTraitType {
+    StmtTraitType::new(span(), name(x), app(gs, name))
 }
 
 pub fn stmt_struct<const N: usize, const M: usize>(

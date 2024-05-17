@@ -167,6 +167,30 @@ pub trait Print<'b> {
         self.group(fun, "[", "]")
     }
 
+    fn if_nonempty<T>(
+        &mut self,
+        items: &[T],
+        f: impl Fn(&mut Self, &[T]) -> std::fmt::Result,
+    ) -> std::fmt::Result {
+        if items.is_empty() {
+            Ok(())
+        } else {
+            f(self, items)
+        }
+    }
+
+    fn if_some<T>(
+        &mut self,
+        item: &Option<T>,
+        f: impl Fn(&mut Self, &T) -> std::fmt::Result,
+    ) -> std::fmt::Result {
+        if let Some(item) = item {
+            f(self, item)
+        } else {
+            Ok(())
+        }
+    }
+
     fn name(&mut self, s: &Name) -> std::fmt::Result {
         write!(self.fmt(), "{}", &s.data)
     }
@@ -183,6 +207,12 @@ pub trait Print<'b> {
         self.punct("\"")?;
         self.lit(s)?;
         self.punct("\"")
+    }
+
+    fn char(&mut self, c: char) -> std::fmt::Result {
+        self.punct("'")?;
+        self.lit(c)?;
+        self.punct("'")
     }
 
     fn scope<T>(

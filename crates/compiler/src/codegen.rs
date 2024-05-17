@@ -18,8 +18,8 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
-use crate::ast::TraitDef;
-use crate::ast::TraitType;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
 use crate::ast::Type;
 use crate::print::Print;
 
@@ -194,7 +194,7 @@ impl<'a, 'b> Rust<'a, 'b> {
         })
     }
 
-    fn stmt_def_decl(&mut self, s: &TraitDef) -> std::fmt::Result {
+    fn stmt_def_decl(&mut self, s: &StmtTraitDef) -> std::fmt::Result {
         self.kw("def")?;
         self.space()?;
         self.name(&s.name)?;
@@ -206,7 +206,7 @@ impl<'a, 'b> Rust<'a, 'b> {
         self.punct(";")
     }
 
-    fn stmt_type_decl(&mut self, s: &TraitType) -> std::fmt::Result {
+    fn stmt_type_decl(&mut self, s: &StmtTraitType) -> std::fmt::Result {
         self.kw("type")?;
         self.space()?;
         self.name(&s.name)?;

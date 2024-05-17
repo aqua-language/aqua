@@ -141,11 +141,15 @@ def run_experiment1():
     obj = {
         'Q1': {
             'Flink': f(flink, 'q1', generate('b')),
-            'Rust': f(rust, 'q1', generate('b'))
+            'Rust': f(rust, 'q1', generate('b')),
+            'FlinkOpt': f(flink, 'q1-opt', generate('b')),
+            'RustOpt': f(rust, 'q1-opt', generate('b'))
         },
         'Q2': {
             'Flink': f(flink, 'q2', generate('b')),
             'Rust': f(rust, 'q2', generate('b')),
+            'FlinkOpt': f(flink, 'q2-opt', generate('b')),
+            'RustOpt': f(rust, 'q2-opt', generate('b'))
         },
         'Q3': {
             'Flink': f(flink, 'q3', generate('ap')),

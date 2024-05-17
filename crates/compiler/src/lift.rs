@@ -22,8 +22,8 @@ use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::TraitBound;
-use crate::ast::TraitDef;
-use crate::ast::TraitType;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
 use crate::ast::Type;
 use crate::diag::Report;
 
@@ -220,7 +220,7 @@ impl Context {
         })
     }
 
-    fn trait_def(&mut self, d: &TraitDef) -> TraitDef {
+    fn trait_def(&mut self, d: &StmtTraitDef) -> StmtTraitDef {
         let name = d.name;
         self.scoped(|ctx| {
             let span = d.span;
@@ -228,16 +228,16 @@ impl Context {
             let params = d.params.map_values(|t| ctx.ty(&t));
             let ty = ctx.ty(&d.ty);
             let where_clause = d.where_clause.iter().map(|b| ctx.bound(b)).collect();
-            TraitDef::new(span, name, generics, params, ty, where_clause)
+            StmtTraitDef::new(span, name, generics, params, ty, where_clause)
         })
     }
 
-    fn trait_type(&mut self, t: &TraitType) -> TraitType {
+    fn trait_type(&mut self, t: &StmtTraitType) -> StmtTraitType {
         self.scoped(|ctx| {
             let span = t.span;
             let name = t.name;
             let generics = t.generics.iter().map(|g| ctx.stack.bind(*g)).collect();
-            TraitType::new(span, name, generics)
+            StmtTraitType::new(span, name, generics)
         })
     }
 

@@ -19,7 +19,7 @@ use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::TraitBound;
-use crate::ast::TraitDef;
+use crate::ast::StmtTraitDef;
 use crate::ast::Type;
 use crate::ast::UnresolvedPatField;
 use crate::infer::Context;
@@ -252,15 +252,15 @@ impl StmtTrait {
     }
 }
 
-impl TraitDef {
-    pub fn annotate(&self, ctx: &mut Context) -> TraitDef {
+impl StmtTraitDef {
+    pub fn annotate(&self, ctx: &mut Context) -> StmtTraitDef {
         let span = self.span;
         let name = self.name;
         let generics = self.generics.clone();
         let where_clause = self.where_clause.iter().map(|p| p.annotate(ctx)).collect();
         let params = self.params.map_values(|t| t.annotate(ctx));
         let ty = self.ty.annotate(ctx);
-        TraitDef::new(span, name, generics, params, ty, where_clause)
+        StmtTraitDef::new(span, name, generics, params, ty, where_clause)
     }
 }
 

@@ -34,6 +34,7 @@ pub mod map;
 pub mod monomorphise;
 #[cfg(feature = "optimiser")]
 pub mod opt;
+pub mod ordmap;
 pub mod symbol;
 // pub mod union_find;
 // mod visitor;
@@ -104,8 +105,8 @@ impl Compiler {
 
     pub fn parse<T>(
         &mut self,
-        name: impl ToString,
         input: &str,
+        name: impl ToString,
         f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>) -> T,
     ) -> Result<T, Recovered<T>> {
         let input: Rc<str> = unindent::unindent(input).into();

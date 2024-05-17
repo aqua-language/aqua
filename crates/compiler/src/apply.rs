@@ -18,7 +18,7 @@ use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::TraitBound;
-use crate::ast::TraitDef;
+use crate::ast::StmtTraitDef;
 use crate::ast::Type;
 use crate::map::Map;
 
@@ -73,6 +73,44 @@ impl Type {
                 Type::Array(t, n)
             }
             Type::Never => Type::Never,
+        }
+    }
+
+    pub fn expand_assoc(&self) -> Type {
+        match self {
+            Type::Cons(x, ts) => {
+                let ts = ts.iter().map(|t| t.expand_assoc()).collect::<Vec<_>>();
+                Type::Cons(*x, ts)
+            }
+            Type::Assoc(b, x1, _) => b.xts.get(x1).unwrap().expand_assoc(),
+            Type::Err => Type::Err,
+            Type::Generic(x) => Type::Generic(*x),
+            Type::Fun(ts, t) => {
+                let ts = ts.iter().map(|t| t.expand_assoc()).collect();
+                let t = t.expand_assoc();
+                Type::Fun(ts, Rc::new(t))
+            }
+            Type::Tuple(ts) => {
+                let ts = ts.iter().map(|t| t.expand_assoc()).collect();
+                Type::Tuple(ts)
+            }
+            Type::Record(xts) => {
+                let xts = xts.iter().map(|(x, t)| (*x, t.expand_assoc())).collect();
+                Type::Record(xts)
+            }
+            Type::Alias(x, ts) => {
+                let ts = ts.iter().map(|t| t.expand_assoc()).collect();
+                Type::Alias(*x, ts)
+            }
+            Type::Array(t, n) => {
+                let t = Rc::new(t.expand_assoc());
+                let n = *n;
+                Type::Array(t, n)
+            }
+            Type::Never => Type::Never,
+            Type::Unresolved(_) => unreachable!(),
+            Type::Var(_) => unreachable!(),
+            Type::Hole => unreachable!(),
         }
     }
 
@@ -234,15 +272,15 @@ impl StmtTrait {
     }
 }
 
-impl TraitDef {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> TraitDef {
+impl StmtTraitDef {
+    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtTraitDef {
         let span = self.span;
         let name = self.name;
         let generics = self.generics.clone();
         let params = self.params.iter().map(|(x, t)| (*x, f(t))).collect();
         let ty = f(&self.ty);
         let where_clause = self.where_clause.iter().map(|b| b.map_type(f)).collect();
-        TraitDef::new(span, name, generics, params, ty, where_clause)
+        StmtTraitDef::new(span, name, generics, params, ty, where_clause)
     }
 }
 
