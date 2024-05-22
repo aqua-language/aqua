@@ -198,6 +198,10 @@ def run_experiment2():
     def f(program, size, query):
         return measure_query(program, query, data, extra_args=[size, slide])
 
+    def g(program, size, query):
+        y_io, yerr_io = measure_io(program, data)
+        return 'Timeout', 'N/A', y_io, yerr_io
+
     obj = {
         'Size 100': {
             'Flink': f(flink, '100', 'qw'),
@@ -219,7 +223,9 @@ def run_experiment2():
         },
         'Size 100000': {
             'Rust': f(rust, '100000', 'qw'),
+            'Flink': g(flink, '100000', 'qw'),
             'RustOpt': f(rust, '100000', 'qw-opt'),
+            'FlinkOpt': g(flink, '100000', 'qw-opt'),
         }
     }
     write(json_path(2), obj)
@@ -228,7 +234,8 @@ def run_experiment2():
 def plot(result_json_path, plot_path, tex=False, io=False):
     obj = read(result_json_path)
     ymax = max([y for query in obj.values()
-               for y, _, _, _ in query.values()])
+               for y, _, _, _ in query.values() if y != 'Timeout'])
+    ylim = ymax * 1.1
 
     SMALL_SIZE = 8
     MEDIUM_SIZE = 10
@@ -251,7 +258,7 @@ def plot(result_json_path, plot_path, tex=False, io=False):
     fig, ax = plt.subplots(figsize=(10/3, 1.8))
 
     ax.yaxis.set_major_formatter(FormatStrFormatter('%.0f'))
-    ax.set_ylim([0, ymax * 1.1])
+    ax.set_ylim([0, ylim])
 
     bar_width = 0.2
 
@@ -264,26 +271,42 @@ def plot(result_json_path, plot_path, tex=False, io=False):
     for query_index, (query, systems) in enumerate(obj.items()):
         offset = (len(systems) - 1) * bar_width / 2
         for system_index, (system, metrics) in enumerate(systems.items()):
-            y, y_err, y_io, y_io_err = metrics
             x = query_index - offset + system_index * bar_width
-
-            if not io:
-                y = y - y_io
-
+            y, y_err, y_io, y_io_err = metrics
             hatch = hatch_map[system]
             color = color_map[system]
-            ax.bar(x, y, bar_width, yerr=y_err,
-                   color=color,
-                   edgecolor='black',
-                   alpha=0.8,
-                   linewidth=0.5,
-                   hatch=hatch)
-            if io:
-                ax.bar(x, y_io, bar_width, yerr=y_io_err,
-                       color='lightgray',
+            if y == 'Timeout':
+                # Write vertical timeout in the bar
+                ax.text(x, y_io+1, r'Timeout ($>$5min)',
+                        color='black',
+                        rotation=90, ha='center', va='bottom')
+                ax.bar(x, ylim+1, bar_width,
+                       color=color,
                        edgecolor='black',
+                       alpha=0.8,
+                       linewidth=0.5)
+                if io:
+                    ax.bar(x, y_io, bar_width, yerr=y_io_err,
+                           color='lightgray',
+                           edgecolor='black',
+                           linewidth=0.5,
+                           alpha=0.8)
+            else:
+                if not io:
+                    y = y - y_io
+
+                ax.bar(x, y, bar_width, yerr=y_err,
+                       color=color,
+                       edgecolor='black',
+                       alpha=0.8,
                        linewidth=0.5,
-                       alpha=0.8)
+                       hatch=hatch)
+                if io:
+                    ax.bar(x, y_io, bar_width, yerr=y_io_err,
+                           color='lightgray',
+                           edgecolor='black',
+                           linewidth=0.5,
+                           alpha=0.8)
 
     ax.set_xticks(np.arange(len(obj)))
     ax.set_xticklabels(obj.keys())
