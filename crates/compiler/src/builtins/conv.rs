@@ -8,7 +8,6 @@ use runtime::builtins::duration::Duration;
 use runtime::builtins::encoding::Encoding;
 use runtime::builtins::file::File;
 // use runtime::builtins::image::Image;
-// use runtime::builtins::model::Model;
 use runtime::builtins::path::Path;
 use runtime::builtins::reader::Reader;
 use runtime::builtins::set::Set;
@@ -65,8 +64,6 @@ conv!(Duration, Duration, as_duration);
 conv!(Dataflow, Dataflow, as_dataflow);
 conv!(Encoding, Encoding, as_encoding);
 conv!(File, File, as_file);
-#[cfg(feature = "model")]
-conv!(Model, Model, as_model);
 conv!(
     runtime::builtins::option::Option<Rc<Value>>,
     Option,

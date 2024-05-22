@@ -15,11 +15,11 @@ use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
+use crate::ast::StmtTraitDef;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::TraitBound;
-use crate::ast::StmtTraitDef;
 use crate::ast::Type;
 use crate::ast::UnresolvedPatField;
 use crate::infer::Context;
@@ -234,8 +234,16 @@ impl StmtImpl {
         let generics = self.generics.clone();
         let head = self.head.annotate(ctx);
         let body = self.where_clause.iter().map(|p| p.annotate(ctx)).collect();
-        let defs = self.defs.iter().map(|d| Rc::new(d.as_ref().annotate(ctx))).collect();
-        let tys = self.types.iter().map(|t| Rc::new(t.as_ref().annotate(ctx))).collect();
+        let defs = self
+            .defs
+            .iter()
+            .map(|d| Rc::new(d.as_ref().annotate(ctx)))
+            .collect();
+        let tys = self
+            .types
+            .iter()
+            .map(|t| Rc::new(t.as_ref().annotate(ctx)))
+            .collect();
         StmtImpl::new(span, generics, head, body, defs, tys)
     }
 }
@@ -246,7 +254,11 @@ impl StmtTrait {
         let generics = self.generics.clone();
         let name = self.name;
         let body = self.where_clause.iter().map(|p| p.annotate(ctx)).collect();
-        let defs = self.defs.iter().map(|d| Rc::new(d.as_ref().annotate(ctx))).collect();
+        let defs = self
+            .defs
+            .iter()
+            .map(|d| Rc::new(d.as_ref().annotate(ctx)))
+            .collect();
         let assocs = self.types.clone();
         StmtTrait::new(span, name, generics, body, defs, assocs)
     }
@@ -270,19 +282,10 @@ impl Expr {
         let t = self.ty().annotate(ctx);
         match self {
             Expr::Unresolved(..) => unreachable!(),
-            Expr::Int(_, _, v) => {
-                let v = v.clone();
-                Expr::Int(s, t, v)
-            }
-            Expr::Float(_, _, v) => {
-                let v = v.clone();
-                Expr::Float(s, t, v)
-            }
+            Expr::Int(_, _, v) => Expr::Int(s, t, *v),
+            Expr::Float(_, _, v) => Expr::Float(s, t, *v),
             Expr::Bool(_, _, v) => Expr::Bool(s, t, *v),
-            Expr::String(_, _, v) => {
-                let v = v.clone();
-                Expr::String(s, t, v)
-            }
+            Expr::String(_, _, v) => Expr::String(s, t, *v),
             Expr::Var(_, _, x) => Expr::Var(s, t, *x),
             Expr::Def(_, _, x, ts) => {
                 let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
@@ -415,14 +418,8 @@ impl Pat {
                 let p = p.annotate(ctx);
                 Pat::Enum(s, t, *x0, ts, *x1, Rc::new(p))
             }
-            Pat::Int(_, _, v) => {
-                let v = v.clone();
-                Pat::Int(s, t, v)
-            }
-            Pat::String(_, _, v) => {
-                let v = v.clone();
-                Pat::String(s, t, v)
-            }
+            Pat::Int(_, _, v) => Pat::Int(s, t, *v),
+            Pat::String(_, _, v) => Pat::String(s, t, *v),
             Pat::Wildcard(_, _) => Pat::Wildcard(s, t),
             Pat::Bool(_, _, v) => Pat::Bool(s, t, *v),
             Pat::Err(_, _) => Pat::Err(s, t),

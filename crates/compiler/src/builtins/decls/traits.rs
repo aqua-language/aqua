@@ -22,24 +22,24 @@ impl Compiler {
                  def add(a:A, b:B): Add[A,B]::Output;
              }",
         );
-        // self.declare_trait(
-        //     "trait Sub[A,B] {
-        //          type Output;
-        //          def sub(a:A, b:B): Sub[A,B]::Output;
-        //      }",
-        // );
-        // self.declare_trait(
-        //     "trait Mul[A,B] {
-        //          type Output;
-        //          def mul(a:A, b:B): Mul[A,B]::Output;
-        //      }",
-        // );
-        // self.declare_trait(
-        //     "trait Div[A,B] {
-        //          type Output;
-        //          def div(a:A, b:B): Div[A,B]::Output;
-        //      }",
-        // );
+        self.declare_trait(
+            "trait Sub[A,B] {
+                 type Output;
+                 def sub(a:A, b:B): Sub[A,B]::Output;
+             }",
+        );
+        self.declare_trait(
+            "trait Mul[A,B] {
+                 type Output;
+                 def mul(a:A, b:B): Mul[A,B]::Output;
+             }",
+        );
+        self.declare_trait(
+            "trait Div[A,B] {
+                 type Output;
+                 def div(a:A, b:B): Div[A,B]::Output;
+             }",
+        );
         // self.declare_trait(
         //     "trait Eq[T] {
         //          def eq(a:T, b:T): bool;

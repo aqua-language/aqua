@@ -122,15 +122,15 @@ impl Context {
     }
 
     fn decl_stmt_def(&mut self, s: &StmtDef) {
-        self.defs.insert(s.name.clone(), s.clone());
+        self.defs.insert(s.name, s.clone());
     }
 
     fn decl_stmt_struct(&mut self, s: &StmtStruct) {
-        self.structs.insert(s.name.clone(), s.clone());
+        self.structs.insert(s.name, s.clone());
     }
 
     fn decl_stmt_enum(&mut self, s: &StmtEnum) {
-        self.enums.insert(s.name.clone(), s.clone());
+        self.enums.insert(s.name, s.clone());
     }
 
     fn decl_stmt_impl(&mut self, s: &StmtImpl) {
@@ -139,7 +139,7 @@ impl Context {
 
     fn stmt_var(&mut self, s: &StmtVar) -> StmtVar {
         let span = s.span;
-        let x = s.name.clone();
+        let x = s.name;
         let t = self.ty(&s.ty);
         let e = self.expr(&s.expr);
         StmtVar::new(span, x, t, e)
@@ -152,9 +152,9 @@ impl Context {
                 s.generics
                     .iter()
                     .zip(ts)
-                    .for_each(|(g, t)| ctx.stack.bind(g.clone(), t.clone()));
+                    .for_each(|(g, t)| ctx.stack.bind(*g, t.clone()));
                 let span = s.span;
-                let ps = s.params.map_values(|t| ctx.ty(&t));
+                let ps = s.params.map_values(|t| ctx.ty(t));
                 let t = ctx.ty(&s.ty);
                 let b = StmtDefBody::UserDefined(ctx.expr(s.body.as_expr()));
                 ctx.stmts.push(Stmt::Def(Rc::new(StmtDef::new(
@@ -179,12 +179,12 @@ impl Context {
                 s.generics
                     .iter()
                     .zip(ts)
-                    .for_each(|(g, t)| ctx.stack.bind(g.clone(), t.clone()));
+                    .for_each(|(g, t)| ctx.stack.bind(*g, t.clone()));
                 let span = s.span;
                 let fields = s
                     .fields
                     .iter()
-                    .map(|(x, t)| (x.clone(), ctx.ty(t)))
+                    .map(|(x, t)| (*x, ctx.ty(t)))
                     .collect();
                 ctx.stmts.push(Stmt::Struct(Rc::new(StmtStruct::new(
                     span,
@@ -219,7 +219,7 @@ impl Context {
         })
     }
 
-    fn _stmt_impl(&mut self, _s: &StmtImpl, _ts: &Vec<Type>) -> StmtImpl {
+    fn _stmt_impl(&mut self, _s: &StmtImpl, _ts: &[Type]) -> StmtImpl {
         // let span = s.span;
         // let tb = s.trait_bound.clone();
         // let x = s.name.clone();
@@ -249,18 +249,18 @@ impl Context {
     }
 
     pub fn expr(&mut self, e: &Expr) -> Expr {
-        let t = self.ty(&e.ty());
+        let t = self.ty(e.ty());
         let s = e.span();
         match e {
             Expr::Unresolved(_, _, _) => unreachable!(),
-            Expr::Int(_, _, v) => Expr::Int(s, t, v.clone()),
-            Expr::Float(_, _, v) => Expr::Float(s, t, v.clone()),
+            Expr::Int(_, _, v) => Expr::Int(s, t, *v),
+            Expr::Float(_, _, v) => Expr::Float(s, t, *v),
             Expr::Bool(_, _, b) => Expr::Bool(s, t, *b),
-            Expr::Char(_, _, v) => Expr::Char(s, t, v.clone()),
-            Expr::String(_, _, v) => Expr::String(s, t, v.clone()),
+            Expr::Char(_, _, v) => Expr::Char(s, t, *v),
+            Expr::String(_, _, v) => Expr::String(s, t, *v),
             Expr::Struct(_, _, x, ts, xes) => {
                 let x = self.stmt_struct(x, ts);
-                let xvs = xes.iter().map(|(n, e)| (n.clone(), self.expr(e))).collect();
+                let xvs = xes.iter().map(|(n, e)| (*n, self.expr(e))).collect();
                 Expr::Struct(s, t, x, vec![], xvs)
             }
             Expr::Tuple(_, _, es) => {
@@ -268,7 +268,7 @@ impl Context {
                 Expr::Tuple(s, t, vs)
             }
             Expr::Record(_, _, xes) => {
-                let vs = xes.iter().map(|(n, e)| (n.clone(), self.expr(e))).collect();
+                let vs = xes.iter().map(|(n, e)| (*n, self.expr(e))).collect();
                 Expr::Record(s, t, vs)
             }
             Expr::Enum(_, _, x, ts, x1, e) => {
@@ -287,7 +287,7 @@ impl Context {
             Expr::Var(_, _, x) => Expr::Var(s, t, *x),
             Expr::Def(_, _, x, ts) => {
                 let ts = ts.iter().map(|t| self.ty(t)).collect::<Vec<_>>();
-                let stmt = self.defs.get(&x).unwrap();
+                let stmt = self.defs.get(x).unwrap();
                 match &stmt.body {
                     StmtDefBody::UserDefined(_) => {
                         let x = self.stmt_def(&stmt.clone(), &ts);
@@ -349,7 +349,7 @@ impl Context {
                 Type::Tuple(ts)
             }
             Type::Record(xts) => {
-                let xts = xts.iter().map(|(x, t)| (x.clone(), self.ty(t))).collect();
+                let xts = xts.iter().map(|(x, t)| (*x, self.ty(t))).collect();
                 Type::Record(xts)
             }
             Type::Array(_, _) => todo!(),

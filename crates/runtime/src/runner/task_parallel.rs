@@ -5,7 +5,7 @@ pub struct TaskParallelRunner {
 }
 
 impl TaskParallelRunner {
-    #[cfg(feature = "tokio/rt-multi-thread")]
+    #[cfg(feature = "multi-thread")]
     pub fn new(f: impl FnOnce(&mut Context) + Send + 'static) -> Self {
         let (tx, rx) = std::sync::mpsc::sync_channel::<()>(1);
         tokio::runtime::Builder::new_multi_thread()
@@ -20,7 +20,7 @@ impl TaskParallelRunner {
         Self { tx }
     }
 
-    #[cfg(not(feature = "tokio/rt-multi-thread"))]
+    #[cfg(not(feature = "multi-thread"))]
     pub fn new(f: impl FnOnce(&mut Context) + Send + 'static) -> Self {
         let (tx, rx) = std::sync::mpsc::sync_channel::<()>(1);
         tokio::runtime::Builder::new_current_thread()

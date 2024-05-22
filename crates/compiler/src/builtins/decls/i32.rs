@@ -9,69 +9,63 @@ impl Compiler {
         self.declare_impl(
             "impl Add[i32,i32] {
                  type Output = i32;
-                 def add(a:i32, b:i32): i32 = i32_add(a, b);
+                 def add(a:i32, b:i32): i32;
              }",
-        );
-        //
-        // self.declare_def(
-        //     "def i32_neg(a: i32): i32;",
-        //     BuiltinDef {
-        //         rust: "(|a| !a)",
-        //         fun: |_ctx, _t, v| {
-        //             let v0 = v[0].as_i32();
-        //             (!v0).into()
-        //         },
-        //     },
-        // );
-
-        self.declare_def(
-            "def i32_add(a: i32, b: i32): i32;",
-            BuiltinDef {
+            [BuiltinDef {
                 rust: "(|a,b| a+b)",
                 fun: |_ctx, _t, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 + v1).into()
                 },
-            },
+            }],
         );
 
-        // self.declare_def(
-        //     "def i32_sub(a: i32, b: i32): i32;",
-        //     BuiltinDef {
-        //         rust: "(|a,b| a-b)",
-        //         fun: |_ctx, _t, v| {
-        //             let v0 = v[0].as_i32();
-        //             let v1 = v[1].as_i32();
-        //             (v0 - v1).into()
-        //         },
-        //     },
-        // );
-        //
-        // self.declare_def(
-        //     "def i32_mul(a: i32, b: i32): i32;",
-        //     BuiltinDef {
-        //         rust: "(|a,b| a*b)",
-        //         fun: |_ctx, _t, v| {
-        //             let v0 = v[0].as_i32();
-        //             let v1 = v[1].as_i32();
-        //             (v0 * v1).into()
-        //         },
-        //     },
-        // );
-        //
-        // self.declare_def(
-        //     "def i32_div(a: i32, b: i32): i32;",
-        //     BuiltinDef {
-        //         rust: "(|a,b| a/b)",
-        //         fun: |_ctx, _t, v| {
-        //             let v0 = v[0].as_i32();
-        //             let v1 = v[1].as_i32();
-        //             (v0 / v1).into()
-        //         },
-        //     },
-        // );
-        //
+        self.declare_impl(
+            "impl Sub[i32,i32] {
+                 type Output = i32;
+                 def sub(a:i32, b:i32): i32;
+             }",
+            [BuiltinDef {
+                rust: "(|a,b| a-b)",
+                fun: |_ctx, _t, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    (v0 - v1).into()
+                },
+            }],
+        );
+
+        self.declare_impl(
+            "impl Mul[i32,i32] {
+                 type Output = i32;
+                 def mul(a:i32, b:i32): i32;
+             }",
+            [BuiltinDef {
+                rust: "(|a,b| a*b)",
+                fun: |_ctx, _t, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    (v0 * v1).into()
+                },
+            }],
+        );
+
+        self.declare_impl(
+            "impl Div[i32,i32] {
+                 type Output = i32;
+                 def div(a:i32, b:i32): i32;
+             }",
+            [BuiltinDef {
+                rust: "(|a,b| a/b)",
+                fun: |_ctx, _t, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    (v0 / v1).into()
+                },
+            }],
+        );
+
         // self.declare_def(
         //     "def i32_ge(a: i32, b: i32): bool;",
         //     BuiltinDef {

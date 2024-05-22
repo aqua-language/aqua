@@ -151,9 +151,9 @@ impl Compiler {
     }
 
     #[cfg_attr(debug_assertions, track_caller)]
-    pub fn declare_impl(&mut self, source: &'static str) {
+    pub fn declare_impl<const N: usize>(&mut self, source: &'static str, defs: [BuiltinDef; N]) {
         if let Some(stmt) = self.try_parse(builtin_file_name!(), source, |parser, follow| {
-            parser.stmt_impl(follow)
+            parser.stmt_impl_builtin(follow, defs)
         }) {
             self.declarations.push(Stmt::Impl(Rc::new(stmt)))
         }

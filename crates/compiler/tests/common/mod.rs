@@ -687,12 +687,12 @@ pub fn pat_var(x: &'static str) -> Pat {
     Pat::Var(span(), Type::hole(), name(x))
 }
 
-pub fn pat_int(i: &'static str) -> Pat {
-    Pat::Int(span(), Type::hole(), i.to_owned())
+pub fn pat_int(v: &'static str) -> Pat {
+    Pat::Int(span(), Type::hole(), v.into())
 }
 
 pub fn pat_string(s: &'static str) -> Pat {
-    Pat::String(span(), Type::hole(), s.to_owned())
+    Pat::String(span(), Type::hole(), s.into())
 }
 
 pub fn pat_unit() -> Pat {

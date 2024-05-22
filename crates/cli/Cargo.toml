@@ -1,8 +1,12 @@
 [package]
-name = "aqua"
+name = "cli"
 version.workspace = true
 edition.workspace = true
 build = "build.rs"
+
+[[bin]]
+name = "aqua"
+path = "src/main.rs"
 
 [features]
 default = ["repl"]

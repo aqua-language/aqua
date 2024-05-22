@@ -25,6 +25,7 @@ use compiler::infer::Context;
 
 use crate::common::traits::impls;
 
+#[allow(unused)]
 fn debug(impls: &[Rc<StmtImpl>], goal: &Bound) {
     println!("impls:");
     for i in impls {
@@ -43,7 +44,6 @@ fn test_trait1() {
     let mut ctx = Context::new();
     ctx.impls = impls.to_vec();
 
-    debug(&impls, &goal);
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
 }
 

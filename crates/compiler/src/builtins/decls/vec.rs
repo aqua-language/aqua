@@ -7,6 +7,7 @@ pub type Vec = runtime::builtins::vec::Vec<crate::builtins::Value>;
 impl Compiler {
     pub(super) fn declare_vec(&mut self) {
         self.declare_type("type Vec[T];", BuiltinType { rust: "Vec" });
+
         self.declare_def(
             "def vec_new[T](): Vec[T];",
             BuiltinDef {
@@ -14,6 +15,7 @@ impl Compiler {
                 fun: |_ctx, _t, _v| Vec::new().into(),
             },
         );
+
         self.declare_def(
             "def vec_push[T](a0: Vec[T], a1: T): ();",
             BuiltinDef {

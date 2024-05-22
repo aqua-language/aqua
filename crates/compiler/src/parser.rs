@@ -48,11 +48,11 @@ use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
-use crate::ast::StmtTraitDef;
-use crate::ast::StmtTraitType;
 use crate::ast::Type;
 use crate::ast::UnresolvedPatField;
 use crate::diag::Report;
@@ -452,6 +452,35 @@ where
         Ok(Spanned::new(s, StmtType::new(s, x.v, gs, body)))
     }
 
+    pub fn stmt_impl_builtin<const N: usize>(
+        &mut self,
+        follow: Token,
+        bodies: [BuiltinDef; N],
+    ) -> Result<Spanned<StmtImpl>, Span> {
+        let t0 = self.expect(Token::Impl, follow)?;
+        let gs = self.generics(follow | Token::Name)?;
+        let b = self.bound(follow | Token::Where | Token::LBrace)?;
+        let bs = self.where_clause(follow | Token::LBrace)?;
+        self.expect(Token::LBrace, follow)?;
+        let mut defs = Vec::new();
+        let mut tys = Vec::new();
+        let mut bodies = bodies.into_iter();
+        loop {
+            let t = self.start(Token::RBrace | Token::Def | Token::Type, follow)?;
+            match t.v {
+                Token::Def => defs.push(Rc::new(
+                    self.stmt_def_builtin(follow | Token::RBrace, bodies.next().unwrap())?
+                        .v,
+                )),
+                Token::Type => tys.push(Rc::new(self.stmt_type(follow)?.v)),
+                _ => break,
+            }
+        }
+        let s1 = self.expect(Token::RBrace, follow)?;
+        let s = t0.s + s1.s;
+        Ok(Spanned::new(s, StmtImpl::new(s, gs, b.v, bs, defs, tys)))
+    }
+
     pub fn stmt(&mut self, follow: Token) -> Result<Spanned<Stmt>, Span> {
         self.stmt_fallible(follow)
             .or_else(|s| Ok(Spanned::new(s, Stmt::Err(s))))
@@ -596,7 +625,10 @@ where
         let bs = self.where_clause(follow | Token::SemiColon)?;
         let t1 = self.expect(Token::SemiColon, follow)?;
         let s = t0.s + t1.s;
-        Ok(Spanned::new(s, StmtTraitDef::new(s, x.v, gs, xts.v, t.v, bs)))
+        Ok(Spanned::new(
+            s,
+            StmtTraitDef::new(s, x.v, gs, xts.v, t.v, bs),
+        ))
     }
 
     fn stmt_type_decl(&mut self, follow: Token) -> Result<Spanned<StmtTraitType>, Span> {

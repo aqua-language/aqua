@@ -132,12 +132,10 @@ impl Context {
                 }
             } else {
                 self.report
-                    .err(goal.span(), "Unsolved goal", "Could not solve goal");
+                    .err(goal.span(), "Trait is not implemented", "Found no implementation for trait");
             }
         }
-        let p = Program::new(stmts).map_type(&|t| t.apply(&sub));
-        println!("{}", p.verbose());
-        p
+        Program::new(stmts).map_type(&|t| t.apply(&sub))
     }
 
     pub fn declare_stmt(&mut self, s: &Stmt) {

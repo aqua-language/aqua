@@ -114,6 +114,7 @@ impl<'de> DeserializeSeed<'de> for Seed {
                         where
                             A: MapAccess<'de>,
                         {
+                            #[allow(clippy::mutable_key_type)]
                             let mut result = std::collections::HashMap::default();
                             while let Some((k, v)) =
                                 map.next_entry_seed(Seed(self.0.clone()), Seed(self.1.clone()))?
@@ -143,6 +144,7 @@ impl<'de> DeserializeSeed<'de> for Seed {
                         where
                             A: serde::de::SeqAccess<'de>,
                         {
+                            #[allow(clippy::mutable_key_type)]
                             let mut result = std::collections::HashSet::new();
                             while let Some(v) = seq.next_element_seed(Seed(self.0.clone()))? {
                                 result.insert(v);

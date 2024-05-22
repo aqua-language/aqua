@@ -175,7 +175,7 @@ impl Context {
         self.scoped(|ctx| {
             let span = s.span;
             let generics = s.generics.iter().map(|g| ctx.stack.bind(*g)).collect();
-            let params = s.params.map(|x, t| (ctx.stack.bind(*x), ctx.ty(&t)));
+            let params = s.params.map(|x, t| (ctx.stack.bind(*x), ctx.ty(t)));
             let ty = ctx.ty(&s.ty);
             let where_clause = s.where_clause.iter().map(|b| ctx.bound(b)).collect();
             let body = ctx.stmt_def_body(&s.body);
@@ -225,7 +225,7 @@ impl Context {
         self.scoped(|ctx| {
             let span = d.span;
             let generics = d.generics.iter().map(|g| ctx.stack.bind(*g)).collect();
-            let params = d.params.map_values(|t| ctx.ty(&t));
+            let params = d.params.map_values(|t| ctx.ty(t));
             let ty = ctx.ty(&d.ty);
             let where_clause = d.where_clause.iter().map(|b| ctx.bound(b)).collect();
             StmtTraitDef::new(span, name, generics, params, ty, where_clause)
@@ -341,10 +341,10 @@ impl Context {
         let t = self.ty(expr.ty());
         match expr {
             Expr::Unresolved(_, _, _) => unreachable!(),
-            Expr::Int(_, _, v) => Expr::Int(s, t, v.clone()),
-            Expr::Float(_, _, v) => Expr::Float(s, t, v.clone()),
+            Expr::Int(_, _, v) => Expr::Int(s, t, *v),
+            Expr::Float(_, _, v) => Expr::Float(s, t, *v),
             Expr::Bool(_, _, v) => Expr::Bool(s, t, *v),
-            Expr::String(_, _, v) => Expr::String(s, t, v.clone()),
+            Expr::String(_, _, v) => Expr::String(s, t, *v),
             Expr::Char(_, _, v) => Expr::Char(s, t, *v),
             Expr::Struct(_, _, x, ts, xes) => {
                 let x = self.stack.get(x);

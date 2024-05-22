@@ -14,11 +14,11 @@ use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
+use crate::ast::StmtTraitDef;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::TraitBound;
-use crate::ast::StmtTraitDef;
 use crate::ast::Type;
 use crate::map::Map;
 
@@ -193,7 +193,7 @@ impl StmtDef {
         let name = self.name;
         let generics = self.generics.clone();
         let qs = self.where_clause.iter().map(|p| p.map_type(f)).collect();
-        let ps = self.params.map_values(|t| f(&t));
+        let ps = self.params.map_values(f);
         let t = f(&self.ty);
         let e = self.body.map_type(f);
         StmtDef::new(span, name, generics, ps, t, qs, e)
@@ -313,19 +313,10 @@ impl Expr {
         let t = f(self.ty());
         match self {
             Expr::Unresolved(..) => unreachable!(),
-            Expr::Int(_, _, v) => {
-                let v = v.clone();
-                Expr::Int(s, t, v)
-            }
-            Expr::Float(_, _, v) => {
-                let v = v.clone();
-                Expr::Float(s, t, v)
-            }
+            Expr::Int(_, _, v) => Expr::Int(s, t, *v),
+            Expr::Float(_, _, v) => Expr::Float(s, t, *v),
             Expr::Bool(_, _, v) => Expr::Bool(s, t, *v),
-            Expr::String(_, _, v) => {
-                let v = v.clone();
-                Expr::String(s, t, v)
-            }
+            Expr::String(_, _, v) => Expr::String(s, t, *v),
             Expr::Var(_, _, x) => Expr::Var(s, t, *x),
             Expr::Def(_, _, x, ts) => {
                 let ts = ts.iter().map(f).collect();
@@ -385,7 +376,7 @@ impl Expr {
             Expr::Continue(_, _) => Expr::Continue(s, t),
             Expr::Break(_, _) => Expr::Break(s, t),
             Expr::Fun(_, _, ps, t1, e) => {
-                let ps = ps.map_values(|t| f(&t));
+                let ps = ps.map_values(f);
                 let t1 = f(t1);
                 let e = Rc::new(e.map_type(f));
                 Expr::Fun(s, t, ps, t1, e)
@@ -450,8 +441,8 @@ impl Pat {
                 let p = Rc::new(p.map_type(f));
                 Pat::Enum(span, t, *x0, ts, *x1, p)
             }
-            Pat::Int(_, _, v) => Pat::Int(span, t, v.clone()),
-            Pat::String(_, _, v) => Pat::String(span, t, v.clone()),
+            Pat::Int(_, _, v) => Pat::Int(span, t, *v),
+            Pat::String(_, _, v) => Pat::String(span, t, *v),
             Pat::Wildcard(_, _) => Pat::Wildcard(span, t),
             Pat::Bool(_, _, v) => Pat::Bool(span, t, *v),
             Pat::Err(_, _) => Pat::Err(span, t),

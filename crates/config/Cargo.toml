@@ -7,4 +7,4 @@ edition.workspace = true
 default = ["clap"]
 
 [dependencies]
-clap = { version = "4.4.16", features = ["derive", "string"], optional = true }
+clap = { version = "4.5.4", features = ["derive", "string"], optional = true }

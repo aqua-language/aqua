@@ -193,7 +193,7 @@ fn test_infer_enum0() {
          Foo::Bar(0:i32):Foo;",
     )
     .unwrap();
-    assert!(a == b, "{a}\n\n{b}");
+    check!(a, b);
 }
 
 #[test]
@@ -208,7 +208,7 @@ fn test_infer_enum1() {
          Foo[i32]::Bar(0:i32):Foo[i32];",
     )
     .unwrap();
-    assert!(a == b, "{a}\n\n{b}");
+    check!(a, b);
 }
 
 #[test]
@@ -246,12 +246,12 @@ fn test_infer_impl1() {
     check!(
         a,
         b,
-        "Error: Unsolved goal
+        "Error: Trait is not implemented
             ╭─[test:3:1]
             │
           3 │ f(0);
             │ ┬
-            │ ╰── Could not solve goal
+            │ ╰── Found no implementation for trait
          ───╯"
     );
 }
@@ -334,8 +334,71 @@ fn test_infer_impl6() {
 }
 
 #[test]
-fn test_infer_add0() {
+fn test_infer_i32_add() {
     let a = Program::infer("1 + 1;").unwrap();
     let b = Program::infer("Add[i32,i32]::add(1:i32, 1:i32);").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_i32_sub() {
+    let a = Program::infer("1 - 1;").unwrap();
+    let b = Program::infer("Sub[i32,i32]::sub(1:i32, 1:i32);").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_i32_mul() {
+    let a = Program::infer("1 * 1;").unwrap();
+    let b = Program::infer("Mul[i32,i32]::mul(1:i32, 1:i32);").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_i32_div() {
+    let a = Program::infer("1 / 1;").unwrap();
+    let b = Program::infer("Div[i32,i32]::div(1:i32, 1:i32);").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_f64_add() {
+    let a = Program::infer("1.0 + 1.0;").unwrap();
+    let b = Program::infer("Add[f64,f64]::add(1.0:f64, 1.0:f64);").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_f64_sub() {
+    let a = Program::infer("1.0 - 1.0;").unwrap();
+    let b = Program::infer("Sub[f64,f64]::sub(1.0:f64, 1.0:f64);").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_f64_mul() {
+    let a = Program::infer("1.0 * 1.0;").unwrap();
+    let b = Program::infer("Mul[f64,f64]::mul(1.0:f64, 1.0:f64);").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_f64_div() {
+    let a = Program::infer("1.0 / 1.0;").unwrap();
+    let b = Program::infer("Div[f64,f64]::div(1.0:f64, 1.0:f64);").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_f64_i32_add() {
+    let a = Program::infer("1.0 + 1;").unwrap();
+    let b = Program::infer("Add[f64,i32]::add(1.0:f64, 1:i32);").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_i32_f64_add() {
+    let a = Program::infer("1 + 1.0;").unwrap();
+    let b = Program::infer("Add[i32,f64]::add(1:i32, 1.0:f64);").unwrap();
     check!(a, b);
 }

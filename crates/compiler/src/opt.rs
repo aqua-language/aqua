@@ -13,13 +13,19 @@ pub struct Optimiser {
     desugar: egglog::ast::desugar::Desugar,
 }
 
-impl Optimiser {
-    pub fn new() -> Self {
+impl Default for Optimiser {
+    fn default() -> Self {
         let egraph = egglog::EGraph::default();
         let desugar = egglog::ast::desugar::Desugar::default();
         let mut this = Self { egraph, desugar };
         this.include(LIB).unwrap();
         this
+    }
+}
+
+impl Optimiser {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn include(&mut self, s: &str) -> Result<Vec<String>, egglog::Error> {

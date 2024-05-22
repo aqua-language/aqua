@@ -16,12 +16,12 @@ use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::TraitBound;
-use crate::ast::StmtTraitDef;
-use crate::ast::StmtTraitType;
 use crate::ast::Type;
 use crate::ast::UnresolvedPatField;
 use crate::diag::Report;
@@ -187,8 +187,8 @@ impl Context {
         found: impl IntoIterator<Item = &'a Name>,
         expected: impl IntoIterator<Item = &'a Name>,
     ) {
-        let found = comma_sep(found.into_iter());
-        let expected = comma_sep(expected.into_iter());
+        let found = comma_sep(found);
+        let expected = comma_sep(expected);
         self.report.err(
             name.span,
             format!("Wrong {kind}s implemented for {name}. Found {{ {found} }}, expected {{ {expected} }}",),
@@ -199,7 +199,7 @@ impl Context {
     #[allow(dead_code)]
     fn wrong_variant<T>(&mut self, name: &Name, found: &(Name, T), expected: &[Name]) {
         let found = &found.0;
-        let expected = comma_sep(expected.into_iter());
+        let expected = comma_sep(expected.iter());
         self.report.err(
             name.span,
             format!("Wrong variant provided. Found {found}, expected {expected}",),
@@ -372,7 +372,7 @@ impl Context {
 
     fn param(&mut self, (x, t): &(Name, Type)) -> (Name, Type) {
         self.stack.bind(*x, Binding::Var);
-        let t = self.ty(&t);
+        let t = self.ty(t);
         (*x, t)
     }
 
@@ -415,7 +415,7 @@ impl Context {
             }
             Type::Never => Type::Never,
             Type::Err => Type::Err,
-            Type::Cons(..) => unreachable!("Unexpected {:?}", t),
+            Type::Cons(x, ts) => Type::Cons(*x, ts.iter().map(|t| self.ty(t)).collect()),
             Type::Alias(..) => unreachable!(),
             Type::Assoc(..) => unreachable!(),
             Type::Var(_) => unreachable!(),
@@ -429,13 +429,11 @@ impl Context {
             Expr::Unresolved(_s, _t, path) => self.resolve_expr_path(s, t, path),
             Expr::Int(s, t, v) => {
                 let t = self.ty(t);
-                let v = v.clone();
-                Expr::Int(*s, t, v)
+                Expr::Int(*s, t, *v)
             }
             Expr::Float(s, t, v) => {
                 let t = self.ty(t);
-                let v = v.clone();
-                Expr::Float(*s, t, v)
+                Expr::Float(*s, t, *v)
             }
             Expr::Bool(s, t, v) => {
                 let t = self.ty(t);
@@ -447,10 +445,7 @@ impl Context {
                 Expr::Tuple(*s, t, es)
             }
             Expr::Call(s, t, e, es) => self.expr_call(*s, t, e, es),
-            Expr::String(_, _, v) => {
-                let v = v.clone();
-                Expr::String(s, t, v)
-            }
+            Expr::String(_, _, v) => Expr::String(s, t, *v),
             Expr::Field(_, _, e, x) => {
                 let e = self.expr(e);
                 Expr::Field(s, t, Rc::new(e), *x)
@@ -681,8 +676,8 @@ impl Context {
                 let ts = ts.iter().map(|t| self.pat(t)).collect();
                 Pat::Tuple(s, t, ts)
             }
-            Pat::Int(_, _, v) => Pat::Int(s, t, v.clone()),
-            Pat::String(_, _, v) => Pat::String(s, t, v.clone()),
+            Pat::Int(_, _, v) => Pat::Int(s, t, *v),
+            Pat::String(_, _, v) => Pat::String(s, t, *v),
             Pat::Wildcard(_, _) => Pat::Wildcard(s, t),
             Pat::Bool(_, _, v) => Pat::Bool(s, t, *v),
             Pat::Err(_, _) => Pat::Err(s, t),
@@ -758,7 +753,7 @@ impl Context {
         let span = bound.span();
         match bound {
             Bound::Unresolved(_, path) => self.resolve_head_path(span, path, defs, types),
-            Bound::Trait(..) => unreachable!(),
+            Bound::Trait(s, b) => Bound::Trait(*s, b.clone()),
             Bound::Err(_) => Bound::Err(span),
         }
     }
@@ -1255,6 +1250,10 @@ fn defs_are_defined(expected: &[Rc<StmtTraitDef>], provided: &[Rc<StmtDef>]) -> 
     })
 }
 
-fn comma_sep<'a>(names: impl Iterator<Item = &'a Name>) -> String {
-    names.map(|x| x.to_string()).collect::<Vec<_>>().join(", ")
+fn comma_sep<'a>(names: impl IntoIterator<Item = &'a Name>) -> String {
+    names
+        .into_iter()
+        .map(|x| x.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
