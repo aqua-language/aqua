@@ -1,10 +1,58 @@
 mod common;
 use compiler::ast::Program;
 
+use crate::common::expr_float;
+use crate::common::expr_int;
+use crate::common::program;
+use crate::common::stmt_expr;
+use crate::common::ty;
+
 #[test]
-fn test_infer_literal0() {
+fn test_infer_literal_bool() {
+    let a = Program::infer("true;").unwrap();
+    let b = Program::infer("true:bool;").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_literal_int0() {
     let a = Program::infer("1;").unwrap();
     let b = Program::infer("1:i32;").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_literal_int1() {
+    let a = Program::infer("1:i64;").unwrap();
+    let b = program([stmt_expr(expr_int("1").with_ty(ty("i64")))]);
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_literal_char() {
+    let a = Program::infer("'a';").unwrap();
+    let b = Program::infer("'a':char;").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_literal_float0() {
+    let a = Program::infer("1.0;").unwrap();
+    let b = Program::infer("1.0:f64;").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_literal_float1() {
+    let a = Program::infer("1.0:f32;").unwrap();
+    let b = program([stmt_expr(expr_float("1.0").with_ty(ty("f32")))]);
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_literal_string() {
+    let a = Program::infer("\"foo\";").unwrap();
+    let b = Program::infer("\"foo\":String;").unwrap();
     check!(a, b);
 }
 
@@ -400,5 +448,12 @@ fn test_infer_f64_i32_add() {
 fn test_infer_i32_f64_add() {
     let a = Program::infer("1 + 1.0;").unwrap();
     let b = Program::infer("Add[i32,f64]::add(1:i32, 1.0:f64);").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_i32_abs() {
+    let a = Program::infer("1.abs();").unwrap();
+    let b = Program::infer("i32::abs(1:i32);").unwrap();
     check!(a, b);
 }

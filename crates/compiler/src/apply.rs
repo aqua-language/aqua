@@ -18,8 +18,8 @@ use crate::ast::StmtTraitDef;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
-use crate::ast::TraitBound;
 use crate::ast::Type;
+use crate::ast::TypeVar;
 use crate::map::Map;
 
 impl Program {
@@ -36,11 +36,11 @@ impl Type {
                 let ts = ts.iter().map(|t| t.apply(sub)).collect::<Vec<_>>();
                 Type::Cons(*x, ts)
             }
-            Type::Var(x) => sub
+            Type::Var(x, k) => sub
                 .iter()
                 .find(|(n, _)| n == x)
                 .map(|(_, t)| t.apply(sub))
-                .unwrap_or_else(|| Type::Var(*x)),
+                .unwrap_or_else(|| Type::Var(*x, *k)),
             Type::Assoc(b, x1, ts1) => {
                 let b = b.map_type(&|b| b.apply(sub));
                 let ts1 = ts1.iter().map(|t| t.apply(sub)).collect::<Vec<_>>();
@@ -66,7 +66,7 @@ impl Type {
                 let ts = ts.iter().map(|t| t.apply(sub)).collect();
                 Type::Alias(*x, ts)
             }
-            Type::Unresolved(_) => unreachable!(),
+            Type::Path(_) => unreachable!(),
             Type::Array(t, n) => {
                 let t = Rc::new(t.apply(sub));
                 let n = *n;
@@ -82,7 +82,7 @@ impl Type {
                 let ts = ts.iter().map(|t| t.expand_assoc()).collect::<Vec<_>>();
                 Type::Cons(*x, ts)
             }
-            Type::Assoc(b, x1, _) => b.xts.get(x1).unwrap().expand_assoc(),
+            Type::Assoc(b, x1, _) => b.get_type(x1).unwrap().expand_assoc(),
             Type::Err => Type::Err,
             Type::Generic(x) => Type::Generic(*x),
             Type::Fun(ts, t) => {
@@ -108,8 +108,8 @@ impl Type {
                 Type::Array(t, n)
             }
             Type::Never => Type::Never,
-            Type::Unresolved(_) => unreachable!(),
-            Type::Var(_) => unreachable!(),
+            Type::Path(_) => unreachable!(),
+            Type::Var(_, _) => unreachable!(),
             Type::Hole => unreachable!(),
         }
     }
@@ -120,7 +120,7 @@ impl Type {
                 let ts = ts.iter().map(|t| t.instantiate(sub)).collect::<Vec<_>>();
                 Type::Cons(*x, ts)
             }
-            Type::Var(x) => Type::Var(*x),
+            Type::Var(x, k) => Type::Var(*x, *k),
             Type::Assoc(b, x1, ts1) => {
                 let b = b.map_type(&|b| b.instantiate(sub));
                 let ts1 = ts1.iter().map(|t| t.instantiate(sub)).collect::<Vec<_>>();
@@ -131,7 +131,7 @@ impl Type {
                 .iter()
                 .find(|(n, _)| n == x)
                 .map(|(_, t)| t.clone())
-                .unwrap_or_else(|| Type::Var(*x)),
+                .unwrap_or_else(|| Type::Var(*x, TypeVar::General)),
             Type::Fun(ts, t) => {
                 let ts = ts.iter().map(|t| t.instantiate(sub)).collect();
                 let t = t.instantiate(sub);
@@ -150,7 +150,7 @@ impl Type {
                 Type::Alias(*x, ts)
             }
             Type::Err => Type::Err,
-            Type::Unresolved(_) => unreachable!(),
+            Type::Path(_) => unreachable!(),
             Type::Array(t, n) => {
                 let t = Rc::new(t.instantiate(sub));
                 let n = *n;
@@ -193,7 +193,7 @@ impl StmtDef {
         let name = self.name;
         let generics = self.generics.clone();
         let qs = self.where_clause.iter().map(|p| p.map_type(f)).collect();
-        let ps = self.params.map_values(f);
+        let ps = self.params.mapv(f);
         let t = f(&self.ty);
         let e = self.body.map_type(f);
         StmtDef::new(span, name, generics, ps, t, qs, e)
@@ -287,23 +287,15 @@ impl StmtTraitDef {
 impl Bound {
     pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Bound {
         match self {
-            Bound::Unresolved(_, _) => unreachable!(),
-            Bound::Trait(s, b) => Bound::Trait(*s, b.map_type(f)),
+            Bound::Path(_, _) => unreachable!(),
+            Bound::Trait(s, x, ts, xts) => {
+                let ts = ts.iter().map(f).collect::<Vec<_>>();
+                let xts = xts.iter().map(|(x, t)| (*x, f(t))).collect::<Map<_, _>>();
+                Bound::Trait(*s, *x, ts, xts)
+            }
+            Bound::Type(s, t) => Bound::Type(*s, Rc::new(f(t.as_ref()))),
             Bound::Err(s) => Bound::Err(*s),
         }
-    }
-}
-
-impl TraitBound {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> TraitBound {
-        let x = self.name;
-        let ts = self.ts.iter().map(f).collect::<Vec<_>>();
-        let xts = self
-            .xts
-            .iter()
-            .map(|(x, t)| (*x, f(t)))
-            .collect::<Map<_, _>>();
-        TraitBound::new(x, ts, xts)
     }
 }
 
@@ -312,7 +304,7 @@ impl Expr {
         let s = self.span();
         let t = f(self.ty());
         match self {
-            Expr::Unresolved(..) => unreachable!(),
+            Expr::Path(..) => unreachable!(),
             Expr::Int(_, _, v) => Expr::Int(s, t, *v),
             Expr::Float(_, _, v) => Expr::Float(s, t, *v),
             Expr::Bool(_, _, v) => Expr::Bool(s, t, *v),
@@ -376,7 +368,7 @@ impl Expr {
             Expr::Continue(_, _) => Expr::Continue(s, t),
             Expr::Break(_, _) => Expr::Break(s, t),
             Expr::Fun(_, _, ps, t1, e) => {
-                let ps = ps.map_values(f);
+                let ps = ps.mapv(f);
                 let t1 = f(t1);
                 let e = Rc::new(e.map_type(f));
                 Expr::Fun(s, t, ps, t1, e)
@@ -397,7 +389,11 @@ impl Expr {
             }
             Expr::Value(_, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
-            Expr::Char(_, _, _) => todo!(),
+            Expr::Char(_, _, v) => Expr::Char(s, t, *v),
+            Expr::Unresolved(_, _, x, ts) => {
+                let ts = ts.iter().map(f).collect();
+                Expr::Unresolved(s, t, *x, ts)
+            }
         }
     }
 }
@@ -425,7 +421,7 @@ impl Pat {
         let t = f(self.ty());
         let span = self.span();
         match self {
-            Pat::Unresolved(..) => unreachable!(),
+            Pat::Path(..) => unreachable!(),
             Pat::Var(_, _, x) => Pat::Var(span, t, *x),
             Pat::Tuple(_, _, es) => {
                 let es = es.iter().map(|e| e.map_type(f)).collect();

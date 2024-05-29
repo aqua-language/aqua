@@ -1,6 +1,5 @@
 mod common;
 
-use common::bound;
 use common::bound_err;
 use common::expr_assoc;
 use common::expr_block;
@@ -11,6 +10,7 @@ use common::expr_err;
 use common::expr_int;
 use common::expr_struct;
 use common::expr_tuple;
+use common::expr_unit;
 use common::expr_var;
 use common::program;
 use common::stmt_def;
@@ -23,6 +23,7 @@ use common::stmt_type;
 use common::stmt_var;
 use common::tr_def;
 use common::tr_type;
+use common::trait_bound;
 use common::ty;
 use common::ty_alias;
 use common::ty_assoc;
@@ -31,6 +32,9 @@ use common::ty_gen;
 use common::ty_tuple;
 use compiler::ast::Program;
 use compiler::ast::Type;
+
+use crate::common::expr_unresolved;
+use crate::common::type_bound;
 
 #[test]
 fn test_resolve_var0() {
@@ -44,22 +48,12 @@ fn test_resolve_var0() {
 
 #[test]
 fn test_resolve_var_err0() {
-    let a = Program::resolve("var x = 0; y;").unwrap_err();
+    let a = Program::resolve("var x = 0; y;").unwrap();
     let b = program([
         stmt_var("x", Type::hole(), expr_int("0")),
-        stmt_expr(expr_err()),
+        stmt_expr(expr_unresolved("y", [])),
     ]);
-    check!(
-        a,
-        b,
-        "Error: Name `y` not found.
-            ╭─[test:1:12]
-            │
-          1 │ var x = 0; y;
-            │            ┬
-            │            ╰── Expected expression.
-         ───╯"
-    );
+    check!(a, b);
 }
 
 #[test]
@@ -132,19 +126,16 @@ fn test_resolve_def3() {
 
 #[test]
 fn test_resolve_def_param1() {
-    let a = Program::resolve("def f(): i32 = x;").unwrap_err();
-    let b = program([stmt_def("f", [], [], Type::i32(), [], expr_err())]);
-    check!(
-        a,
-        b,
-        "Error: Name `x` not found.
-            ╭─[test:1:16]
-            │
-          1 │ def f(): i32 = x;
-            │                ┬
-            │                ╰── Expected expression.
-         ───╯"
-    );
+    let a = Program::resolve("def f(): i32 = x;").unwrap();
+    let b = program([stmt_def(
+        "f",
+        [],
+        [],
+        Type::i32(),
+        [],
+        expr_unresolved("x", []),
+    )]);
+    check!(a, b);
 }
 
 #[test]
@@ -257,11 +248,8 @@ fn test_resolve_trait_assoc0() {
             ["T"],
             [("x", ty_gen("T"))],
             ty_gen("T"),
-            [bound("Trait", [ty_gen("T")], [])],
-            expr_call(
-                expr_assoc("Trait", [Type::hole()], "f", []),
-                [expr_var("x")],
-            ),
+            [trait_bound("Trait", [ty_gen("T")], [])],
+            expr_call(expr_unresolved("f", []), [expr_var("x")]),
         ),
     ]);
     check!(a, b);
@@ -288,7 +276,7 @@ fn test_resolve_trait_impl0() {
         ),
         stmt_impl(
             [],
-            bound("Trait", [Type::i32()], []),
+            trait_bound("Trait", [Type::i32()], []),
             [],
             [stmt_def(
                 "f",
@@ -320,7 +308,7 @@ fn test_resolve_trait_impl1() {
         stmt_trait("Trait", ["T"], [], [], [tr_type("f", [])]),
         stmt_impl(
             [],
-            bound("Trait", [Type::i32()], []),
+            trait_bound("Trait", [Type::i32()], []),
             [],
             [],
             [stmt_type("A", ["U"], ty_gen("U"))],
@@ -562,7 +550,10 @@ fn test_resolve_expr_assoc0() {
             [tr_def("f", [], [("x", Type::i32())], Type::i32(), [])],
             [],
         ),
-        stmt_expr(expr_call(expr_assoc("Trait", [], "f", []), [expr_int("0")])),
+        stmt_expr(expr_call(
+            expr_assoc(trait_bound("Trait", [], []), "f", []),
+            [expr_int("0")],
+        )),
     ]);
     check!(a, b);
 }
@@ -584,7 +575,7 @@ fn test_resolve_expr_assoc1() {
             [tr_def("f", [], [("x", Type::i32())], Type::i32(), [])],
             [],
         ),
-        stmt_expr(expr_call(expr_assoc("Trait", [], "f", []), [expr_int("0")])),
+        stmt_expr(expr_call(expr_unresolved("f", []), [expr_int("0")])),
     ]);
     check!(a, b);
 }
@@ -607,7 +598,7 @@ fn test_resolve_expr_assoc2() {
             [],
         ),
         stmt_expr(expr_call(
-            expr_assoc("Trait", [Type::i32()], "f", []),
+            expr_assoc(trait_bound("Trait", [Type::i32()], []), "f", []),
             [expr_int("0")],
         )),
     ]);
@@ -677,5 +668,78 @@ fn test_resolve_type_assoc2() {
             ),
         ),
     ]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_type_impl() {
+    let a = Program::resolve(
+        "impl i32 {
+             def zero(): i32 = 0;
+         }",
+    )
+    .unwrap();
+    let b = program([stmt_impl(
+        [],
+        type_bound(ty("i32")),
+        [],
+        [stmt_def("zero", [], [], Type::i32(), [], expr_int("0"))],
+        [],
+    )]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_type_impl2() {
+    let a = Program::resolve(
+        "impl[T] Vec[T] {
+             def push(v:Vec[T], x:T): () = ();
+         }",
+    )
+    .unwrap();
+    let b = program([stmt_impl(
+        ["T"],
+        type_bound(ty_con("Vec", [ty_gen("T")])),
+        [],
+        [stmt_def(
+            "push",
+            [],
+            [("v", ty_con("Vec", [ty_gen("T")])), ("x", ty_gen("T"))],
+            Type::unit(),
+            [],
+            expr_unit(),
+        )],
+        [],
+    )]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_i32_abs() {
+    let a = Program::resolve("1.abs();").unwrap();
+    let b = program([stmt_expr(expr_call(
+        expr_unresolved("abs", []),
+        [expr_int("1")],
+    ))]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_vec_new1() {
+    let a = Program::resolve("Vec::new();").unwrap();
+    let b = program([stmt_expr(expr_call(
+        expr_assoc(type_bound(ty_con("Vec", [Type::Hole])), "new", []),
+        [],
+    ))]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_vec_new2() {
+    let a = Program::resolve("Vec[i32]::new();").unwrap();
+    let b = program([stmt_expr(expr_call(
+        expr_assoc(type_bound(ty_con("Vec", [Type::i32()])), "new", []),
+        [],
+    ))]);
     check!(a, b);
 }

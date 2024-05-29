@@ -154,7 +154,7 @@ impl Context {
                     .zip(ts)
                     .for_each(|(g, t)| ctx.stack.bind(*g, t.clone()));
                 let span = s.span;
-                let ps = s.params.map_values(|t| ctx.ty(t));
+                let ps = s.params.mapv(|t| ctx.ty(t));
                 let t = ctx.ty(&s.ty);
                 let b = StmtDefBody::UserDefined(ctx.expr(s.body.as_expr()));
                 ctx.stmts.push(Stmt::Def(Rc::new(StmtDef::new(
@@ -181,11 +181,7 @@ impl Context {
                     .zip(ts)
                     .for_each(|(g, t)| ctx.stack.bind(*g, t.clone()));
                 let span = s.span;
-                let fields = s
-                    .fields
-                    .iter()
-                    .map(|(x, t)| (*x, ctx.ty(t)))
-                    .collect();
+                let fields = s.fields.iter().map(|(x, t)| (*x, ctx.ty(t))).collect();
                 ctx.stmts.push(Stmt::Struct(Rc::new(StmtStruct::new(
                     span,
                     x,
@@ -207,7 +203,7 @@ impl Context {
                     .zip(ts)
                     .for_each(|(g, t)| ctx.stack.bind(*g, t.clone()));
                 let span = s.span;
-                let variants = s.variants.map_values(|t| ctx.ty(t));
+                let variants = s.variants.mapv(|t| ctx.ty(t));
                 ctx.stmts.push(Stmt::Enum(Rc::new(StmtEnum::new(
                     span,
                     x,
@@ -252,7 +248,7 @@ impl Context {
         let t = self.ty(e.ty());
         let s = e.span();
         match e {
-            Expr::Unresolved(_, _, _) => unreachable!(),
+            Expr::Path(_, _, _) => unreachable!(),
             Expr::Int(_, _, v) => Expr::Int(s, t, *v),
             Expr::Float(_, _, v) => Expr::Float(s, t, *v),
             Expr::Bool(_, _, b) => Expr::Bool(s, t, *b),
@@ -325,19 +321,20 @@ impl Context {
             Expr::Err(_, _) => unreachable!(),
             Expr::Value(_, _) => unreachable!(),
             Expr::For(_, _, _, _, _) => todo!(),
+            Expr::Unresolved(_, _, _, _) => unreachable!(),
         }
     }
 
     fn ty(&mut self, t: &Type) -> Type {
         match t {
-            Type::Unresolved(_) => unreachable!(),
+            Type::Path(_) => unreachable!(),
             Type::Cons(x, ts) => {
                 let x = self.mangle(*x, ts.clone());
                 Type::Cons(x, vec![])
             }
             Type::Alias(..) => unreachable!(),
             Type::Assoc(_, _, _) => todo!(),
-            Type::Var(_) => unreachable!(),
+            Type::Var(_, _) => unreachable!(),
             Type::Generic(x) => self.stack.get(x),
             Type::Fun(ts, t) => {
                 let ts = ts.iter().map(|t| self.ty(t)).collect();

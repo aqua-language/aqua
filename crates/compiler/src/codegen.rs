@@ -15,11 +15,11 @@ use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
-use crate::ast::StmtTraitDef;
-use crate::ast::StmtTraitType;
 use crate::ast::Type;
 use crate::print::Print;
 
@@ -224,7 +224,7 @@ impl<'a, 'b> Rust<'a, 'b> {
 
     fn _expr(&mut self, e: &Expr) -> std::fmt::Result {
         match e {
-            Expr::Unresolved(_, _, p) => unreachable!(),
+            Expr::Path(_, _, p) => unreachable!(),
             Expr::Int(_, _, v) => {
                 self.lit(v)?;
             }
@@ -331,6 +331,7 @@ impl<'a, 'b> Rust<'a, 'b> {
             Expr::Value(_, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Char(_, _, _) => todo!(),
+            Expr::Unresolved(_, _, _, _) => unreachable!(),
         }
         Ok(())
     }
@@ -398,7 +399,7 @@ impl<'a, 'b> Rust<'a, 'b> {
                 self.type_args(ts)?;
             }
             Type::Assoc(..) => unreachable!(),
-            Type::Var(x) => unreachable!(),
+            Type::Var(_, _) => unreachable!(),
             Type::Hole => unreachable!(),
             Type::Err => unreachable!(),
             Type::Generic(x) => unreachable!(),
@@ -416,7 +417,7 @@ impl<'a, 'b> Rust<'a, 'b> {
                 self.fields(xts.as_ref(), Self::annotate)?;
             }
             Type::Alias(..) => unreachable!(),
-            Type::Unresolved(..) => unreachable!(),
+            Type::Path(..) => unreachable!(),
             Type::Array(t, n) => {
                 self.brack(|ctx| {
                     ctx.ty(t)?;
@@ -448,7 +449,7 @@ impl<'a, 'b> Rust<'a, 'b> {
 
     fn _pat(&mut self, p: &Pat) -> std::fmt::Result {
         match p {
-            Pat::Unresolved(..) => unreachable!(),
+            Pat::Path(..) => unreachable!(),
             Pat::Var(_, _, x) => {
                 self.name(x)?;
             }

@@ -6,6 +6,7 @@ use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Pat;
 use crate::ast::Path;
+use crate::ast::PathPatField;
 use crate::ast::Program;
 use crate::ast::Segment;
 use crate::ast::Stmt;
@@ -19,9 +20,8 @@ use crate::ast::StmtTraitDef;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
-use crate::ast::TraitBound;
 use crate::ast::Type;
-use crate::ast::UnresolvedPatField;
+use crate::ast::TypeVar;
 use crate::infer::Context;
 
 // Replace all holes with fresh type variables.
@@ -41,8 +41,8 @@ impl Type {
                 let ts1 = map(ts1, |t| t.annotate(ctx));
                 Type::Assoc(b, *x1, ts1)
             }
-            Type::Var(x) => Type::Var(*x),
-            Type::Hole => ctx.new_tyvar(),
+            Type::Var(x, k) => Type::Var(*x, *k),
+            Type::Hole => ctx.new_tyvar(TypeVar::General),
             Type::Err => Type::Err,
             Type::Generic(x) => Type::Generic(*x),
             Type::Fun(ts, t) => {
@@ -62,9 +62,9 @@ impl Type {
                 let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
                 Type::Alias(*x, ts)
             }
-            Type::Unresolved(p) => {
+            Type::Path(p) => {
                 let p = p.annotate(ctx);
-                Type::Unresolved(p)
+                Type::Path(p)
             }
             Type::Array(t, n) => {
                 let t = t.annotate(ctx);
@@ -209,7 +209,7 @@ impl StmtDef {
         let name = self.name;
         let generics = self.generics.clone();
         let preds = self.where_clause.iter().map(|p| p.annotate(ctx)).collect();
-        let params = self.params.map_values(|t| t.annotate(ctx));
+        let params = self.params.mapv(|t| t.annotate(ctx));
         let ty = self.ty.annotate(ctx);
         let body = self.body.annotate(ctx);
         StmtDef::new(span, name, generics, params, ty, preds, body)
@@ -270,7 +270,7 @@ impl StmtTraitDef {
         let name = self.name;
         let generics = self.generics.clone();
         let where_clause = self.where_clause.iter().map(|p| p.annotate(ctx)).collect();
-        let params = self.params.map_values(|t| t.annotate(ctx));
+        let params = self.params.mapv(|t| t.annotate(ctx));
         let ty = self.ty.annotate(ctx);
         StmtTraitDef::new(span, name, generics, params, ty, where_clause)
     }
@@ -281,7 +281,7 @@ impl Expr {
         let s = self.span();
         let t = self.ty().annotate(ctx);
         match self {
-            Expr::Unresolved(..) => unreachable!(),
+            Expr::Path(..) => unreachable!(),
             Expr::Int(_, _, v) => Expr::Int(s, t, *v),
             Expr::Float(_, _, v) => Expr::Float(s, t, *v),
             Expr::Bool(_, _, v) => Expr::Bool(s, t, *v),
@@ -305,7 +305,7 @@ impl Expr {
             Expr::Struct(_, _, x, ts, xes) => {
                 let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
                 let xes = xes.iter().map(|(x, e)| (*x, e.annotate(ctx))).collect();
-                Expr::Struct(s, ctx.new_tyvar(), *x, ts, xes)
+                Expr::Struct(s, ctx.new_tyvar(TypeVar::General), *x, ts, xes)
             }
             Expr::Enum(_, _, x0, ts0, x1, e) => {
                 let ts0 = ts0.iter().map(|t| t.annotate(ctx)).collect();
@@ -349,7 +349,7 @@ impl Expr {
             Expr::Continue(_, _) => Expr::Continue(s, t),
             Expr::Break(_, _) => Expr::Break(s, t),
             Expr::Fun(_, _, ps, t1, e) => {
-                let ps = ps.map_values(|t| t.annotate(ctx));
+                let ps = ps.mapv(|t| t.annotate(ctx));
                 let t1 = t1.annotate(ctx);
                 let e = Rc::new(e.annotate(ctx));
                 Expr::Fun(s, t, ps, t1, e)
@@ -368,9 +368,14 @@ impl Expr {
                 let xes = xes.iter().map(|(x, e)| (*x, e.annotate(ctx))).collect();
                 Expr::Record(s, t, xes)
             }
-            Expr::Value(_, _) => todo!(),
-            Expr::For(_, _, _, _, _) => todo!(),
-            Expr::Char(_, _, _) => todo!(),
+            Expr::Value(_, v) => Expr::Value(t, v.clone()),
+            Expr::For(_, _, x, e, b) => {
+                let e = Rc::new(e.annotate(ctx));
+                let b = b.annotate(ctx);
+                Expr::For(s, t, *x, e, b)
+            }
+            Expr::Char(_, _, v) => Expr::Char(s, t, *v),
+            Expr::Unresolved(_, _, _, _) => todo!(),
         }
     }
 }
@@ -396,12 +401,12 @@ impl Pat {
         let s = self.span();
         let t = self.ty().annotate(ctx);
         match self {
-            Pat::Unresolved(_, _, path, args) => {
+            Pat::Path(_, _, path, args) => {
                 let path = path.annotate(ctx);
                 let args = args
                     .as_ref()
                     .map(|args| args.iter().map(|arg| arg.annotate(ctx)).collect());
-                Pat::Unresolved(s, t, path, args)
+                Pat::Path(s, t, path, args)
             }
             Pat::Var(_, _, x) => Pat::Var(s, t, *x),
             Pat::Tuple(_, _, ps) => {
@@ -437,16 +442,16 @@ impl Pat {
     }
 }
 
-impl UnresolvedPatField {
-    pub fn annotate(&self, ctx: &mut Context) -> UnresolvedPatField {
+impl PathPatField {
+    pub fn annotate(&self, ctx: &mut Context) -> PathPatField {
         match self {
-            UnresolvedPatField::Named(x, p) => {
+            PathPatField::Named(x, p) => {
                 let p = p.annotate(ctx);
-                UnresolvedPatField::Named(*x, p)
+                PathPatField::Named(*x, p)
             }
-            UnresolvedPatField::Unnamed(p) => {
+            PathPatField::Unnamed(p) => {
                 let p = p.annotate(ctx);
-                UnresolvedPatField::Unnamed(p)
+                PathPatField::Unnamed(p)
             }
         }
     }
@@ -454,30 +459,21 @@ impl UnresolvedPatField {
 
 impl Bound {
     pub fn annotate(&self, ctx: &mut Context) -> Bound {
-        let span = self.span();
         match self {
-            Bound::Unresolved(_, path) => {
+            Bound::Path(s, path) => {
                 let path = path.annotate(ctx);
-                Bound::Unresolved(span, path)
+                Bound::Path(*s, path)
             }
-            Bound::Trait(_, b) => {
-                let b = b.annotate(ctx);
-                Bound::Trait(span, b)
+            Bound::Trait(s, x, ts, xts) => {
+                let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
+                let xts = xts.iter().map(|(x, t)| (*x, t.annotate(ctx))).collect();
+                Bound::Trait(*s, *x, ts, xts)
             }
-            Bound::Err(_) => Bound::Err(span),
+            Bound::Type(s, t) => {
+                let t = Rc::new(t.annotate(ctx));
+                Bound::Type(*s, t)
+            }
+            Bound::Err(s) => Bound::Err(*s),
         }
-    }
-}
-
-impl TraitBound {
-    pub fn annotate(&self, ctx: &mut Context) -> TraitBound {
-        let x = self.name;
-        let ts = self.ts.iter().map(|t| t.annotate(ctx)).collect();
-        let xts = self
-            .xts
-            .iter()
-            .map(|(x, t)| (*x, t.annotate(ctx)))
-            .collect();
-        TraitBound::new(x, ts, xts)
     }
 }

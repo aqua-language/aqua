@@ -70,7 +70,7 @@ impl<K, V> Map<K, V> {
         Map(self.0.iter().map(|(k, v)| f(k, v)).collect())
     }
 
-    pub fn map_values<U, F>(&self, mut f: F) -> Map<K, U>
+    pub fn mapv<U, F>(&self, mut f: F) -> Map<K, U>
     where
         F: FnMut(&V) -> U,
         K: Clone,

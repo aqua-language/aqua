@@ -7,6 +7,7 @@ use crate::ast::Index;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
+use crate::ast::PathPatField;
 use crate::ast::Program;
 use crate::ast::Query;
 use crate::ast::Segment;
@@ -22,9 +23,8 @@ use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
-use crate::ast::TraitBound;
 use crate::ast::Type;
-use crate::ast::UnresolvedPatField;
+use crate::ast::TypeVar;
 use crate::builtins::Value;
 use crate::print::Print;
 
@@ -61,6 +61,12 @@ impl Stmt {
 }
 
 impl Type {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl Path {
     pub fn verbose(&self) -> Verbose<&Self> {
         Verbose(self)
     }
@@ -114,6 +120,14 @@ impl std::fmt::Display for Verbose<&Type> {
     }
 }
 
+impl std::fmt::Display for Verbose<&Path> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut p = Pretty::new(f);
+        p.verbose = true;
+        p.path(self.0)
+    }
+}
+
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Pretty::new(f).expr(self)
@@ -135,6 +149,12 @@ impl std::fmt::Display for Block {
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Pretty::new(f).program(self)
+    }
+}
+
+impl std::fmt::Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Pretty::new(f).path(self)
     }
 }
 
@@ -171,12 +191,6 @@ impl std::fmt::Display for Pat {
 impl std::fmt::Display for Bound {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Pretty::new(f).bound(self)
-    }
-}
-
-impl std::fmt::Display for TraitBound {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).trait_bound(self)
     }
 }
 
@@ -440,8 +454,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
 
     fn _expr(&mut self, e: &Expr) -> std::fmt::Result {
         match e {
-            Expr::Unresolved(_, _, p) => {
-                self.unresolved_path(p)?;
+            Expr::Path(_, _, p) => {
+                self.path(p)?;
             }
             Expr::Int(_, _, v) => {
                 self.lit(v)?;
@@ -493,7 +507,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.newline_sep(qs, Self::query_stmt)?;
             }
             Expr::Assoc(_, _, b, x1, ts1) => {
-                self.trait_bound(b)?;
+                self.bound(b)?;
                 self.punct("::")?;
                 self.name(x1)?;
                 self.type_args(ts1)?;
@@ -572,6 +586,10 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Expr::Char(_, _, c) => {
                 self.char(*c)?;
             }
+            Expr::Unresolved(_, _, x, ts) => {
+                self.name(x)?;
+                self.type_args(ts)?;
+            }
         }
         Ok(())
     }
@@ -593,28 +611,6 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.punct("=>")?;
         self.space()?;
         self.expr(&arm.e)
-    }
-
-    fn trait_bound(&mut self, b: &TraitBound) -> std::fmt::Result {
-        self.name(&b.name)?;
-        if !b.ts.is_empty() || !b.xts.is_empty() {
-            self.brack(|this| {
-                this.if_nonempty(&b.ts, |this, ts| this.comma_sep(ts, Self::ty))?;
-                this.if_nonempty(&b.xts, |this, xts| {
-                    this.if_nonempty(&b.ts, |this, ts| {
-                        this.punct(",")?;
-                        this.space()
-                    })?;
-                    this.comma_sep(xts, |this, (x, t)| {
-                        this.name(x)?;
-                        this.punct("=")?;
-                        this.ty(t)
-                    })
-                })?;
-                Ok(())
-            })?;
-        }
-        Ok(())
     }
 
     fn expr(&mut self, expr: &Expr) -> std::fmt::Result {
@@ -752,7 +748,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         }
         Ok(())
     }
-    
+
     fn agg(&mut self, (x, e0, e1): &(Name, Expr, Expr)) -> std::fmt::Result {
         self.name(x)?;
         self.punct("=")?;
@@ -765,11 +761,31 @@ impl<'a, 'b> Pretty<'a, 'b> {
 
     fn bound(&mut self, b: &Bound) -> std::fmt::Result {
         match b {
-            Bound::Unresolved(_, path) => {
-                self.unresolved_path(path)?;
+            Bound::Path(_, path) => {
+                self.path(path)?;
             }
-            Bound::Trait(_, b) => {
-                self.trait_bound(b)?;
+            Bound::Trait(_, x, ts, xts) => {
+                self.name(x)?;
+                if !ts.is_empty() || !xts.is_empty() {
+                    self.brack(|this| {
+                        this.if_nonempty(ts, |this, ts| this.comma_sep(ts, Self::ty))?;
+                        this.if_nonempty(xts, |this, xts| {
+                            this.if_nonempty(ts, |this, ts| {
+                                this.punct(",")?;
+                                this.space()
+                            })?;
+                            this.comma_sep(xts, |this, (x, t)| {
+                                this.name(x)?;
+                                this.punct("=")?;
+                                this.ty(t)
+                            })
+                        })?;
+                        Ok(())
+                    })?;
+                }
+            }
+            Bound::Type(_, t) => {
+                self.ty(t)?;
             }
             Bound::Err(_) => {
                 self.kw("<err>")?;
@@ -785,14 +801,30 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.type_args(ts)?;
             }
             Type::Assoc(b, x1, ts1) => {
-                self.trait_bound(b)?;
+                self.bound(b)?;
                 self.punct("::")?;
                 self.name(x1)?;
                 self.type_args(ts1)?;
             }
-            Type::Var(x) => {
-                self.name(x)?;
-            }
+            Type::Var(x, k) => match k {
+                TypeVar::General => {
+                    self.name(x)?;
+                }
+                TypeVar::Int => {
+                    self.brace(|this| {
+                        this.kw("integer")?;
+                        this.punct(":")?;
+                        this.lit(x)
+                    })?;
+                }
+                TypeVar::Float => {
+                    self.brace(|this| {
+                        this.kw("float")?;
+                        this.punct(":")?;
+                        this.lit(x)
+                    })?;
+                }
+            },
             Type::Hole => {
                 self.punct("_")?;
             }
@@ -819,8 +851,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.name(name)?;
                 self.type_args(xts)?;
             }
-            Type::Unresolved(path) => {
-                self.unresolved_path(path)?;
+            Type::Path(path) => {
+                self.path(path)?;
             }
             Type::Array(t, n) => {
                 self.brack(|ctx| {
@@ -852,17 +884,17 @@ impl<'a, 'b> Pretty<'a, 'b> {
 
     fn _pat(&mut self, p: &Pat) -> std::fmt::Result {
         match p {
-            Pat::Unresolved(_, _, path, args) => {
-                self.unresolved_path(path)?;
+            Pat::Path(_, _, path, args) => {
+                self.path(path)?;
                 self.if_some(args, |this, args| {
                     this.paren(|this| {
                         this.sep(",", true, args, |this, p| match p {
-                            UnresolvedPatField::Named(x, p) => {
+                            PathPatField::Named(x, p) => {
                                 this.name(x)?;
                                 this.punct("=")?;
                                 this.pat(p)
                             }
-                            UnresolvedPatField::Unnamed(p) => this.pat(p),
+                            PathPatField::Unnamed(p) => this.pat(p),
                         })
                     })
                 })?;
@@ -913,7 +945,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         Ok(())
     }
 
-    fn unresolved_path(&mut self, p: &Path) -> std::fmt::Result {
+    fn path(&mut self, p: &Path) -> std::fmt::Result {
         self.sep("::", false, &p.segments, Self::segment)
     }
 

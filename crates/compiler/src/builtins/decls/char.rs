@@ -3,6 +3,6 @@ use crate::Compiler;
 
 impl Compiler {
     pub(super) fn declare_char(&mut self) {
-        self.declare_type("type char;", BuiltinType { rust: "Aggregator" });
+        self.declare_type("type char;", BuiltinType { rust: "char" });
     }
 }

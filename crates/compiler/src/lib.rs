@@ -148,7 +148,7 @@ impl Compiler {
     pub fn interpret(&mut self, name: &str, input: &str) -> Result<Value, Recovered<Value>> {
         let mut result = self.infer(name, input).unwrap();
         let stmt = result.stmts.pop().unwrap();
-        let expr = stmt.as_expr();
+        let expr = stmt.as_expr().unwrap();
         self.interpret.interpret(&result);
         let value = self.interpret.expr(expr);
         self.report.merge(&mut self.interpret.report);

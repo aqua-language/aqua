@@ -7,6 +7,19 @@ impl Compiler {
         self.declare_type("type i32;", BuiltinType { rust: "i32" });
 
         self.declare_impl(
+            "impl i32 {
+                def abs(a:i32): i32;
+             }",
+            [BuiltinDef {
+                rust: "i32::abs",
+                fun: |_ctx, _t, v| {
+                    let v0 = v[0].as_i32();
+                    v0.abs().into()
+                },
+            }],
+        );
+
+        self.declare_impl(
             "impl Add[i32,i32] {
                  type Output = i32;
                  def add(a:i32, b:i32): i32;

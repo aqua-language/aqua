@@ -76,29 +76,37 @@ impl ariadne::Span for Span {
 }
 
 #[derive(Debug, Default)]
-pub struct Report(pub Vec<ariadne::Report<'static, Span>>);
+pub struct Report {
+    pub diags: Vec<ariadne::Report<'static, Span>>,
+    pub supress: bool,
+}
 
 impl Report {
     pub fn new() -> Self {
-        Self(Vec::new())
+        Self {
+            diags: Vec::new(),
+            supress: false,
+        }
     }
 
     pub fn merge(&mut self, other: &mut Report) {
-        self.0.append(&mut other.0);
+        self.diags.append(&mut other.diags);
     }
 
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.diags.is_empty()
     }
 
     pub fn err(&mut self, span: Span, label: impl AsRef<str>, msg: impl AsRef<str>) {
-        let kind = ReportKind::Error;
-        let report = ariadne::Report::build(kind, *span.file(), *span.start() as usize)
-            .with_label(Label::new(span).with_message(msg.as_ref()))
-            .with_message(label.as_ref())
-            .with_config(Config::default().with_color(false))
-            .finish();
-        self.0.push(report);
+        if !self.supress {
+            let kind = ReportKind::Error;
+            let report = ariadne::Report::build(kind, *span.file(), *span.start() as usize)
+                .with_label(Label::new(span).with_message(msg.as_ref()))
+                .with_message(label.as_ref())
+                .with_config(Config::default().with_color(false))
+                .finish();
+            self.diags.push(report);
+        }
     }
 
     pub fn err2(
@@ -116,23 +124,20 @@ impl Report {
             .with_message(label.as_ref())
             .with_config(Config::default().with_color(false))
             .finish();
-        self.0.push(report);
+        self.diags.push(report);
     }
 
-    pub fn print(&mut self, mut sources: &mut Sources) -> std::io::Result<()> {
-        for diag in self.0.drain(..) {
-            diag.eprint(&mut sources)?;
+    pub fn print(&mut self, sources: &mut Sources) -> std::io::Result<()> {
+        for diag in self.diags.drain(..) {
+            diag.eprint(&mut *sources)?;
         }
         Ok(())
     }
 
-    pub fn string(
-        &mut self,
-        mut sources: &mut Sources,
-    ) -> Result<String, std::string::FromUtf8Error> {
+    pub fn string(&mut self, sources: &mut Sources) -> Result<String, std::string::FromUtf8Error> {
         let mut buf = Vec::new();
-        for diag in self.0.drain(..) {
-            diag.write(&mut sources, &mut buf).unwrap();
+        for diag in self.diags.drain(..) {
+            diag.write(&mut *sources, &mut buf).unwrap();
             writeln!(&mut buf).unwrap();
         }
         String::from_utf8(buf)

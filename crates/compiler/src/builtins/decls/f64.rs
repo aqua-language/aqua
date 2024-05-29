@@ -10,7 +10,6 @@ use crate::ast::StmtDefBody;
 use crate::ast::StmtImpl;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
-use crate::ast::TraitBound;
 use crate::ast::Type;
 use crate::lexer::Span;
 use crate::Compiler;
@@ -19,6 +18,19 @@ use std::rc::Rc;
 impl Compiler {
     pub(super) fn declare_f64(&mut self) {
         self.declare_type("type f64;", BuiltinType { rust: "f64" });
+
+        self.declare_impl(
+            "impl f64 {
+                def abs(a:f64): f64;
+            }",
+            [BuiltinDef {
+                rust: "f64::abs",
+                fun: |_ctx, _t, v| {
+                    let v0 = v[0].as_f64();
+                    v0.abs().into()
+                },
+            }],
+        );
 
         self.declare_impl(
             "impl Add[f64,f64] {

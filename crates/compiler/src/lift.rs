@@ -18,12 +18,11 @@ use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
-use crate::ast::TraitBound;
-use crate::ast::StmtTraitDef;
-use crate::ast::StmtTraitType;
 use crate::ast::Type;
 use crate::diag::Report;
 
@@ -126,12 +125,6 @@ impl Context {
             }
             Stmt::Trait(s) => {
                 self.stack.bind(s.name);
-                for s in &s.defs {
-                    self.stack.bind(s.name);
-                }
-                for s in &s.types {
-                    self.stack.bind(s.name);
-                }
             }
             Stmt::Impl(s) => {}
             Stmt::Struct(s) => {
@@ -185,20 +178,15 @@ impl Context {
 
     fn bound(&mut self, b: &Bound) -> Bound {
         match b {
-            Bound::Unresolved(..) => unreachable!(),
-            Bound::Trait(s, b) => {
-                let b = self.trait_bound(b);
-                Bound::Trait(*s, b)
+            Bound::Path(..) => unreachable!(),
+            Bound::Trait(s, x, ts, xts) => {
+                let ts = ts.iter().map(|t| self.ty(t)).collect();
+                let xts = xts.iter().map(|(n, t)| (*n, self.ty(t))).collect();
+                Bound::Trait(*s, *x, ts, xts)
             }
+            Bound::Type(s, t) => Bound::Type(*s, Rc::new(self.ty(t))),
             Bound::Err(s) => Bound::Err(*s),
         }
-    }
-
-    fn trait_bound(&mut self, b: &TraitBound) -> TraitBound {
-        let x = self.stack.get(&b.name);
-        let ts = b.ts.iter().map(|t| self.ty(t)).collect();
-        let xts = b.xts.iter().map(|(n, t)| (*n, self.ty(t))).collect();
-        TraitBound::new(x, ts, xts)
     }
 
     fn stmt_def_body(&mut self, s: &StmtDefBody) -> StmtDefBody {
@@ -225,10 +213,23 @@ impl Context {
         self.scoped(|ctx| {
             let span = d.span;
             let generics = d.generics.iter().map(|g| ctx.stack.bind(*g)).collect();
-            let params = d.params.map_values(|t| ctx.ty(t));
+            let params = d.params.mapv(|t| ctx.ty(t));
             let ty = ctx.ty(&d.ty);
             let where_clause = d.where_clause.iter().map(|b| ctx.bound(b)).collect();
             StmtTraitDef::new(span, name, generics, params, ty, where_clause)
+        })
+    }
+
+    fn impl_def(&mut self, d: &StmtDef) -> StmtDef {
+        let name = d.name;
+        self.scoped(|ctx| {
+            let span = d.span;
+            let generics = d.generics.iter().map(|g| ctx.stack.bind(*g)).collect();
+            let params = d.params.mapv(|t| ctx.ty(t));
+            let ty = ctx.ty(&d.ty);
+            let where_clause = d.where_clause.iter().map(|b| ctx.bound(b)).collect();
+            let body = ctx.stmt_def_body(&d.body);
+            StmtDef::new(span, name, generics, params, ty, where_clause, body)
         })
     }
 
@@ -247,8 +248,8 @@ impl Context {
             let generics = s.generics.iter().map(|g| ctx.stack.bind(*g)).collect();
             let head = ctx.bound(&s.head);
             let where_clause = s.where_clause.iter().map(|b| ctx.bound(b)).collect();
-            let defs = s.defs.iter().map(|d| Rc::new(ctx.stmt_def(d))).collect();
-            let types = s.types.iter().map(|t| Rc::new(ctx.stmt_type(t))).collect();
+            let defs = s.defs.iter().map(|d| Rc::new(ctx.impl_def(d))).collect();
+            let types = s.types.iter().map(|t| Rc::new(ctx.impl_type(t))).collect();
             StmtImpl::new(span, generics, head, where_clause, defs, types)
         })
     }
@@ -283,6 +284,16 @@ impl Context {
         })
     }
 
+    fn impl_type(&mut self, t: &StmtType) -> StmtType {
+        let name = t.name;
+        self.scoped(|ctx| {
+            let span = t.span;
+            let generics = t.generics.iter().map(|g| ctx.stack.bind(*g)).collect();
+            let ty = ctx.stmt_type_body(&t.body);
+            StmtType::new(span, name, generics, ty)
+        })
+    }
+
     fn stmt_type_body(&mut self, s: &StmtTypeBody) -> StmtTypeBody {
         match s {
             StmtTypeBody::UserDefined(t) => StmtTypeBody::UserDefined(self.ty(t)),
@@ -292,7 +303,7 @@ impl Context {
 
     fn ty(&mut self, ty: &Type) -> Type {
         match ty {
-            Type::Unresolved(..) => unreachable!(),
+            Type::Path(..) => unreachable!(),
             Type::Cons(x, ts) => {
                 let x = self.stack.get(x);
                 let ts = ts.iter().map(|t| self.ty(t)).collect();
@@ -304,7 +315,7 @@ impl Context {
                 Type::Alias(x, ts)
             }
             Type::Assoc(b, x, ts) => {
-                let b = self.trait_bound(b);
+                let b = self.bound(b);
                 let ts = ts.iter().map(|t| self.ty(t)).collect();
                 Type::Assoc(b, *x, ts)
             }
@@ -340,7 +351,7 @@ impl Context {
         let s = expr.span();
         let t = self.ty(expr.ty());
         match expr {
-            Expr::Unresolved(_, _, _) => unreachable!(),
+            Expr::Path(_, _, _) => unreachable!(),
             Expr::Int(_, _, v) => Expr::Int(s, t, *v),
             Expr::Float(_, _, v) => Expr::Float(s, t, *v),
             Expr::Bool(_, _, v) => Expr::Bool(s, t, *v),
@@ -396,7 +407,7 @@ impl Context {
             }
             Expr::Query(_, _, _) => todo!(),
             Expr::Assoc(_, _, b, x, ts) => {
-                let b = self.trait_bound(b);
+                let b = self.bound(b);
                 let ts = ts.iter().map(|t| self.ty(t)).collect();
                 Expr::Assoc(s, t, b, *x, ts)
             }
@@ -439,6 +450,7 @@ impl Context {
             }
             Expr::Err(_, _) => Expr::Err(s, t),
             Expr::Value(_, _) => unreachable!(),
+            Expr::Unresolved(_, _, _, _) => todo!(),
         }
     }
 

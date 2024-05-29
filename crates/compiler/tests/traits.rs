@@ -20,7 +20,6 @@ use compiler::ast::Bound;
 use compiler::ast::Map;
 use compiler::ast::StmtImpl;
 use compiler::ast::Type;
-use compiler::infer::unify;
 use compiler::infer::Context;
 
 use crate::common::traits::impls;
@@ -112,7 +111,7 @@ fn test_trait5() {
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
     let t0 = ty_iterator_item(Type::vec(Type::i32()));
     let t1 = Type::i32();
-    assert!(unify(&mut sub, &t0, &t1).is_ok());
+    assert!(ctx.try_unify(&mut sub, &t0, &t1).is_ok());
 }
 
 // impl Add[i32, i32] { type Output = i32; }
@@ -131,7 +130,7 @@ fn test_trait6() {
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
     let t0 = ty_add_output([Type::i32(), Type::i32()]);
     let t1 = Type::i32();
-    assert!(unify(&mut sub, &t0, &t1).is_ok());
+    assert!(ctx.try_unify(&mut sub, &t0, &t1).is_ok());
 }
 
 // impl Add[i32, i32] { type Output = i32; }
@@ -161,7 +160,7 @@ fn test_trait7() {
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
     let t0 = ty_add_output([Type::vec(Type::i32()), Type::i32()]);
     let t1 = Type::vec(Type::i32());
-    assert!(unify(&mut sub, &t0, &t1).is_ok());
+    assert!(ctx.try_unify(&mut sub, &t0, &t1).is_ok());
 }
 
 // impl Add[i32, i32] { type Output = i32; }
@@ -181,7 +180,7 @@ fn test_trait8() {
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
     let t0 = ty_add_output([Type::i64(), Type::i32()]);
     let t1 = Type::i64();
-    assert!(unify(&mut sub, &t0, &t1).is_ok());
+    assert!(ctx.try_unify(&mut sub, &t0, &t1).is_ok());
 }
 
 // impl[T] IntoIterator[Vec[?T]] {
@@ -212,7 +211,7 @@ fn test_trait9() {
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
     let t0 = ty_into_iterator_into_iter(Type::vec(Type::i32()));
     let t1 = ty_con("VecIterator", [Type::i32()]);
-    assert!(unify(&mut sub, &t0, &t1).is_ok());
+    assert!(ctx.try_unify(&mut sub, &t0, &t1).is_ok());
 }
 
 // impl[T] IntoIterator[Vec[?T]] {

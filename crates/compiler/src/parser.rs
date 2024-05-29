@@ -54,7 +54,7 @@ use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Type;
-use crate::ast::UnresolvedPatField;
+use crate::ast::PathPatField;
 use crate::diag::Report;
 use crate::lexer::Span;
 use crate::lexer::Spanned;
@@ -712,7 +712,7 @@ where
 
     fn bound(&mut self, follow: Token) -> Result<Spanned<Bound>, Span> {
         let x = self.path(follow)?;
-        Ok(Spanned::new(x.s, Bound::Unresolved(x.s, x.v)))
+        Ok(Spanned::new(x.s, Bound::Path(x.s, x.v)))
     }
 
     fn generics(&mut self, follow: Token) -> Result<Vec<Name>, Span> {
@@ -854,7 +854,7 @@ where
         let lhs = match t.v {
             Token::Name => {
                 let path = self.path(follow)?;
-                Type::Unresolved(path.v)
+                Type::Path(path.v)
             }
             Token::LParen => {
                 let t = self.ty_tuple(follow)?;
@@ -953,9 +953,9 @@ where
                 if self.start(Token::LParen | follow, follow)?.v == Token::LParen {
                     let t = self.pat_args(follow)?;
                     let s = path.s + t.s;
-                    Pat::Unresolved(s, Type::Hole, path.v, Some(t.v))
+                    Pat::Path(s, Type::Hole, path.v, Some(t.v))
                 } else {
-                    Pat::Unresolved(path.s, Type::Hole, path.v, None)
+                    Pat::Path(path.s, Type::Hole, path.v, None)
                 }
             }
             Token::LParen => {
@@ -1030,7 +1030,7 @@ where
         .map(|x| x.flatten())
     }
 
-    fn pat_args(&mut self, follow: Token) -> Result<Spanned<Vec<UnresolvedPatField>>, Span> {
+    fn pat_args(&mut self, follow: Token) -> Result<Spanned<Vec<PathPatField>>, Span> {
         self.paren(
             |p, follow| p.seq(Self::pat_arg, Token::Comma, Pat::FIRST, follow),
             follow,
@@ -1038,9 +1038,9 @@ where
         .map(|x| x.flatten())
     }
 
-    fn pat_arg(&mut self, follow: Token) -> Result<Spanned<UnresolvedPatField>, Span> {
+    fn pat_arg(&mut self, follow: Token) -> Result<Spanned<PathPatField>, Span> {
         let mut p0 = self.pat(follow | Token::Eq)?;
-        if let Pat::Unresolved(_, Type::Hole, path, fields) = &mut p0.v {
+        if let Pat::Path(_, Type::Hole, path, fields) = &mut p0.v {
             let t1 = self.start(Token::Eq | follow, follow)?;
             if path.is_name() && fields.is_none() && t1.v == Token::Eq {
                 self.skip();
@@ -1048,11 +1048,11 @@ where
                 let x = path.segments.pop().unwrap().name;
                 let p1 = self.pat(follow)?;
                 let s = p0.s + p1.s;
-                return Ok(Spanned::new(s, UnresolvedPatField::Named(x, p1.v)));
+                return Ok(Spanned::new(s, PathPatField::Named(x, p1.v)));
             }
         }
         let s = p0.s;
-        Ok(Spanned::new(s, UnresolvedPatField::Unnamed(p0.v)))
+        Ok(Spanned::new(s, PathPatField::Unnamed(p0.v)))
     }
 
     fn pat_fields(&mut self, follow: Token) -> Result<Spanned<Vec<(Name, Pat)>>, Span> {
@@ -1073,7 +1073,7 @@ where
         } else {
             let s = x.s;
             let path = Path::new_name(x.v);
-            let p = Pat::Unresolved(s, Type::Hole, path, None);
+            let p = Pat::Path(s, Type::Hole, path, None);
             Ok(Spanned::new(s, (x.v, p)))
         }
     }
@@ -1192,7 +1192,7 @@ where
                                     let (ts, xts) = tys.map(|x| x.v).unwrap_or_default();
                                     let path =
                                         Path::new(vec![Segment::new(s, x.v, ts, xts.into())]);
-                                    let e = Expr::Unresolved(lhs.s, Type::Hole, path);
+                                    let e = Expr::Path(lhs.s, Type::Hole, path);
                                     Expr::Call(s, Type::Hole, Rc::new(e), es)
                                 } else {
                                     let s = lhs.s + x.s;
@@ -1227,7 +1227,7 @@ where
                     let s0 = Segment::new_name(Name::new(s, x0));
                     let s1 = Segment::new_name(Name::new(s, x1));
                     let path = Path::new(vec![s0, s1]);
-                    let fun = Expr::Unresolved(s, Type::Hole, path);
+                    let fun = Expr::Path(s, Type::Hole, path);
                     Expr::Call(s, Type::Hole, Rc::new(fun), vec![lhs, rhs])
                 }
                 let s = lhs.s + rhs.s;
@@ -1317,7 +1317,7 @@ where
             Token::Name => {
                 let path = self.path(follow)?;
                 let s = path.s;
-                Ok(Spanned::new(s, Expr::Unresolved(s, Type::Hole, path.v)))
+                Ok(Spanned::new(s, Expr::Path(s, Type::Hole, path.v)))
             }
             Token::LParen => {
                 let t = self.expr_args(follow)?;
@@ -1338,7 +1338,7 @@ where
                     let s0 = Segment::new_name(Name::new(s, x0));
                     let s1 = Segment::new_name(Name::new(s, x1));
                     let path = Path::new(vec![s0, s1]);
-                    let fun = Expr::Unresolved(s, Type::Hole, path);
+                    let fun = Expr::Path(s, Type::Hole, path);
                     Expr::Call(s, Type::Hole, Rc::new(fun), vec![e])
                 }
 
@@ -1589,7 +1589,7 @@ where
                 let s = x.s;
                 Ok(Spanned::new(
                     s,
-                    (x.v, Expr::Unresolved(s, Type::Hole, path)),
+                    (x.v, Expr::Path(s, Type::Hole, path)),
                 ))
             }
         }

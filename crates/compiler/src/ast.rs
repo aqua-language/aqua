@@ -41,7 +41,7 @@ impl Path {
 
 impl Type {
     pub fn name(&self) -> Option<&Name> {
-        if let Type::Unresolved(p) = self {
+        if let Type::Path(p) = self {
             p.name()
         } else {
             None
@@ -51,7 +51,7 @@ impl Type {
 
 impl Pat {
     pub fn name(&self) -> Option<&Name> {
-        if let Pat::Unresolved(_, _, p, None) = self {
+        if let Pat::Path(_, _, p, None) = self {
             p.name()
         } else {
             None
@@ -61,7 +61,7 @@ impl Pat {
 
 impl Expr {
     pub fn name(&self) -> Option<&Name> {
-        if let Expr::Unresolved(_, _, p) = self {
+        if let Expr::Path(_, _, p) = self {
             p.name()
         } else {
             None
@@ -150,6 +150,12 @@ pub struct StmtImpl {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+pub enum ImplKind {
+    Trait,
+    Type,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct StmtTrait {
     pub span: Span,
     pub name: Name,
@@ -159,14 +165,13 @@ pub struct StmtTrait {
     pub types: Vec<Rc<StmtTraitType>>,
 }
 
-// A trait is like a predicate
-// <name>(<types>)
-// e.g., Clone(i32)
-//       Iterator(Item=i32)
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Bound {
-    Unresolved(Span, Path),
-    Trait(Span, TraitBound),
+    Path(Span, Path),
+    // Trait bound. For example: impl Clone[i32] { ... }
+    Trait(Span, Name, Vec<Type>, Map<Name, Type>),
+    // Type bound. For example: impl i32 { ... }
+    Type(Span, Rc<Type>),
     Err(Span),
 }
 
@@ -185,31 +190,14 @@ impl std::fmt::Display for Uid {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct TraitBound {
-    pub name: Name,
-    pub ts: Vec<Type>,
-    pub xts: Map<Name, Type>,
-}
-
-impl TraitBound {
-    pub fn new(name: Name, types: Vec<Type>, named_types: Map<Name, Type>) -> Self {
-        Self {
-            name,
-            ts: types,
-            xts: named_types,
-        }
-    }
-}
-
 // A type is like a proposition
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Type {
-    Unresolved(Path),
+    Path(Path),
     Cons(Name, Vec<Type>),
     Alias(Name, Vec<Type>),
-    Assoc(TraitBound, Name, Vec<Type>),
-    Var(Name),
+    Assoc(Bound, Name, Vec<Type>),
+    Var(Name, TypeVar),
     Generic(Name),
     Fun(Vec<Type>, Rc<Type>),
     Tuple(Vec<Type>),
@@ -218,6 +206,13 @@ pub enum Type {
     Never,
     Hole,
     Err,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum TypeVar {
+    General,
+    Float,
+    Int,
 }
 
 impl Type {
@@ -288,39 +283,61 @@ pub enum Stmt {
 }
 
 impl Stmt {
-    pub fn as_var(&self) -> &StmtVar {
-        let Stmt::Var(v) = self else { unreachable!() };
-        v
+    pub fn as_var(&self) -> Option<&StmtVar> {
+        if let Stmt::Var(v) = self {
+            Some(v)
+        } else {
+            None
+        }
     }
-    pub fn as_def(&self) -> &StmtDef {
-        let Stmt::Def(d) = self else { unreachable!() };
-        d
+    pub fn as_def(&self) -> Option<&StmtDef> {
+        if let Stmt::Def(d) = self {
+            Some(d)
+        } else {
+            None
+        }
     }
-    pub fn as_trait(&self) -> &StmtTrait {
-        let Stmt::Trait(t) = self else { unreachable!() };
-        t
+    pub fn as_trait(&self) -> Option<&StmtTrait> {
+        if let Stmt::Trait(t) = self {
+            Some(t)
+        } else {
+            None
+        }
     }
-    pub fn as_impl(&self) -> &StmtImpl {
-        let Stmt::Impl(i) = self else { unreachable!() };
-        i
+    pub fn as_impl(&self) -> Option<&StmtImpl> {
+        if let Stmt::Impl(i) = self {
+            Some(i)
+        } else {
+            None
+        }
     }
-    pub fn as_struct(&self) -> &StmtStruct {
-        let Stmt::Struct(s) = self else {
-            unreachable!()
-        };
-        s
+    pub fn as_struct(&self) -> Option<&StmtStruct> {
+        if let Stmt::Struct(s) = self {
+            Some(s)
+        } else {
+            None
+        }
     }
-    pub fn as_enum(&self) -> &StmtEnum {
-        let Stmt::Enum(e) = self else { unreachable!() };
-        e
+    pub fn as_enum(&self) -> Option<&StmtEnum> {
+        if let Stmt::Enum(e) = self {
+            Some(e)
+        } else {
+            None
+        }
     }
-    pub fn as_type(&self) -> &StmtType {
-        let Stmt::Type(t) = self else { unreachable!() };
-        t
+    pub fn as_type(&self) -> Option<&StmtType> {
+        if let Stmt::Type(t) = self {
+            Some(t)
+        } else {
+            None
+        }
     }
-    pub fn as_expr(&self) -> &Expr {
-        let Stmt::Expr(e) = self else { unreachable!() };
-        e
+    pub fn as_expr(&self) -> Option<&Expr> {
+        if let Stmt::Expr(e) = self {
+            Some(e)
+        } else {
+            None
+        }
     }
 }
 
@@ -455,7 +472,8 @@ pub struct Index {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Expr {
-    Unresolved(Span, Type, Path),
+    Path(Span, Type, Path),
+    Unresolved(Span, Type, Name, Vec<Type>),
     Int(Span, Type, Symbol),
     Float(Span, Type, Symbol),
     Bool(Span, Type, bool),
@@ -472,7 +490,7 @@ pub enum Expr {
     Call(Span, Type, Rc<Expr>, Vec<Expr>),
     Block(Span, Type, Block),
     Query(Span, Type, Vec<Query>),
-    Assoc(Span, Type, TraitBound, Name, Vec<Type>),
+    Assoc(Span, Type, Bound, Name, Vec<Type>),
     Match(Span, Type, Rc<Expr>, Vec<Arm>),
     Array(Span, Type, Vec<Expr>),
     Assign(Span, Type, Rc<Expr>, Rc<Expr>),
@@ -494,7 +512,7 @@ pub struct Block {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum UnresolvedPatField {
+pub enum PathPatField {
     Named(Name, Pat),
     // Could be a punned field or a positional field
     Unnamed(Pat),
@@ -509,7 +527,7 @@ pub struct Arm {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Pat {
-    Unresolved(Span, Type, Path, Option<Vec<UnresolvedPatField>>),
+    Path(Span, Type, Path, Option<Vec<PathPatField>>),
     Var(Span, Type, Name),
     Tuple(Span, Type, Vec<Pat>),
     Struct(Span, Type, Name, Vec<Type>, Map<Name, Pat>),
@@ -694,9 +712,18 @@ impl Block {
 impl Bound {
     pub fn span(&self) -> Span {
         match self {
-            Bound::Unresolved(s, _) => *s,
-            Bound::Trait(s, _) => *s,
+            Bound::Path(s, ..) => *s,
+            Bound::Trait(s, ..) => *s,
+            Bound::Type(s, ..) => *s,
             Bound::Err(s) => *s,
+        }
+    }
+    pub fn get_type(&self, x: &Name) -> Option<&Type> {
+        match self {
+            Bound::Path(_, _) => None,
+            Bound::Trait(_, _, _, xts) => xts.get(x),
+            Bound::Type(_, _) => None,
+            Bound::Err(_) => None,
         }
     }
 }
@@ -788,10 +815,11 @@ impl Expr {
             Expr::Match(_, t, ..) => t,
             Expr::While(_, t, ..) => t,
             Expr::Record(_, t, _) => t,
-            Expr::Unresolved(_, t, _) => t,
-            Expr::Value(_, _) => todo!(),
-            Expr::For(_, _, _, _, _) => todo!(),
-            Expr::Char(_, _, _) => todo!(),
+            Expr::Path(_, t, _) => t,
+            Expr::Value(t, _) => t,
+            Expr::For(_, t, _, _, _) => t,
+            Expr::Char(_, t, _) => t,
+            Expr::Unresolved(_, t, _, _) => t,
         }
     }
 
@@ -822,11 +850,12 @@ impl Expr {
             Expr::Match(s, _, e, pes) => Expr::Match(s, t, e, pes),
             Expr::Err(s, _) => Expr::Err(s, t),
             Expr::While(s, _, e0, e1) => Expr::While(s, t, e0, e1),
-            Expr::Record(_, _, _) => todo!(),
-            Expr::Unresolved(s, _, p) => Expr::Unresolved(s, t, p),
-            Expr::Value(_, _) => todo!(),
-            Expr::For(_, _, _, _, _) => todo!(),
-            Expr::Char(_, _, _) => todo!(),
+            Expr::Record(s, _, xes) => Expr::Record(s, t, xes),
+            Expr::Path(s, _, p) => Expr::Path(s, t, p),
+            Expr::Value(_, v) => Expr::Value(t, v),
+            Expr::For(s, _, x, e, b) => Expr::For(s, t, x, e, b),
+            Expr::Char(s, _, v) => Expr::Char(s, t, v),
+            Expr::Unresolved(s, _, x, ts) => Expr::Unresolved(s, t, x, ts),
         }
     }
 
@@ -857,17 +886,18 @@ impl Expr {
             Expr::Err(s, ..) => *s,
             Expr::While(s, ..) => *s,
             Expr::Record(s, _, _) => *s,
-            Expr::Unresolved(s, _, _) => *s,
-            Expr::Value(_, _) => todo!(),
-            Expr::For(_, _, _, _, _) => todo!(),
-            Expr::Char(_, _, _) => todo!(),
+            Expr::Path(s, _, _) => *s,
+            Expr::Value(_, _) => unreachable!(),
+            Expr::For(s, _, _, _, _) => *s,
+            Expr::Char(s, _, _) => *s,
+            Expr::Unresolved(s, _, _, _) => *s,
         }
     }
 
     #[inline(always)]
     pub fn with_span(self, span: Span) -> Expr {
         match self {
-            Expr::Unresolved(_, t, p) => Expr::Unresolved(span, t, p),
+            Expr::Path(_, t, p) => Expr::Path(span, t, p),
             Expr::Record(_, t, xes) => Expr::Record(span, t, xes),
             Expr::While(_, t, e0, e1) => Expr::While(span, t, e0, e1),
             Expr::Int(_, t, v) => Expr::Int(span, t, v),
@@ -893,9 +923,10 @@ impl Expr {
             Expr::Fun(_, t, ps, t1, e) => Expr::Fun(span, t, ps, t1, e),
             Expr::Match(_, t, e, pes) => Expr::Match(span, t, e, pes),
             Expr::Err(_, t) => Expr::Err(span, t),
-            Expr::Value(_, _) => todo!(),
-            Expr::For(_, _, _, _, _) => todo!(),
-            Expr::Char(_, _, _) => todo!(),
+            Expr::Value(t, v) => Expr::Value(t, v),
+            Expr::For(_, t, x, e, b) => Expr::For(span, t, x, e, b),
+            Expr::Char(_, t, v) => Expr::Char(span, t, v),
+            Expr::Unresolved(_, t, x, ts) => Expr::Unresolved(span, t, x, ts),
         }
     }
 }
@@ -903,7 +934,7 @@ impl Expr {
 impl Pat {
     pub fn ty(&self) -> &Type {
         match self {
-            Pat::Unresolved(_, t, _, _) => t,
+            Pat::Path(_, t, _, _) => t,
             Pat::Var(_, t, ..) => t,
             Pat::Tuple(_, t, ..) => t,
             Pat::Struct(_, t, ..) => t,
@@ -922,7 +953,7 @@ impl Pat {
     #[inline(always)]
     pub fn with_ty(self, t: Type) -> Pat {
         match self {
-            Pat::Unresolved(s, _, p, a) => Pat::Unresolved(s, t, p, a),
+            Pat::Path(s, _, p, a) => Pat::Path(s, t, p, a),
             Pat::Var(s, _, x) => Pat::Var(s, t, x),
             Pat::Tuple(s, _, ps) => Pat::Tuple(s, t, ps),
             Pat::Struct(s, _, x, ts, xps) => Pat::Struct(s, t, x, ts, xps),
@@ -940,7 +971,7 @@ impl Pat {
 
     pub fn span(&self) -> Span {
         match self {
-            Pat::Unresolved(s, _, _, _) => *s,
+            Pat::Path(s, _, _, _) => *s,
             Pat::Var(s, ..) => *s,
             Pat::Tuple(s, ..) => *s,
             Pat::Struct(s, ..) => *s,
@@ -959,7 +990,7 @@ impl Pat {
     #[inline(always)]
     pub fn with_span(self, s: Span) -> Pat {
         match self {
-            Pat::Unresolved(_, t, p, a) => Pat::Unresolved(s, t, p, a),
+            Pat::Path(_, t, p, a) => Pat::Path(s, t, p, a),
             Pat::Var(_, t, x) => Pat::Var(s, t, x),
             Pat::Tuple(_, t, ps) => Pat::Tuple(s, t, ps),
             Pat::Struct(_, t, x, ts, xps) => Pat::Struct(s, t, x, ts, xps),

@@ -74,8 +74,8 @@ impl Compiler {
         // self.declare_aggregator();
         // self.declare_array();
         // self.declare_blob();
-        // self.declare_bool();
-        // self.declare_char();
+        self.declare_bool();
+        self.declare_char();
         // self.declare_dict();
         // self.declare_dataflow();
         // self.declare_discretizer();
@@ -88,7 +88,7 @@ impl Compiler {
         // self.declare_i128();
         // self.declare_i16();
         self.declare_i32();
-        // self.declare_i64();
+        self.declare_i64();
         // self.declare_i8();
         // self.declare_image();
         // self.declare_instance();
@@ -97,7 +97,7 @@ impl Compiler {
         // self.declare_matrix();
         // self.declare_model();
         // self.declare_never();
-        // self.declare_option();
+        self.declare_option();
         // self.declare_path();
         // self.declare_reader();
         // self.declare_record();
@@ -105,7 +105,7 @@ impl Compiler {
         // self.declare_set();
         // self.declare_socket();
         // self.declare_stream();
-        // self.declare_string();
+        self.declare_string();
         // self.declare_time();
         // self.declare_time_source();
         self.declare_traits();
@@ -117,9 +117,9 @@ impl Compiler {
         // self.declare_u8();
         // self.declare_unit();
         // self.declare_url();
-        // self.declare_usize();
+        self.declare_usize();
         // self.declare_variant();
-        // self.declare_vec();
+        self.declare_vec();
         // self.declare_writer();
     }
 
@@ -174,11 +174,4 @@ impl Compiler {
         self.report.merge(&mut lexer.report);
         result
     }
-
-    // fn decl_impl(&mut self, source: &'static str, body: StmtImplBody) {
-    //    let lexer = crate::lexer::Lexer::new(0, source);
-    //    let mut parser = crate::parser::Parser::new(source, lexer);
-    //    let stmt = parser.parse(move |p, f| p.stmt_impl_builtin(f, body));
-    //    self.stmts.push(stmt);
-    // }
 }

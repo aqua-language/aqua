@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use compiler::ast::Map;
+use compiler::ast::TypeVar;
 use serde::de::DeserializeSeed;
 
 use compiler::ast::Type;
@@ -196,7 +197,7 @@ fn test_serde_result_err() {
 #[test]
 fn test_serde_type_variable() {
     let mut de = serde_json::Deserializer::from_str("1");
-    let t = Type::Var("a".into());
+    let t = Type::Var("a".into(), TypeVar::General);
     assert!(Seed(t).deserialize(&mut de).is_err());
 }
 

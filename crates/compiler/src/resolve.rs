@@ -7,6 +7,7 @@ use crate::ast::Expr;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
+use crate::ast::PathPatField;
 use crate::ast::Program;
 use crate::ast::Segment;
 use crate::ast::Stmt;
@@ -21,9 +22,7 @@ use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
-use crate::ast::TraitBound;
 use crate::ast::Type;
-use crate::ast::UnresolvedPatField;
 use crate::diag::Report;
 use crate::lexer::Span;
 use crate::map::Map;
@@ -31,8 +30,10 @@ use crate::map::Map;
 #[derive(Debug)]
 pub struct Stack(Vec<Scope>);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Scope(Map<Name, Binding>);
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Scope {
+    bindings: Map<Name, Binding>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Binding {
@@ -47,22 +48,11 @@ enum Binding {
 
 impl Stack {
     fn bind(&mut self, name: Name, binding: Binding) {
-        self.0.last_mut().unwrap().0.insert(name, binding);
+        self.0.last_mut().unwrap().bindings.insert(name, binding);
     }
 
     fn get(&self, x: &Name) -> Option<Binding> {
-        self.0.iter().rev().find_map(|s| s.0.get(x)).cloned()
-    }
-
-    fn traits(&self) -> impl Iterator<Item = &StmtTrait> {
-        self.0
-            .iter()
-            .rev()
-            .flat_map(|s| s.0.iter())
-            .filter_map(|(_, b)| match b {
-                Binding::Trait(s) => Some(s.as_ref()),
-                _ => None,
-            })
+        self.0.iter().rev().find_map(|s| s.bindings.get(x)).cloned()
     }
 }
 
@@ -81,22 +71,27 @@ impl Default for Context {
 impl Context {
     pub fn new() -> Context {
         Context {
-            stack: Stack(vec![Scope(Map::new())]),
+            stack: Stack(vec![Scope::default()]),
             report: Report::new(),
         }
     }
 
+    pub fn supress<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.report.supress = true;
+        let v = f(self);
+        self.report.supress = false;
+        v
+    }
+
     pub fn resolve(&mut self, p: &Program) -> Program {
-        p.stmts.iter().for_each(|stmt| self.declare_stmt(stmt));
-        let stmts = p.stmts.iter().map(|stmt| self.stmt(stmt)).collect();
-        Program::new(stmts)
+        Program::new(self.stmts(&p.stmts))
     }
 
     fn scoped<F, T>(&mut self, f: F) -> T
     where
         F: FnOnce(&mut Self) -> T,
     {
-        self.stack.0.push(Scope(Map::new()));
+        self.stack.0.push(Scope::default());
         let t = f(self);
         self.stack.0.pop();
         t
@@ -229,17 +224,22 @@ impl Context {
         }
     }
 
-    fn stmt(&mut self, s: &Stmt) -> Stmt {
+    fn stmts(&mut self, stmts: &[Stmt]) -> Vec<Stmt> {
+        stmts.iter().for_each(|s| self.declare_stmt(s));
+        stmts.iter().filter_map(|s| self.stmt(s)).collect()
+    }
+
+    fn stmt(&mut self, s: &Stmt) -> Option<Stmt> {
         match s {
-            Stmt::Var(s) => Stmt::Var(Rc::new(self.stmt_var(s))),
-            Stmt::Def(s) => Stmt::Def(Rc::new(self.stmt_def(s))),
-            Stmt::Trait(s) => Stmt::Trait(Rc::new(self.stmt_trait(s))),
-            Stmt::Impl(s) => Stmt::Impl(Rc::new(self.stmt_impl(s))),
-            Stmt::Struct(s) => Stmt::Struct(Rc::new(self.stmt_struct(s))),
-            Stmt::Enum(s) => Stmt::Enum(Rc::new(self.stmt_enum(s))),
-            Stmt::Type(s) => Stmt::Type(Rc::new(self.stmt_type(s))),
-            Stmt::Expr(s) => Stmt::Expr(Rc::new(self.expr(s))),
-            Stmt::Err(s) => Stmt::Err(*s),
+            Stmt::Var(s) => Some(Stmt::Var(Rc::new(self.stmt_var(s)))),
+            Stmt::Def(s) => Some(Stmt::Def(Rc::new(self.stmt_def(s)))),
+            Stmt::Trait(s) => Some(Stmt::Trait(Rc::new(self.stmt_trait(s)))),
+            Stmt::Impl(s) => Some(Stmt::Impl(Rc::new(self.stmt_impl(s)))),
+            Stmt::Struct(s) => Some(Stmt::Struct(Rc::new(self.stmt_struct(s)))),
+            Stmt::Enum(s) => Some(Stmt::Enum(Rc::new(self.stmt_enum(s)))),
+            Stmt::Type(s) => Some(Stmt::Type(Rc::new(self.stmt_type(s)))),
+            Stmt::Expr(s) => Some(Stmt::Expr(Rc::new(self.expr(s)))),
+            Stmt::Err(s) => Some(Stmt::Err(*s)),
         }
     }
 
@@ -309,18 +309,18 @@ impl Context {
         self.scoped(|ctx| {
             s.generics
                 .iter()
-                .for_each(|generic| ctx.stack.bind(*generic, Binding::Generic));
+                .for_each(|g| ctx.stack.bind(*g, Binding::Generic));
             let span = s.span;
             let generics = s.generics.clone();
             let head = ctx.head(&s.head, &s.defs, &s.types);
-            let body = s
+            let where_clause = s
                 .where_clause
                 .iter()
                 .map(|p| ctx.bound(p))
                 .collect::<Vec<_>>();
             let defs = s.defs.iter().map(|d| Rc::new(ctx.stmt_def(d))).collect();
             let types = s.types.iter().map(|t| Rc::new(ctx.stmt_type(t))).collect();
-            StmtImpl::new(span, generics, head, body, defs, types)
+            StmtImpl::new(span, generics, head, where_clause, defs, types)
         })
     }
 
@@ -328,7 +328,7 @@ impl Context {
         self.scoped(|ctx| {
             s.generics
                 .iter()
-                .for_each(|generic| ctx.stack.bind(*generic, Binding::Generic));
+                .for_each(|g| ctx.stack.bind(*g, Binding::Generic));
             let span = s.span;
             let name = s.name;
             let generics = s.generics.clone();
@@ -341,7 +341,7 @@ impl Context {
         self.scoped(|ctx| {
             s.generics
                 .iter()
-                .for_each(|generic| ctx.stack.bind(*generic, Binding::Generic));
+                .for_each(|g| ctx.stack.bind(*g, Binding::Generic));
             let span = s.span;
             let name = s.name;
             let generics = s.generics.clone();
@@ -392,7 +392,7 @@ impl Context {
 
     fn ty(&mut self, t: &Type) -> Type {
         match t {
-            Type::Unresolved(p) => self.resolve_type_path(p),
+            Type::Path(p) => self.resolve_type_path(p),
             Type::Hole => Type::Hole,
             Type::Generic(x) => Type::Generic(*x),
             Type::Fun(ts, t) => {
@@ -418,15 +418,16 @@ impl Context {
             Type::Cons(x, ts) => Type::Cons(*x, ts.iter().map(|t| self.ty(t)).collect()),
             Type::Alias(..) => unreachable!(),
             Type::Assoc(..) => unreachable!(),
-            Type::Var(_) => unreachable!(),
+            Type::Var(_, _) => unreachable!(),
         }
     }
 
     fn expr(&mut self, e: &Expr) -> Expr {
-        let t = self.ty(e.ty());
-        let s = e.span();
         match e {
-            Expr::Unresolved(_s, _t, path) => self.resolve_expr_path(s, t, path),
+            Expr::Path(s, t, path) => {
+                let t = self.ty(t);
+                self.resolve_expr_path(*s, t, path)
+            }
             Expr::Int(s, t, v) => {
                 let t = self.ty(t);
                 Expr::Int(*s, t, *v)
@@ -445,61 +446,86 @@ impl Context {
                 Expr::Tuple(*s, t, es)
             }
             Expr::Call(s, t, e, es) => self.expr_call(*s, t, e, es),
-            Expr::String(_, _, v) => Expr::String(s, t, *v),
-            Expr::Field(_, _, e, x) => {
-                let e = self.expr(e);
-                Expr::Field(s, t, Rc::new(e), *x)
+            Expr::String(s, t, v) => {
+                let t = self.ty(t);
+                Expr::String(*s, t, *v)
             }
-            Expr::Block(_, _, b) => {
+            Expr::Field(s, t, e, x) => {
+                let t = self.ty(t);
+                let e = self.expr(e);
+                Expr::Field(*s, t, Rc::new(e), *x)
+            }
+            Expr::Block(s, t, b) => {
+                let t = self.ty(t);
                 let b = self.block(b);
-                Expr::Block(s, t, b)
+                Expr::Block(*s, t, b)
             }
             Expr::Query(..) => {
                 todo!()
             }
-            Expr::Index(_, _, e, i) => {
+            Expr::Index(s, t, e, i) => {
+                let t = self.ty(t);
                 let e = self.expr(e);
                 let i = *i;
-                Expr::Index(s, t, Rc::new(e), i)
+                Expr::Index(*s, t, Rc::new(e), i)
             }
-            Expr::Array(_, _, es) => {
+            Expr::Array(s, t, es) => {
+                let t = self.ty(t);
                 let es = es.iter().map(|e| self.expr(e)).collect();
-                Expr::Array(s, t, es)
+                Expr::Array(*s, t, es)
             }
-            Expr::Err(_, _) => Expr::Err(s, t),
-            Expr::Assign(_, _, e0, e1) => {
+            Expr::Err(s, t) => {
+                let t = self.ty(t);
+                Expr::Err(*s, t)
+            }
+            Expr::Assign(s, t, e0, e1) => {
+                let t = self.ty(t);
                 let e0 = self.expr(e0);
                 let e1 = self.expr(e1);
                 let e1 = self.lvalue(&e1);
-                Expr::Assign(s, t, Rc::new(e0), Rc::new(e1))
+                Expr::Assign(*s, t, Rc::new(e0), Rc::new(e1))
             }
-            Expr::Return(_, _, e) => {
+            Expr::Return(s, t, e) => {
+                let t = self.ty(t);
                 let e = self.expr(e);
-                Expr::Return(s, t, Rc::new(e))
+                Expr::Return(*s, t, Rc::new(e))
             }
-            Expr::Continue(_, _) => Expr::Continue(s, t),
-            Expr::Break(_, _) => Expr::Break(s, t),
-            Expr::Fun(_, _, ps, t1, e) => {
+            Expr::Continue(s, t) => {
+                let t = self.ty(t);
+                Expr::Continue(*s, t)
+            }
+            Expr::Break(s, t) => {
+                let t = self.ty(t);
+                Expr::Break(*s, t)
+            }
+            Expr::Fun(s, t, ps, t1, e) => {
+                let t = self.ty(t);
                 let ps = ps.iter().map(|p| self.param(p)).collect();
                 let t1 = self.ty(t1);
                 let e = self.expr(e);
-                Expr::Fun(s, t, ps, t1, Rc::new(e))
+                Expr::Fun(*s, t, ps, t1, Rc::new(e))
             }
-            Expr::Match(_, _, e, xps) => {
+            Expr::Match(s, t, e, xps) => {
+                let t = self.ty(t);
                 let e = self.expr(e);
                 let xps = xps.iter().map(|arm| self.arm(arm)).collect();
-                Expr::Match(s, t, Rc::new(e), xps)
+                Expr::Match(*s, t, Rc::new(e), xps)
             }
-            Expr::While(_, _, e, b) => {
+            Expr::While(s, t, e, b) => {
+                let t = self.ty(t);
                 let e = self.expr(e);
                 let b = self.block(b);
-                Expr::While(s, t, Rc::new(e), b)
+                Expr::While(*s, t, Rc::new(e), b)
             }
-            Expr::Record(_, _, xes) => {
+            Expr::Record(s, t, xes) => {
+                let t = self.ty(t);
                 let xes = xes.iter().map(|(x, e)| (*x, self.expr(e))).collect();
-                Expr::Record(s, t, xes)
+                Expr::Record(*s, t, xes)
             }
-            Expr::Char(_, _, c) => Expr::Char(s, t, *c),
+            Expr::Char(s, t, c) => {
+                let t = self.ty(t);
+                Expr::Char(*s, t, *c)
+            }
             Expr::Value(_, _) => unreachable!(),
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Def(..) => unreachable!(),
@@ -507,25 +533,23 @@ impl Context {
             Expr::Struct(..) => unreachable!(),
             Expr::Enum(..) => unreachable!(),
             Expr::Assoc(..) => unreachable!(),
+            Expr::Unresolved(..) => unreachable!(),
         }
     }
 
     fn block(&mut self, b: &Block) -> Block {
         self.scoped(|ctx| {
-            let span = b.span;
-            b.stmts.iter().for_each(|s| ctx.declare_stmt(s));
-            let stmts = b.stmts.iter().map(|s| ctx.stmt(s)).collect();
+            let stmts = ctx.stmts(&b.stmts);
             let e = ctx.expr(&b.expr);
-            Block::new(span, stmts, e)
+            Block::new(b.span, stmts, e)
         })
     }
 
-    fn arm(&mut self, arm: &Arm) -> Arm {
+    fn arm(&mut self, a: &Arm) -> Arm {
         self.scoped(|ctx| {
-            let span = arm.span;
-            let p = ctx.pat(&arm.p);
-            let e = ctx.expr(&arm.e);
-            Arm::new(span, p, e)
+            let p = ctx.pat(&a.p);
+            let e = ctx.expr(&a.e);
+            Arm::new(a.span, p, e)
         })
     }
 
@@ -537,7 +561,7 @@ impl Context {
 
     fn expr_call(&mut self, s: Span, t1: &Type, e: &Expr, es: &[Expr]) -> Expr {
         let t1 = self.ty(t1);
-        if let Expr::Unresolved(_s, _t, path) = e {
+        if let Expr::Path(_s, _t, path) = e {
             let path = self.path(path);
             let mut iter = path.segments.into_iter();
             let seg0 = iter.next().unwrap();
@@ -613,7 +637,7 @@ impl Context {
             }
             Expr::Assign(_, _, e0, e1) => {
                 let e1 = self.expr(e1);
-                if let Expr::Unresolved(_, _, path) = &**e0 {
+                if let Expr::Path(_, _, path) = &**e0 {
                     let mut iter = path.segments.iter();
                     let seg0 = iter.next().unwrap();
                     if !seg0.ts.is_empty() {
@@ -630,7 +654,7 @@ impl Context {
                     None
                 }
             }
-            Expr::Unresolved(_, _, path) => {
+            Expr::Path(_, _, path) => {
                 let mut iter = path.segments.iter();
                 let seg0 = iter.next().unwrap();
                 match self.stack.get(&seg0.name) {
@@ -670,7 +694,7 @@ impl Context {
         let t = self.ty(p.ty());
         let s = p.span();
         match p {
-            Pat::Unresolved(_, _, path, args) => self.resolve_pat_path(s, t, path, args),
+            Pat::Path(_, _, path, args) => self.resolve_pat_path(s, t, path, args),
             Pat::Var(_, _, x) => Pat::Var(s, t, *x),
             Pat::Tuple(_, _, ts) => {
                 let ts = ts.iter().map(|t| self.pat(t)).collect();
@@ -698,7 +722,7 @@ impl Context {
 
     fn enum_pat_args(
         &mut self,
-        args: &Option<Vec<UnresolvedPatField>>,
+        args: &Option<Vec<PathPatField>>,
         is_unit_enum: bool,
     ) -> Option<Vec<Pat>> {
         if args.is_none() && is_unit_enum {
@@ -708,7 +732,7 @@ impl Context {
         let mut ps = Vec::with_capacity(args.len());
         for arg in args {
             match arg {
-                UnresolvedPatField::Named(x, p) => {
+                PathPatField::Named(x, p) => {
                     self.report.err(
                         x.span,
                         format!("Expected `<pat>`, found `{x} = {p}`.",),
@@ -716,16 +740,13 @@ impl Context {
                     );
                     return None;
                 }
-                UnresolvedPatField::Unnamed(p) => ps.push(p.clone()),
+                PathPatField::Unnamed(p) => ps.push(p.clone()),
             }
         }
         Some(ps)
     }
 
-    fn struct_pat_args(
-        &mut self,
-        args: &Option<Vec<UnresolvedPatField>>,
-    ) -> Option<Map<Name, Pat>> {
+    fn struct_pat_args(&mut self, args: &Option<Vec<PathPatField>>) -> Option<Map<Name, Pat>> {
         if args.is_none() {
             return Some(Map::new());
         }
@@ -733,8 +754,8 @@ impl Context {
         let mut xps = Map::new();
         for arg in args {
             match arg {
-                UnresolvedPatField::Named(x, p) => xps.insert(*x, p.clone()),
-                UnresolvedPatField::Unnamed(p) => {
+                PathPatField::Named(x, p) => xps.insert(*x, p.clone()),
+                PathPatField::Unnamed(p) => {
                     self.report.err(
                         p.span(),
                         format!("Expected `{p} = <pat>`.",),
@@ -749,12 +770,12 @@ impl Context {
 
     // impl Foo[T] { ... }
     #[allow(clippy::type_complexity)]
-    fn head(&mut self, bound: &Bound, defs: &[Rc<StmtDef>], types: &[Rc<StmtType>]) -> Bound {
-        let span = bound.span();
-        match bound {
-            Bound::Unresolved(_, path) => self.resolve_head_path(span, path, defs, types),
-            Bound::Trait(s, b) => Bound::Trait(*s, b.clone()),
-            Bound::Err(_) => Bound::Err(span),
+    fn head(&mut self, head: &Bound, defs: &[Rc<StmtDef>], types: &[Rc<StmtType>]) -> Bound {
+        match head {
+            Bound::Path(s, path) => self.resolve_head_path(*s, path, defs, types),
+            Bound::Trait(_, _, _, _) => unreachable!(),
+            Bound::Type(_, _) => unreachable!(),
+            Bound::Err(s) => Bound::Err(*s),
         }
     }
 
@@ -763,8 +784,9 @@ impl Context {
     fn bound(&mut self, bound: &Bound) -> Bound {
         let span = bound.span();
         match bound {
-            Bound::Unresolved(_, path) => self.resolve_bound_path(span, path),
+            Bound::Path(_, path) => self.resolve_bound_path(span, path),
             Bound::Trait(..) => unreachable!(),
+            Bound::Type(..) => unreachable!(),
             Bound::Err(_) => Bound::Err(span),
         }
     }
@@ -839,8 +861,20 @@ impl Context {
                     return Bound::Err(span);
                 }
                 let xts = stmt.types.iter().map(|ty| (ty.name, Type::Hole)).collect();
-                let b = TraitBound::new(seg0.name, ts0, xts);
-                Bound::Trait(span, b)
+                Bound::Trait(span, seg0.name, ts0, xts)
+            }
+            Some(Binding::Type(stmt)) => {
+                if !seg0.has_optional_arity(stmt.generics.len()) {
+                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                    return Bound::Err(span);
+                }
+                let ts0 = seg0.instantiate_unnamed(stmt.generics.len());
+                let t = Type::Cons(seg0.name, ts0.clone());
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
+                    return Bound::Err(span);
+                }
+                Bound::Type(span, Rc::new(t))
             }
             Some(b) => {
                 self.unexpected(&seg0.name, b.name(), "trait");
@@ -871,8 +905,7 @@ impl Context {
                     self.unexpected_assoc("Trait", "item", &seg0.name, &seg1.name);
                     return Bound::Err(span);
                 }
-                let b = TraitBound::new(seg0.name, ts0, xts0);
-                Bound::Trait(span, b)
+                Bound::Trait(span, seg0.name, ts0, xts0)
             }
             Some(b) => {
                 self.unexpected(&seg0.name, b.name(), "trait");
@@ -886,6 +919,7 @@ impl Context {
     }
 
     fn resolve_expr_path(&mut self, s: Span, t: Type, path: &Path) -> Expr {
+        let t = self.ty(&t);
         let path = self.path(path);
         let mut iter = path.segments.into_iter();
         let seg0 = iter.next().unwrap();
@@ -928,7 +962,6 @@ impl Context {
                     return Expr::Err(s, t);
                 }
                 let ts0 = seg0.instantiate_unnamed(stmt.generics.len());
-                let t = self.ty(&t);
                 let x0 = seg0.name;
                 Expr::Struct(s, t, x0, ts0.clone(), Map::new())
             }
@@ -954,34 +987,33 @@ impl Context {
                     return Expr::Err(s, t);
                 }
                 let ts0 = seg0.instantiate_unnamed(stmt.generics.len());
-                let b = TraitBound::new(seg0.name, ts0, Map::new());
+                let b = Bound::Trait(s, seg0.name, ts0, Map::new());
                 Expr::Assoc(s, t, b, seg1.name, seg1.ts.clone())
+            }
+            Some(Binding::Type(stmt)) => {
+                if !seg0.has_optional_arity(stmt.generics.len()) {
+                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                    return Expr::Err(s, t.clone());
+                }
+                let x0 = seg0.name;
+                let ts0 = seg0.instantiate_unnamed(stmt.generics.len());
+                let Some(seg1) = iter.next() else {
+                    self.expected_assoc("function", &seg0.name);
+                    return Expr::Err(s, t);
+                };
+                let ts1 = seg1.ts;
+                let x1 = seg1.name;
+                let b = Bound::Type(s, Rc::new(Type::Cons(x0, ts0)));
+                Expr::Assoc(s, t, b, x1, ts1)
             }
             Some(b) => {
                 self.unexpected(&seg0.name, b.name(), "expression");
                 Expr::Err(s, t.clone())
             }
             None => {
-                for stmt in self.stack.traits() {
-                    for def in stmt.defs.iter() {
-                        if seg0.name == def.name && seg0.has_optional_arity(def.generics.len()) {
-                            return Expr::Assoc(
-                                s,
-                                t,
-                                TraitBound::new(
-                                    stmt.name,
-                                    vec![Type::Hole; stmt.generics.len()],
-                                    Map::new(),
-                                ),
-                                seg0.name,
-                                seg0.instantiate_unnamed(def.generics.len()),
-                            );
-                        }
-                    }
-                }
-                self.not_found(&seg0.name, "expression");
-                Expr::Err(s, t.clone())
-            }
+                let ts = seg0.ts.iter().map(|t| self.ty(t)).collect();
+                Expr::Unresolved(s, t, seg0.name, ts)
+            },
         }
     }
 
@@ -1055,7 +1087,8 @@ impl Context {
                     return Type::Err;
                 }
                 let xts = stmt.types.iter().map(|t| (t.name, Type::Hole)).collect();
-                let b = TraitBound::new(seg0.name, seg0.ts.clone(), xts);
+                let s = seg0.span + seg1.span;
+                let b = Bound::Trait(s, seg0.name, seg0.ts.clone(), xts);
                 Type::Assoc(b, seg1.name, seg1.ts.clone())
             }
             Some(b) => {
@@ -1074,7 +1107,7 @@ impl Context {
         s: Span,
         t: Type,
         path: &Path,
-        args: &Option<Vec<UnresolvedPatField>>,
+        args: &Option<Vec<PathPatField>>,
     ) -> Pat {
         let path = self.path(path);
         let mut iter = path.segments.into_iter();
