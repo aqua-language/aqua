@@ -72,6 +72,12 @@ impl Path {
     }
 }
 
+impl StmtTraitDef {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
 impl<'a> std::fmt::Display for Verbose<&'a Program> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut p = Pretty::new(f);
@@ -125,6 +131,14 @@ impl std::fmt::Display for Verbose<&Path> {
         let mut p = Pretty::new(f);
         p.verbose = true;
         p.path(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&StmtTraitDef> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut p = Pretty::new(f);
+        p.verbose = true;
+        p.stmt_def_decl(self.0)
     }
 }
 
@@ -221,6 +235,12 @@ impl std::fmt::Display for StmtVar {
 impl std::fmt::Display for StmtStruct {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Pretty::new(f).stmt_struct(self)
+    }
+}
+
+impl std::fmt::Display for StmtTraitDef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).stmt_def_decl(self)
     }
 }
 
@@ -567,6 +587,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.block(b)?;
             }
             Expr::Record(_, _, xts) => {
+                self.kw("record")?;
                 self.fields(xts.as_ref(), Self::assign)?;
             }
             Expr::Value(_, _) => {
@@ -618,7 +639,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
             self.paren(|this| {
                 this._expr(expr)?;
                 this.punct(":")?;
-                this.ty(expr.ty())
+                this.ty(expr.type_of())
             })?;
         } else {
             self._expr(expr)?;
@@ -845,6 +866,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.paren(|this| this.comma_sep_trailing(ts, Self::ty))?;
             }
             Type::Record(xts) => {
+                self.kw("record")?;
                 self.fields(xts.as_ref(), Self::annotate)?;
             }
             Type::Alias(name, xts) => {
@@ -875,7 +897,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
             self.paren(|this| {
                 this._pat(p)?;
                 this.punct(":")?;
-                this.ty(p.ty())
+                this.ty(p.type_of())
             })
         } else {
             self._pat(p)
@@ -933,6 +955,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.kw("<err>")?;
             }
             Pat::Record(_, _, xps) => {
+                self.kw("record")?;
                 self.fields(xps, Self::bind)?;
             }
             Pat::Or(_, _, p0, p1) => {

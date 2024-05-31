@@ -38,6 +38,7 @@ use crate::ast::Index;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
+use crate::ast::PathPatField;
 use crate::ast::Program;
 use crate::ast::Query;
 use crate::ast::Segment;
@@ -54,12 +55,11 @@ use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Type;
-use crate::ast::PathPatField;
 use crate::diag::Report;
 use crate::lexer::Span;
 use crate::lexer::Spanned;
 use crate::lexer::Token;
-use crate::map::Map;
+use crate::collections::map::Map;
 
 pub struct Parser<'a, I>
 where
@@ -469,8 +469,13 @@ where
             let t = self.start(Token::RBrace | Token::Def | Token::Type, follow)?;
             match t.v {
                 Token::Def => defs.push(Rc::new(
-                    self.stmt_def_builtin(follow | Token::RBrace, bodies.next().unwrap())?
-                        .v,
+                    self.stmt_def_builtin(
+                        follow | Token::RBrace,
+                        bodies
+                            .next()
+                            .expect(&format!("Builtin body missing for {}", b.v)),
+                    )?
+                    .v,
                 )),
                 Token::Type => tys.push(Rc::new(self.stmt_type(follow)?.v)),
                 _ => break,
@@ -524,7 +529,7 @@ where
         }
     }
 
-    fn stmt_def(&mut self, follow: Token) -> Result<Spanned<StmtDef>, Span> {
+    pub fn stmt_def(&mut self, follow: Token) -> Result<Spanned<StmtDef>, Span> {
         let t0 = self.expect(Token::Def, follow)?;
         let x = self.name(follow)?;
         let gs = self.generics(follow | Token::LParen)?;
@@ -811,7 +816,7 @@ where
 
     fn ty_arg(&mut self, follow: Token) -> Result<Spanned<Either<Type, (Name, Type)>>, Span> {
         let ty0 = self.ty(follow | Token::Eq)?;
-        if let Some(name) = ty0.v.name() {
+        if let Some(name) = ty0.v.as_name() {
             if self.eat(Token::Eq, follow)? {
                 let ty1 = self.ty(follow)?;
                 let s = ty0.s + ty1.s;
@@ -887,6 +892,10 @@ where
             Token::Not => {
                 self.skip();
                 Type::Never
+            }
+            Token::Underscore => {
+                self.skip();
+                Type::Hole
             }
             _ => unreachable!(),
         };
@@ -966,7 +975,7 @@ where
                     Pat::Tuple(t.s, Type::Hole, t.v)
                 }
             }
-            Token::Struct => {
+            Token::Record => {
                 let t0 = self.next();
                 let xps = self.pat_fields(follow)?;
                 let s = t0.s + xps.s;
@@ -1042,7 +1051,7 @@ where
         let mut p0 = self.pat(follow | Token::Eq)?;
         if let Pat::Path(_, Type::Hole, path, fields) = &mut p0.v {
             let t1 = self.start(Token::Eq | follow, follow)?;
-            if path.is_name() && fields.is_none() && t1.v == Token::Eq {
+            if path.as_name().is_some() && fields.is_none() && t1.v == Token::Eq {
                 self.skip();
                 // x = p
                 let x = path.segments.pop().unwrap().name;
@@ -1283,7 +1292,6 @@ where
 
     fn expr_lhs(&mut self, follow: Token) -> Result<Spanned<Expr>, Span> {
         let t0 = self.start(Expr::FIRST, follow)?;
-
         match t0.v {
             Token::True | Token::False => {
                 self.skip();
@@ -1301,6 +1309,39 @@ where
                 let v = self.text(t0).to_owned();
                 let s = t0.s;
                 Ok(Spanned::new(s, Expr::Float(s, Type::Hole, v.into())))
+            }
+            Token::IntSuffix => {
+                self.skip();
+                let s = t0.s;
+                let v = self.text(t0);
+                let i = v.chars().take_while(|c| c.is_digit(10)).count();
+                let l = &v[..i];
+                let r = smol_str::format_smolstr!("postfix_{}", &v[i..]);
+                let e0 = Expr::Int(s, Type::Hole, l.into());
+                let path = Path::new_name(Name::new(s, r));
+                let e1 = Expr::Path(s, Type::Hole, path);
+                Ok(Spanned::new(
+                    s,
+                    Expr::Call(s, Type::Hole, Rc::new(e1), vec![e0]),
+                ))
+            }
+            Token::FloatSuffix => {
+                self.skip();
+                let s = t0.s;
+                let v = self.text(t0);
+                let i = v
+                    .chars()
+                    .take_while(|c| c.is_digit(10) || *c == '.')
+                    .count();
+                let l = &v[..i];
+                let r = smol_str::format_smolstr!("postfix_{}", &v[i..]);
+                let e0 = Expr::Float(s, Type::Hole, l.into());
+                let path = Path::new_name(Name::new(s, r));
+                let e1 = Expr::Path(s, Type::Hole, path);
+                Ok(Spanned::new(
+                    s,
+                    Expr::Call(s, Type::Hole, Rc::new(e1), vec![e0]),
+                ))
             }
             Token::String => {
                 self.skip();
@@ -1457,6 +1498,17 @@ where
                     Expr::For(s, Type::Hole, x.v, Rc::new(e.v), b.v),
                 ))
             }
+            Token::Record => {
+                let t = self.next();
+                let es = self
+                    .paren(
+                        |p, follow| p.seq(Self::field_expr, Token::Comma, Token::Name, follow),
+                        follow,
+                    )
+                    .map(|x| x.flatten())?;
+                let s = t.s + es.s;
+                Ok(Spanned::new(s, Expr::Record(s, Type::Hole, es.v.into())))
+            }
             Token::From => {
                 let qs = self
                     .repeat(Self::query, Query::FIRST, follow | Query::FOLLOW)?
@@ -1587,10 +1639,7 @@ where
             _ => {
                 let path = Path::new_name(x.v);
                 let s = x.s;
-                Ok(Spanned::new(
-                    s,
-                    (x.v, Expr::Path(s, Type::Hole, path)),
-                ))
+                Ok(Spanned::new(s, (x.v, Expr::Path(s, Type::Hole, path))))
             }
         }
     }
@@ -1616,7 +1665,9 @@ impl Query {
 
 impl Expr {
     const FIRST: Token = Token::Int
+        .or(Token::IntSuffix)
         .or(Token::Float)
+        .or(Token::FloatSuffix)
         .or(Token::String)
         .or(Token::Name)
         .or(Token::LParen)
@@ -1635,6 +1686,7 @@ impl Expr {
         .or(Token::Not)
         .or(Token::Char)
         .or(Token::LBrace)
+        .or(Token::Record)
         .or(Query::FIRST);
     const FOLLOW: Token = Token::Eof
         .or(Token::And)
@@ -1673,8 +1725,10 @@ impl Type {
     const FIRST: Token = Token::Name
         .or(Token::LParen)
         .or(Token::Struct)
+        .or(Token::Record)
         .or(Token::Fun)
         .or(Token::LBrack)
+        .or(Token::Underscore)
         .or(Token::Not);
     const _FOLLOW: Token = Token::Eof;
 }
@@ -1686,6 +1740,7 @@ impl Pat {
         .or(Token::Int)
         .or(Token::String)
         .or(Token::Struct)
+        .or(Token::Record)
         .or(Token::True)
         .or(Token::False)
         .or(Token::Char);

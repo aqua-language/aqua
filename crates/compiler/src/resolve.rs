@@ -25,7 +25,7 @@ use crate::ast::StmtVar;
 use crate::ast::Type;
 use crate::diag::Report;
 use crate::lexer::Span;
-use crate::map::Map;
+use crate::collections::map::Map;
 
 #[derive(Debug)]
 pub struct Stack(Vec<Scope>);
@@ -204,7 +204,7 @@ impl Context {
 
     fn expected_name(&mut self, e: &Expr) {
         self.report.err(
-            e.span(),
+            e.span_of(),
             "Expected a field label.",
             "Only `<name> = <expr>` is allowed.",
         );
@@ -553,7 +553,7 @@ impl Context {
         })
     }
 
-    fn fill_type_args(args: Vec<Type>, expected: usize) -> Vec<Type> {
+    fn create_type_arg_holes(args: Vec<Type>, expected: usize) -> Vec<Type> {
         args.is_empty()
             .then(|| (0..expected).map(|_| Type::Hole).collect())
             .unwrap_or(args)
@@ -567,7 +567,7 @@ impl Context {
             let seg0 = iter.next().unwrap();
             match self.stack.get(&seg0.name) {
                 Some(Binding::Struct(stmt)) => {
-                    let Some(ts0) = seg0.try_instantiate(stmt.generics.len()) else {
+                    let Some(ts0) = seg0.try_create_unnamed_holes(stmt.generics.len()) else {
                         self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
                         return Expr::Err(s, t1);
                     };
@@ -595,7 +595,7 @@ impl Context {
                         self.unexpected_named_type_args(&seg0.name);
                         return Expr::Err(s, t1);
                     }
-                    let ts0 = seg0.instantiate_unnamed(stmt.generics.len());
+                    let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                     let Some(seg1) = iter.next() else {
                         self.expected_assoc("variant", &seg0.name);
                         return Expr::Err(s, t1);
@@ -628,8 +628,8 @@ impl Context {
     }
 
     fn expr_field(&mut self, e: &Expr) -> Option<(Name, Expr)> {
-        let s = e.span();
-        let t = self.ty(e.ty());
+        let s = e.span_of();
+        let t = self.ty(e.type_of());
         match e {
             Expr::Field(_, _, e, x) => {
                 let e = self.expr(e);
@@ -681,7 +681,7 @@ impl Context {
             }
             _ => {
                 self.report.err(
-                    e.span(),
+                    e.span_of(),
                     "Not a field.",
                     "Expected `<name> = <expr>`, `<name>` or `<expr>.<name>`.",
                 );
@@ -691,8 +691,8 @@ impl Context {
     }
 
     fn pat(&mut self, p: &Pat) -> Pat {
-        let t = self.ty(p.ty());
-        let s = p.span();
+        let t = self.ty(p.type_of());
+        let s = p.span_of();
         match p {
             Pat::Path(_, _, path, args) => self.resolve_pat_path(s, t, path, args),
             Pat::Var(_, _, x) => Pat::Var(s, t, *x),
@@ -757,7 +757,7 @@ impl Context {
                 PathPatField::Named(x, p) => xps.insert(*x, p.clone()),
                 PathPatField::Unnamed(p) => {
                     self.report.err(
-                        p.span(),
+                        p.span_of(),
                         format!("Expected `{p} = <pat>`.",),
                         format!("Expected named pattern `{p} = <pat>`."),
                     );
@@ -807,11 +807,11 @@ impl Context {
             }
             _ => {
                 self.report.err(
-                    e.span(),
+                    e.span_of(),
                     "Expression is not an lvalue.",
                     "Only variables, field access, and tuple access are allowed.",
                 );
-                Expr::Err(e.span(), e.ty().clone())
+                Expr::Err(e.span_of(), e.type_of().clone())
             }
         }
     }
@@ -833,7 +833,7 @@ impl Context {
                     self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
                     return Bound::Err(span);
                 }
-                let ts0 = seg0.instantiate_unnamed(stmt.generics.len());
+                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                 if seg0.has_named_args() {
                     self.unexpected_named_type_args(&seg0.name);
                     return Bound::Err(span);
@@ -868,7 +868,7 @@ impl Context {
                     self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
                     return Bound::Err(span);
                 }
-                let ts0 = seg0.instantiate_unnamed(stmt.generics.len());
+                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                 let t = Type::Cons(seg0.name, ts0.clone());
                 if let Some(seg1) = iter.next() {
                     self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
@@ -894,11 +894,11 @@ impl Context {
         let seg0 = iter.next().unwrap();
         match self.stack.get(&seg0.name) {
             Some(Binding::Trait(stmt)) => {
-                let Some(ts0) = seg0.try_instantiate(stmt.generics.len()) else {
+                let Some(ts0) = seg0.try_create_unnamed_holes(stmt.generics.len()) else {
                     self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
                     return Bound::Err(span);
                 };
-                let Some(xts0) = seg0.try_instantiate_named(&stmt.types) else {
+                let Some(xts0) = seg0.try_create_named_holes(&stmt.types) else {
                     return Bound::Err(span);
                 };
                 if let Some(seg1) = iter.next() {
@@ -944,7 +944,7 @@ impl Context {
                     self.unexpected_assoc("Def", "item", &seg0.name, &seg1.name);
                     return Expr::Err(s, t);
                 }
-                let ts0 = seg0.instantiate_unnamed(stmt.generics.len());
+                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                 Expr::Def(s, t, seg0.name, ts0.clone())
             }
             // Unit Struct
@@ -961,7 +961,7 @@ impl Context {
                     self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
                     return Expr::Err(s, t);
                 }
-                let ts0 = seg0.instantiate_unnamed(stmt.generics.len());
+                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                 let x0 = seg0.name;
                 Expr::Struct(s, t, x0, ts0.clone(), Map::new())
             }
@@ -986,8 +986,9 @@ impl Context {
                     self.wrong_arity(&seg1.name, seg1.ts.len(), def.generics.len());
                     return Expr::Err(s, t);
                 }
-                let ts0 = seg0.instantiate_unnamed(stmt.generics.len());
-                let b = Bound::Trait(s, seg0.name, ts0, Map::new());
+                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
+                let xts0 = stmt.types.iter().map(|t| (t.name, Type::Hole)).collect();
+                let b = Bound::Trait(s, seg0.name, ts0, xts0);
                 Expr::Assoc(s, t, b, seg1.name, seg1.ts.clone())
             }
             Some(Binding::Type(stmt)) => {
@@ -996,7 +997,7 @@ impl Context {
                     return Expr::Err(s, t.clone());
                 }
                 let x0 = seg0.name;
-                let ts0 = seg0.instantiate_unnamed(stmt.generics.len());
+                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                 let Some(seg1) = iter.next() else {
                     self.expected_assoc("function", &seg0.name);
                     return Expr::Err(s, t);
@@ -1013,7 +1014,7 @@ impl Context {
             None => {
                 let ts = seg0.ts.iter().map(|t| self.ty(t)).collect();
                 Expr::Unresolved(s, t, seg0.name, ts)
-            },
+            }
         }
     }
 
@@ -1118,7 +1119,7 @@ impl Context {
                     self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
                     return Pat::Err(s, t.clone());
                 }
-                let ts0 = Self::fill_type_args(seg0.ts, stmt.generics.len());
+                let ts0 = Self::create_type_arg_holes(seg0.ts, stmt.generics.len());
                 let Some(seg1) = iter.next() else {
                     self.expected_assoc("variant", &seg0.name);
                     return Pat::Err(s, t.clone());
@@ -1149,7 +1150,7 @@ impl Context {
                     self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
                     return Pat::Err(s, t.clone());
                 }
-                let ts0 = Self::fill_type_args(seg0.ts, stmt.generics.len());
+                let ts0 = Self::create_type_arg_holes(seg0.ts, stmt.generics.len());
                 if let Some(seg1) = iter.next() {
                     self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
                     return Pat::Err(s, t.clone());
@@ -1217,7 +1218,7 @@ impl Segment {
         self.has_unnamed_args() || self.has_named_args()
     }
 
-    fn try_instantiate(&self, arity: usize) -> Option<Vec<Type>> {
+    fn try_create_unnamed_holes(&self, arity: usize) -> Option<Vec<Type>> {
         if self.ts.is_empty() {
             Some(vec![Type::Hole; arity])
         } else if self.ts.len() == arity {
@@ -1227,7 +1228,7 @@ impl Segment {
         }
     }
 
-    fn try_instantiate_named(&self, expected: &[Rc<StmtTraitType>]) -> Option<Map<Name, Type>> {
+    fn try_create_named_holes(&self, expected: &[Rc<StmtTraitType>]) -> Option<Map<Name, Type>> {
         if self
             .xts
             .iter()
@@ -1245,7 +1246,7 @@ impl Segment {
         }
     }
 
-    fn instantiate_unnamed(&self, n: usize) -> Vec<Type> {
+    fn create_unnamed_holes(&self, n: usize) -> Vec<Type> {
         if self.ts.is_empty() {
             vec![Type::Hole; n]
         } else {

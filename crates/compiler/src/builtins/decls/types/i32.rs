@@ -37,7 +37,7 @@ impl Compiler {
         self.declare_impl(
             "impl Sub[i32,i32] {
                  type Output = i32;
-                 def sub(a:i32, b:i32): i32;
+                 def sub(a:i32, b:i32): Sub[i32,i32]::Output;
              }",
             [BuiltinDef {
                 rust: "(|a,b| a-b)",
@@ -52,7 +52,7 @@ impl Compiler {
         self.declare_impl(
             "impl Mul[i32,i32] {
                  type Output = i32;
-                 def mul(a:i32, b:i32): i32;
+                 def mul(a:i32, b:i32): Mul[i32,i32]::Output;
              }",
             [BuiltinDef {
                 rust: "(|a,b| a*b)",
@@ -67,7 +67,7 @@ impl Compiler {
         self.declare_impl(
             "impl Div[i32,i32] {
                  type Output = i32;
-                 def div(a:i32, b:i32): i32;
+                 def div(a:i32, b:i32): Div[i32,i32]::Output;
              }",
             [BuiltinDef {
                 rust: "(|a,b| a/b)",
@@ -77,6 +77,92 @@ impl Compiler {
                     (v0 / v1).into()
                 },
             }],
+        );
+
+        self.declare_impl(
+            "impl Neg[i32] {
+                 type Output = i32;
+                 def neg(a:i32): Neg[i32]::Output;
+             }",
+            [BuiltinDef {
+                rust: "(|a| -a)",
+                fun: |_ctx, _t, v| {
+                    let v0 = v[0].as_i32();
+                    (-v0).into()
+                },
+            }],
+        );
+
+        self.declare_impl(
+            "impl Display[i32] {
+                def to_string(v: i32): String;
+             }",
+            [BuiltinDef {
+                rust: "(|v| v.to_string())",
+                fun: |_ctx, _t, v| {
+                    let v0 = v[0].as_i32();
+                    runtime::prelude::String::from(v0.to_string()).into()
+                },
+            }],
+        );
+
+        self.declare_impl(
+            "impl PartialEq[i32,i32] {
+                 def eq(a:i32, b:i32): bool;
+                 def ne(a:i32, b:i32): bool;
+             }",
+            [
+                BuiltinDef {
+                    rust: "(|a,b| a == b)",
+                    fun: |_ctx, _t, v| {
+                        let v0 = v[0].as_i32();
+                        let v1 = v[1].as_i32();
+                        (v0 == v1).into()
+                    },
+                },
+                BuiltinDef {
+                    rust: "(|a,b| a != b)",
+                    fun: |_ctx, _t, v| {
+                        let v0 = v[0].as_i32();
+                        let v1 = v[1].as_i32();
+                        (v0 != v1).into()
+                    },
+                },
+            ],
+        );
+
+        self.declare_impl(
+            "impl Ord {
+                 def cmp(a:i32, b:i32): Ordering;
+                 def min(a:i32, b:i32): i32;
+                 def max(a:i32, b:i32): i32;
+             }",
+            [
+                BuiltinDef {
+                    rust: "(|a,b| a.cmp(&b))",
+                    fun: |_ctx, _t, v| {
+                        let v0 = v[0].as_i32();
+                        let v1 = v[1].as_i32();
+                        v0.cmp(&v1).into()
+                    },
+                },
+                BuiltinDef {
+                    rust: "(|a,b| a.min(b))",
+                    fun: |_ctx, _t, v| {
+                        let v0 = v[0].as_i32();
+                        let v1 = v[1].as_i32();
+                        v0.min(v1).into()
+                    },
+                },
+                BuiltinDef {
+                    rust: "(|a,b| a.max(b))",
+                    fun: |_ctx, _t, v| {
+                        let v0 = v[0].as_i32();
+                        let v1 = v[1].as_i32();
+                        v0.max(v1).into()
+                    },
+                },
+            ],
         );
 
         // self.declare_def(
@@ -168,18 +254,6 @@ impl Compiler {
         //         fun: |_ctx, _t, v| {
         //             let v0 = v[0].as_i32();
         //             (v0 as usize).into()
-        //         },
-        //     },
-        // );
-        //
-        // self.declare_def(
-        //     "def i32_to_string(a: i32): String;",
-        //     BuiltinDef {
-        //         rust: "(|a| a.to_string())",
-        //         fun: |_ctx, _t, _v| {
-        //             // let v0 = v[0].as_i32();
-        //             // String::from(v0.to_string()).into()
-        //             todo!()
         //         },
         //     },
         // );

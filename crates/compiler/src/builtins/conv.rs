@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::rc::Rc;
 
 use runtime::builtins::aggregator::Aggregator;
@@ -19,13 +20,13 @@ use runtime::builtins::writer::Writer;
 
 use super::Fun;
 use super::Value;
-use crate::builtins::decls::array::Array;
-use crate::builtins::decls::dataflow::Dataflow;
-use crate::builtins::decls::instance::Instance;
-use crate::builtins::decls::record::Record;
-use crate::builtins::decls::stream::Stream;
-use crate::builtins::decls::tuple::Tuple;
-use crate::builtins::decls::variant::Variant;
+use crate::builtins::decls::types::array::Array;
+use crate::builtins::decls::types::dataflow::Dataflow;
+use crate::builtins::decls::types::instance::Instance;
+use crate::builtins::decls::types::record::Record;
+use crate::builtins::decls::types::stream::Stream;
+use crate::builtins::decls::types::tuple::Tuple;
+use crate::builtins::decls::types::variant::Variant;
 
 macro_rules! conv {
     {
@@ -56,7 +57,11 @@ conv!(Record, Record, as_record);
 conv!(Stream, Stream, as_stream);
 conv!(Variant, Variant, as_variant);
 conv!(bool, Bool, as_bool);
-conv!(Aggregator<Rc<Value>, Rc<Value>, Rc<Value>, Rc<Value>>, Aggregator, as_aggregator);
+conv!(
+    Aggregator<Rc<Value>, Rc<Value>, Rc<Value>, Rc<Value>>,
+    Aggregator,
+    as_aggregator
+);
 conv!(Blob, Blob, as_blob);
 conv!(Dict<Value, Value>, Dict, as_dict);
 conv!(Assigner, Discretizer, as_discretizer);
@@ -100,4 +105,5 @@ conv!(u64, U64, as_u64);
 conv!(u8, U8, as_u8);
 conv!(usize, Usize, as_usize);
 conv!(Instance, Instance, as_instance);
+conv!(Ordering, Ordering, as_ordering);
 // conv!(Image, Image, as_image);

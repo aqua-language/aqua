@@ -29,6 +29,12 @@ impl<'a> From<&'a str> for Symbol {
     }
 }
 
+impl From<SmolStr> for Symbol {
+    fn from(name: SmolStr) -> Symbol {
+        SymbolMap::intern(name)
+    }
+}
+
 impl From<String> for Symbol {
     fn from(name: String) -> Symbol {
         SymbolMap::intern(SmolStr::from(name))

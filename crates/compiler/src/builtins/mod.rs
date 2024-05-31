@@ -8,14 +8,14 @@ mod hash;
 mod ord;
 mod ser;
 
-pub use decls::array::Array;
-pub use decls::dataflow::Dataflow;
-pub use decls::function::Fun;
-pub use decls::instance::Instance;
-pub use decls::record::Record;
-pub use decls::stream::Stream;
-pub use decls::tuple::Tuple;
-pub use decls::variant::Variant;
+pub use decls::types::array::Array;
+pub use decls::types::dataflow::Dataflow;
+pub use decls::types::function::Fun;
+pub use decls::types::instance::Instance;
+pub use decls::types::record::Record;
+pub use decls::types::stream::Stream;
+pub use decls::types::tuple::Tuple;
+pub use decls::types::variant::Variant;
 
 use runtime::prelude::Aggregator;
 use runtime::prelude::Assigner;
@@ -81,6 +81,7 @@ pub enum Value {
     Vec(runtime::builtins::vec::Vec<Value>),
     Writer(Writer),
     Instance(Instance),
+    Ordering(std::cmp::Ordering),
 }
 
 impl Value {

@@ -91,6 +91,9 @@ use common::unresolved::ty;
 use common::unresolved::ty_assoc;
 use common::unresolved::ty_con;
 
+use crate::common::expr_record;
+use crate::common::ty_record;
+
 #[test]
 fn test_parser_expr_int0() {
     let a = Expr::parse("1").unwrap();
@@ -98,7 +101,6 @@ fn test_parser_expr_int0() {
     check!(a, b);
 }
 
-#[ignore]
 #[test]
 fn test_parser_expr_int1() {
     let a = Expr::parse("123s").unwrap();
@@ -113,7 +115,6 @@ fn test_parser_expr_float0() {
     check!(a, b);
 }
 
-#[ignore]
 #[test]
 fn test_parser_expr_float1() {
     let a = Expr::parse("1.0s").unwrap();
@@ -423,22 +424,22 @@ fn test_parser_pat_struct3() {
 }
 
 #[test]
-fn test_parser_pat_inline_struct0() {
-    let a = Pat::parse("struct()").unwrap();
+fn test_parser_pat_record0() {
+    let a = Pat::parse("record()").unwrap();
     let b = pat_record([]);
     check!(a, b);
 }
 
 #[test]
-fn test_parser_pat_inline_struct1() {
-    let a = Pat::parse("struct(x=1)").unwrap();
+fn test_parser_pat_record1() {
+    let a = Pat::parse("record(x=1)").unwrap();
     let b = pat_record([("x", pat_int("1"))]);
     check!(a, b);
 }
 
 #[test]
-fn test_parser_pat_inline_struct2() {
-    let a = Pat::parse("struct(x=1,y=2)").unwrap();
+fn test_parser_pat_record2() {
+    let a = Pat::parse("record(x=1,y=2)").unwrap();
     let b = pat_record([("x", pat_int("1")), ("y", pat_int("2"))]);
     check!(a, b);
 }
@@ -930,7 +931,7 @@ fn test_parser_stmt_impl3() {
 #[test]
 fn test_parser_stmt_var0() {
     let a = Stmt::parse("var x = 1;").unwrap();
-    let b = stmt_var("x", Type::hole(), expr_int("1"));
+    let b = stmt_var("x", Type::Hole, expr_int("1"));
     check!(a, b);
 }
 
@@ -945,8 +946,8 @@ fn test_parser_stmt_var1() {
 fn test_parser_stmt_var2() {
     let a = Program::parse("var x = 1; var y = x;").unwrap();
     let b = program([
-        stmt_var("x", Type::hole(), expr_int("1")),
-        stmt_var("y", Type::hole(), expr_var("x")),
+        stmt_var("x", Type::Hole, expr_int("1")),
+        stmt_var("y", Type::Hole, expr_var("x")),
     ]);
     check!(a, b);
 }
@@ -1637,6 +1638,91 @@ fn test_parser_type_fun1() {
 }
 
 #[test]
+fn test_parser_type_hole() {
+    let a = Type::parse("_").unwrap();
+    let b = Type::Hole;
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_type_never() {
+    let a = Type::parse("!").unwrap();
+    let b = Type::Never;
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_type_unit() {
+    let a = Type::parse("()").unwrap();
+    let b = Type::Tuple(vec![]);
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_type_record0() {
+    let a = Type::parse("record()").unwrap();
+    let b = ty_record([]);
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_type_record1() {
+    let a = Type::parse("record(x:i32)").unwrap();
+    let b = ty_record([("x", ty("i32"))]);
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_type_record2() {
+    let a = Type::parse("record(x:i32, y:i32)").unwrap();
+    let b = ty_record([("x", ty("i32")), ("y", ty("i32"))]);
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_type_tuple0() {
+    let a = Type::parse("()").unwrap();
+    let b = ty_tuple([]);
+    check!(a, b);
+}
+
+#[test]
+#[ignore]
+fn test_parser_type_tuple1() {
+    let a = Type::parse("(i32,)").unwrap();
+    let b = Type::Tuple(vec![ty("i32")]);
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_type_tuple2() {
+    let a = Type::parse("(i32, i32)").unwrap();
+    let b = Type::Tuple(vec![ty("i32"), ty("i32")]);
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_record0() {
+    let a = Expr::parse("record()").unwrap();
+    let b = expr_record([]);
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_record1() {
+    let a = Expr::parse("record(x=1)").unwrap();
+    let b = expr_record([("x", expr_int("1"))]);
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_record2() {
+    let a = Expr::parse("record(x=1, y=2)").unwrap();
+    let b = expr_record([("x", expr_int("1")), ("y", expr_int("2"))]);
+    check!(a, b);
+}
+
+#[test]
 fn test_parser_expr_return0() {
     let a = Expr::parse("return 1").unwrap();
     let b = expr_return(expr_int("1"));
@@ -1733,7 +1819,7 @@ fn test_parser_recover2() {
 #[test]
 fn test_parser_recover3() {
     let a = Stmt::parse("def f(x: +): i32 = 1;").unwrap_err();
-    let b = stmt_def("f", [], [("x", Type::err())], ty("i32"), [], expr_int("1"));
+    let b = stmt_def("f", [], [("x", Type::Err)], ty("i32"), [], expr_int("1"));
     check!(
         a,
         b,
@@ -1742,7 +1828,7 @@ fn test_parser_recover3() {
             │
           1 │ def f(x: +): i32 = 1;
             │          ┬
-            │          ╰── Expected one of `[`, `(`, `!`, `fun`, `struct`, `<name>`, ...
+            │          ╰── Expected one of `[`, `(`, `!`, `_`, `fun`, `struct`, ...
          ───╯"
     );
 }

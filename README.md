@@ -1,6 +1,6 @@
 # Aqua
 
-Aqua is a programming language for data stream analysis.
+Aqua is a programming language for data stream analytics.
 
 ## Installation
 
@@ -21,7 +21,7 @@ aqua
 ## Links
 
 - [Website](https://aqua-language.github.io)
-- [Manual](https://aqua-language.github.io/manual)
+- [Manual](https://aqua-language.github.io/Manual.pdf)
 - [Research](https://aqua-language.github.io/research)
 
 ## Editor Plugins

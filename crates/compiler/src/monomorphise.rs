@@ -245,8 +245,8 @@ impl Context {
     }
 
     pub fn expr(&mut self, e: &Expr) -> Expr {
-        let t = self.ty(e.ty());
-        let s = e.span();
+        let t = self.ty(e.type_of());
+        let s = e.span_of();
         match e {
             Expr::Path(_, _, _) => unreachable!(),
             Expr::Int(_, _, v) => Expr::Int(s, t, *v),

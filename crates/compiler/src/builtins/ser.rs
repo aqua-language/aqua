@@ -52,6 +52,7 @@ impl Serialize for Value {
             Value::Writer(v) => v.serialize(serializer),
             Value::Dataflow(_) => unreachable!(),
             Value::Instance(_) => unreachable!(),
+            Value::Ordering(_) => unreachable!(),
             // Value::Image(v) => v.serialize(serializer),
         }
     }

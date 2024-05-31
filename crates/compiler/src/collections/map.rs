@@ -67,7 +67,7 @@ impl<K, V> Map<K, V> {
     where
         F: FnMut(&K, &V) -> (K, U),
     {
-        Map(self.0.iter().map(|(k, v)| f(k, v)).collect())
+        Map(self.iter().map(|(k, v)| f(k, v)).collect())
     }
 
     pub fn mapv<U, F>(&self, mut f: F) -> Map<K, U>
@@ -75,7 +75,64 @@ impl<K, V> Map<K, V> {
         F: FnMut(&V) -> U,
         K: Clone,
     {
-        Map(self.0.iter().map(|(k, v)| (k.clone(), f(v))).collect())
+        Map(self.iter().map(|(k, v)| (k.clone(), f(v))).collect())
+    }
+
+    pub fn same_keys(&self, other: &Self) -> bool
+    where
+        K: PartialEq,
+    {
+        self.iter().all(|(k, _)| other.contains_key(k))
+            && other.iter().all(|(k, _)| self.contains_key(k))
+    }
+
+    pub fn intersect(&self, other: &Self) -> Self
+    where
+        K: PartialEq,
+        K: Clone,
+        V: Clone,
+    {
+        Self(
+            self.iter()
+                .filter(|(k, _)| other.contains_key(k))
+                .cloned()
+                .collect(),
+        )
+    }
+
+    pub fn union(&self, other: &Self) -> Self
+    where
+        K: Clone,
+        V: Clone,
+    {
+        self.iter()
+            .chain(other.iter())
+            .fold(Map::new(), |mut acc, (k, v)| {
+                acc.insert(k.clone(), v.clone());
+                acc
+            })
+    }
+
+    pub fn sort_keys(&self) -> Self
+    where
+        K: Clone + Ord,
+        V: Clone,
+    {
+        let mut v = self.0.clone();
+        v.sort_by_key(|(k, _)| k.clone());
+        Self(v)
+    }
+
+    pub fn same_keys_sorted(&self, other: &Self) -> bool
+    where
+        K: PartialEq + Ord,
+    {
+        for ((k1, _), (k2, _)) in self.iter().zip(other.iter()) {
+            if k1 != k2 {
+                return false;
+            }
+        }
+        return true;
     }
 }
 

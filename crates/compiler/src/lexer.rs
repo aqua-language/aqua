@@ -461,8 +461,8 @@ impl<'a> Lexer<'a> {
                 }
                 ' ' | '\n' | '\t' => continue,
                 'a'..='z' | 'A'..='Z' | '_' => {
-                    while let Some('a'..='z' | 'A'..='Z' | '0'..='9' | '_') = chars.next() {
-                        self.pos += 1;
+                    while let Some(c @ ('a'..='z' | 'A'..='Z' | '0'..='9' | '_')) = chars.next() {
+                        self.pos += c.len_utf8();
                     }
                     if self.pos - start == 1 && c == '_' {
                         Token::Underscore
@@ -496,7 +496,7 @@ impl<'a> Lexer<'a> {
                             "return" => Token::Return,
                             "select" => Token::Select,
                             "struct" => Token::Struct,
-                            "record" => Token::Struct,
+                            "record" => Token::Record,
                             "trait" => Token::Trait,
                             "true" => Token::True,
                             "type" => Token::Type,

@@ -20,10 +20,14 @@ use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Type;
 use crate::ast::TypeVar;
-use crate::map::Map;
+use crate::infer::Context;
+
+fn map<T>(ts: &[T], f: impl FnMut(&T) -> T) -> Vec<T> {
+    ts.iter().map(f).collect()
+}
 
 impl Program {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Program {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> Program {
         let stmts = self.stmts.iter().map(|s| s.map_type(f)).collect::<Vec<_>>();
         Program::new(stmts)
     }
@@ -33,7 +37,7 @@ impl Type {
     pub fn apply(&self, sub: &[(Name, Type)]) -> Type {
         match self {
             Type::Cons(x, ts) => {
-                let ts = ts.iter().map(|t| t.apply(sub)).collect::<Vec<_>>();
+                let ts = map(ts, |t| t.apply(sub));
                 Type::Cons(*x, ts)
             }
             Type::Var(x, k) => sub
@@ -42,20 +46,20 @@ impl Type {
                 .map(|(_, t)| t.apply(sub))
                 .unwrap_or_else(|| Type::Var(*x, *k)),
             Type::Assoc(b, x1, ts1) => {
-                let b = b.map_type(&|b| b.apply(sub));
+                let b = b.map_type(&mut |t| t.apply(sub));
                 let ts1 = ts1.iter().map(|t| t.apply(sub)).collect::<Vec<_>>();
                 Type::Assoc(b, *x1, ts1)
             }
-            Type::Hole => unreachable!(),
+            Type::Hole => Type::Hole,
             Type::Err => Type::Err,
             Type::Generic(x) => Type::Generic(*x),
             Type::Fun(ts, t) => {
-                let ts = ts.iter().map(|t| t.apply(sub)).collect();
+                let ts = map(ts, |t| t.apply(sub));
                 let t = t.apply(sub);
                 Type::Fun(ts, Rc::new(t))
             }
             Type::Tuple(ts) => {
-                let ts = ts.iter().map(|t| t.apply(sub)).collect();
+                let ts = map(ts, |t| t.apply(sub));
                 Type::Tuple(ts)
             }
             Type::Record(xts) => {
@@ -63,7 +67,7 @@ impl Type {
                 Type::Record(xts)
             }
             Type::Alias(x, ts) => {
-                let ts = ts.iter().map(|t| t.apply(sub)).collect();
+                let ts = map(ts, |t| t.apply(sub));
                 Type::Alias(*x, ts)
             }
             Type::Path(_) => unreachable!(),
@@ -76,69 +80,31 @@ impl Type {
         }
     }
 
-    pub fn expand_assoc(&self) -> Type {
-        match self {
-            Type::Cons(x, ts) => {
-                let ts = ts.iter().map(|t| t.expand_assoc()).collect::<Vec<_>>();
-                Type::Cons(*x, ts)
-            }
-            Type::Assoc(b, x1, _) => b.get_type(x1).unwrap().expand_assoc(),
-            Type::Err => Type::Err,
-            Type::Generic(x) => Type::Generic(*x),
-            Type::Fun(ts, t) => {
-                let ts = ts.iter().map(|t| t.expand_assoc()).collect();
-                let t = t.expand_assoc();
-                Type::Fun(ts, Rc::new(t))
-            }
-            Type::Tuple(ts) => {
-                let ts = ts.iter().map(|t| t.expand_assoc()).collect();
-                Type::Tuple(ts)
-            }
-            Type::Record(xts) => {
-                let xts = xts.iter().map(|(x, t)| (*x, t.expand_assoc())).collect();
-                Type::Record(xts)
-            }
-            Type::Alias(x, ts) => {
-                let ts = ts.iter().map(|t| t.expand_assoc()).collect();
-                Type::Alias(*x, ts)
-            }
-            Type::Array(t, n) => {
-                let t = Rc::new(t.expand_assoc());
-                let n = *n;
-                Type::Array(t, n)
-            }
-            Type::Never => Type::Never,
-            Type::Path(_) => unreachable!(),
-            Type::Var(_, _) => unreachable!(),
-            Type::Hole => unreachable!(),
-        }
-    }
-
     pub fn instantiate(&self, sub: &[(Name, Type)]) -> Type {
         match self {
             Type::Cons(x, ts) => {
-                let ts = ts.iter().map(|t| t.instantiate(sub)).collect::<Vec<_>>();
+                let ts = map(ts, |t| t.instantiate(sub));
                 Type::Cons(*x, ts)
             }
             Type::Var(x, k) => Type::Var(*x, *k),
             Type::Assoc(b, x1, ts1) => {
-                let b = b.map_type(&|b| b.instantiate(sub));
+                let b = b.map_type(&mut |b| b.instantiate(sub));
                 let ts1 = ts1.iter().map(|t| t.instantiate(sub)).collect::<Vec<_>>();
                 Type::Assoc(b, *x1, ts1)
             }
-            Type::Hole => unreachable!(),
+            Type::Hole => Type::Hole,
             Type::Generic(x) => sub
                 .iter()
                 .find(|(n, _)| n == x)
                 .map(|(_, t)| t.clone())
                 .unwrap_or_else(|| Type::Var(*x, TypeVar::General)),
             Type::Fun(ts, t) => {
-                let ts = ts.iter().map(|t| t.instantiate(sub)).collect();
+                let ts = map(ts, |t| t.instantiate(sub));
                 let t = t.instantiate(sub);
                 Type::Fun(ts, Rc::new(t))
             }
             Type::Tuple(ts) => {
-                let ts = ts.iter().map(|t| t.instantiate(sub)).collect();
+                let ts = map(ts, |t| t.instantiate(sub));
                 Type::Tuple(ts)
             }
             Type::Record(xts) => {
@@ -146,7 +112,7 @@ impl Type {
                 Type::Record(xts)
             }
             Type::Alias(x, ts) => {
-                let ts = ts.iter().map(|t| t.instantiate(sub)).collect();
+                let ts = map(ts, |t| t.instantiate(sub));
                 Type::Alias(*x, ts)
             }
             Type::Err => Type::Err,
@@ -159,26 +125,159 @@ impl Type {
             Type::Never => Type::Never,
         }
     }
+
+    pub fn default(&self, int: &Type, float: &Type) -> Type {
+        match self {
+            Type::Path(_) => unreachable!(),
+            Type::Cons(x, ts) => {
+                let ts = map(ts, |t| t.default(int, float));
+                Type::Cons(*x, ts)
+            }
+            Type::Alias(x, ts) => {
+                let ts = map(ts, |t| t.default(int, float));
+                Type::Alias(*x, ts)
+            }
+            Type::Assoc(b, x, ts) => {
+                let b = b.map_type(&mut |b| b.default(int, float));
+                let ts = map(ts, |t| t.default(int, float));
+                Type::Assoc(b, *x, ts)
+            }
+            Type::Var(x, k) => match k {
+                TypeVar::General => Type::Var(*x, TypeVar::General),
+                TypeVar::Float => float.clone(),
+                TypeVar::Int => int.clone(),
+            },
+            Type::Generic(x) => Type::Generic(*x),
+            Type::Fun(ts, t) => {
+                let ts = map(ts, |t| t.default(int, float));
+                let t = t.default(int, float);
+                Type::Fun(ts, Rc::new(t))
+            }
+            Type::Tuple(ts) => {
+                let ts = map(ts, |t| t.default(int, float));
+                Type::Tuple(ts)
+            }
+            Type::Record(xts) => {
+                let xts = xts
+                    .iter()
+                    .map(|(x, t)| (*x, t.default(int, float)))
+                    .collect();
+                Type::Record(xts)
+            }
+            Type::Array(t, i) => {
+                let t = Rc::new(t.default(int, float));
+                let i = *i;
+                Type::Array(t, i)
+            }
+            Type::Never => Type::Never,
+            Type::Hole => Type::Hole,
+            Type::Err => Type::Err,
+        }
+    }
+
+    pub fn expand_assoc(&self, f: &mut impl FnMut(&Bound, &Name, &Vec<Type>) -> Type) -> Type {
+        match self {
+            Type::Path(_) => unreachable!(),
+            Type::Cons(x, ts) => {
+                let ts = ts.iter().map(|t| t.expand_assoc(f)).collect::<Vec<_>>();
+                Type::Cons(*x, ts)
+            }
+            Type::Alias(x, ts) => {
+                let ts = ts.iter().map(|t| t.expand_assoc(f)).collect::<Vec<_>>();
+                Type::Alias(*x, ts)
+            }
+            Type::Assoc(b, x, ts) => {
+                let b = b.map_type(&mut |t| t.expand_assoc(f));
+                let ts = map(ts, |t| t.expand_assoc(f));
+                f(&b, x, &ts)
+            }
+            Type::Var(x, k) => Type::Var(*x, *k),
+            Type::Generic(x) => Type::Generic(*x),
+            Type::Fun(ts, t) => {
+                let ts = ts.iter().map(|t| t.expand_assoc(f)).collect();
+                let t = t.expand_assoc(f);
+                Type::Fun(ts, Rc::new(t))
+            }
+            Type::Tuple(ts) => {
+                let ts = ts.iter().map(|t| t.expand_assoc(f)).collect();
+                Type::Tuple(ts)
+            }
+            Type::Record(xts) => {
+                let xts = xts.iter().map(|(x, t)| (*x, t.expand_assoc(f))).collect();
+                Type::Record(xts)
+            }
+            Type::Array(t, i) => {
+                let t = Rc::new(t.expand_assoc(f));
+                let i = *i;
+                Type::Array(t, i)
+            }
+            Type::Never => Type::Never,
+            Type::Hole => Type::Hole,
+            Type::Err => Type::Err,
+        }
+    }
+
+    pub fn annotate(&self, ctx: &mut Context) -> Type {
+        match self {
+            Type::Cons(x, ts) => {
+                let ts = map(ts, |t| t.annotate(ctx));
+                Type::Cons(*x, ts)
+            }
+            Type::Assoc(b, x1, ts1) => {
+                let b = b.map_type(&mut |t| t.annotate(ctx));
+                let ts1 = map(ts1, |t| t.annotate(ctx));
+                Type::Assoc(b, *x1, ts1)
+            }
+            Type::Var(x, k) => Type::Var(*x, *k),
+            Type::Hole => ctx.new_tyvar(TypeVar::General),
+            Type::Err => Type::Err,
+            Type::Generic(x) => Type::Generic(*x),
+            Type::Fun(ts, t) => {
+                let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
+                let t = Rc::new(t.annotate(ctx));
+                Type::Fun(ts, t)
+            }
+            Type::Tuple(ts) => {
+                let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
+                Type::Tuple(ts)
+            }
+            Type::Record(xts) => {
+                let xts = xts.iter().map(|(x, t)| (*x, t.annotate(ctx))).collect();
+                Type::Record(xts)
+            }
+            Type::Alias(x, ts) => {
+                let ts = ts.iter().map(|t| t.annotate(ctx)).collect();
+                Type::Alias(*x, ts)
+            }
+            Type::Path(_) => unreachable!(),
+            Type::Array(t, n) => {
+                let t = t.annotate(ctx);
+                let n = *n;
+                Type::Array(Rc::new(t), n)
+            }
+            Type::Never => Type::Never,
+        }
+    }
 }
 
 impl Stmt {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Stmt {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> Stmt {
         match self {
-            Stmt::Var(v) => Stmt::Var(Rc::new(v.map_type(f))),
-            Stmt::Def(d) => Stmt::Def(Rc::new(d.map_type(f))),
-            Stmt::Impl(i) => Stmt::Impl(Rc::new(i.map_type(f))),
-            Stmt::Expr(e) => Stmt::Expr(Rc::new(e.map_type(f))),
-            Stmt::Struct(s) => Stmt::Struct(Rc::new(s.map_type(f))),
-            Stmt::Enum(s) => Stmt::Enum(Rc::new(s.map_type(f))),
-            Stmt::Type(s) => Stmt::Type(Rc::new(s.map_type(f))),
-            Stmt::Trait(s) => Stmt::Trait(Rc::new(s.map_type(f))),
+            Stmt::Var(s) => Stmt::Var(Rc::new(s.map_type(f))),
+            Stmt::Def(s) => Stmt::Def(s.clone()),
+            Stmt::Impl(s) => Stmt::Impl(s.clone()),
+            Stmt::Expr(s) => Stmt::Expr(Rc::new(s.map_type(f))),
+            Stmt::Struct(s) => Stmt::Struct(s.clone()),
+            Stmt::Enum(s) => Stmt::Enum(s.clone()),
+            Stmt::Type(s) => Stmt::Type(s.clone()),
+            Stmt::Trait(s) => Stmt::Trait(s.clone()),
             Stmt::Err(_) => todo!(),
         }
     }
 }
 
 impl StmtVar {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtVar {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> StmtVar {
         let span = self.span;
         let name = self.name;
         let ty = f(&self.ty);
@@ -188,12 +287,12 @@ impl StmtVar {
 }
 
 impl StmtDef {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtDef {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> StmtDef {
         let span = self.span;
         let name = self.name;
         let generics = self.generics.clone();
         let qs = self.where_clause.iter().map(|p| p.map_type(f)).collect();
-        let ps = self.params.mapv(f);
+        let ps = self.params.mapv(&mut *f);
         let t = f(&self.ty);
         let e = self.body.map_type(f);
         StmtDef::new(span, name, generics, ps, t, qs, e)
@@ -201,7 +300,7 @@ impl StmtDef {
 }
 
 impl StmtDefBody {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtDefBody {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> StmtDefBody {
         match self {
             StmtDefBody::UserDefined(e) => StmtDefBody::UserDefined(e.map_type(f)),
             StmtDefBody::Builtin(b) => StmtDefBody::Builtin(b.clone()),
@@ -210,7 +309,7 @@ impl StmtDefBody {
 }
 
 impl StmtImpl {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtImpl {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> StmtImpl {
         let span = self.span;
         let generics = self.generics.clone();
         let head = self.head.map_type(f);
@@ -222,7 +321,7 @@ impl StmtImpl {
 }
 
 impl StmtType {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtType {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> StmtType {
         let span = self.span;
         let name = self.name;
         let generics = self.generics.clone();
@@ -232,7 +331,7 @@ impl StmtType {
 }
 
 impl StmtTypeBody {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtTypeBody {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> StmtTypeBody {
         match self {
             StmtTypeBody::UserDefined(t) => StmtTypeBody::UserDefined(f(t)),
             StmtTypeBody::Builtin(b) => StmtTypeBody::Builtin(b.clone()),
@@ -241,7 +340,7 @@ impl StmtTypeBody {
 }
 
 impl StmtStruct {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtStruct {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> StmtStruct {
         let span = self.span;
         let name = self.name;
         let generics = self.generics.clone();
@@ -251,7 +350,7 @@ impl StmtStruct {
 }
 
 impl StmtEnum {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtEnum {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> StmtEnum {
         let span = self.span;
         let name = self.name;
         let generics = self.generics.clone();
@@ -261,7 +360,7 @@ impl StmtEnum {
 }
 
 impl StmtTrait {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtTrait {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> StmtTrait {
         let span = self.span;
         let name = self.name;
         let generics = self.generics.clone();
@@ -273,7 +372,7 @@ impl StmtTrait {
 }
 
 impl StmtTraitDef {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> StmtTraitDef {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> StmtTraitDef {
         let span = self.span;
         let name = self.name;
         let generics = self.generics.clone();
@@ -285,12 +384,12 @@ impl StmtTraitDef {
 }
 
 impl Bound {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Bound {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> Bound {
         match self {
             Bound::Path(_, _) => unreachable!(),
             Bound::Trait(s, x, ts, xts) => {
-                let ts = ts.iter().map(f).collect::<Vec<_>>();
-                let xts = xts.iter().map(|(x, t)| (*x, f(t))).collect::<Map<_, _>>();
+                let ts = map(ts, &mut *f);
+                let xts = xts.mapv(&mut |t: &Type| f(t));
                 Bound::Trait(*s, *x, ts, xts)
             }
             Bound::Type(s, t) => Bound::Type(*s, Rc::new(f(t.as_ref()))),
@@ -300,9 +399,9 @@ impl Bound {
 }
 
 impl Expr {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Expr {
-        let s = self.span();
-        let t = f(self.ty());
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> Expr {
+        let s = self.span_of();
+        let t = f(self.type_of());
         match self {
             Expr::Path(..) => unreachable!(),
             Expr::Int(_, _, v) => Expr::Int(s, t, *v),
@@ -325,12 +424,15 @@ impl Expr {
             }
             Expr::Query(..) => todo!(),
             Expr::Struct(_, _, x, ts, xts) => {
-                let ts = ts.iter().map(f).collect();
-                let xts = xts.iter().map(|(x, e)| (*x, e.map_type(f))).collect();
+                let ts = ts.iter().map(&mut *f).collect();
+                let xts = xts
+                    .iter()
+                    .map(&mut |(x, e): &(Name, Expr)| (*x, e.map_type(f)))
+                    .collect();
                 Expr::Struct(s, t, *x, ts, xts)
             }
             Expr::Enum(_, _, x0, ts, x1, e) => {
-                let ts = ts.iter().map(f).collect();
+                let ts = ts.iter().map(&mut *f).collect();
                 let e = e.map_type(f);
                 Expr::Enum(s, t, *x0, ts, *x1, Rc::new(e))
             }
@@ -368,7 +470,7 @@ impl Expr {
             Expr::Continue(_, _) => Expr::Continue(s, t),
             Expr::Break(_, _) => Expr::Break(s, t),
             Expr::Fun(_, _, ps, t1, e) => {
-                let ps = ps.mapv(f);
+                let ps = ps.mapv(&mut *f);
                 let t1 = f(t1);
                 let e = Rc::new(e.map_type(f));
                 Expr::Fun(s, t, ps, t1, e)
@@ -399,7 +501,7 @@ impl Expr {
 }
 
 impl Arm {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Arm {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> Arm {
         let span = self.span;
         let p = self.p.map_type(f);
         let e = self.e.map_type(f);
@@ -408,7 +510,7 @@ impl Arm {
 }
 
 impl Block {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Block {
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> Block {
         let span = self.span;
         let stmts = self.stmts.iter().map(|s| s.map_type(f)).collect();
         let expr = self.expr.map_type(f);
@@ -417,9 +519,9 @@ impl Block {
 }
 
 impl Pat {
-    pub fn map_type(&self, f: &impl Fn(&Type) -> Type) -> Pat {
-        let t = f(self.ty());
-        let span = self.span();
+    pub fn map_type(&self, f: &mut impl FnMut(&Type) -> Type) -> Pat {
+        let t = f(self.type_of());
+        let span = self.span_of();
         match self {
             Pat::Path(..) => unreachable!(),
             Pat::Var(_, _, x) => Pat::Var(span, t, *x),
@@ -428,12 +530,15 @@ impl Pat {
                 Pat::Tuple(span, t, es)
             }
             Pat::Struct(_, _, x, ts, xps) => {
-                let ts = ts.iter().map(f).collect();
-                let xps = xps.iter().map(|(x, p)| (*x, p.map_type(f))).collect();
+                let ts = ts.iter().map(&mut *f).collect();
+                let xps = xps
+                    .iter()
+                    .map(&mut |(x, p): &(Name, Pat)| (*x, p.map_type(f)))
+                    .collect();
                 Pat::Struct(span, t, *x, ts, xps)
             }
             Pat::Enum(_, _, x0, ts, x1, p) => {
-                let ts = ts.iter().map(f).collect();
+                let ts = ts.iter().map(&mut *f).collect();
                 let p = Rc::new(p.map_type(f));
                 Pat::Enum(span, t, *x0, ts, *x1, p)
             }

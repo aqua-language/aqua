@@ -348,8 +348,8 @@ impl Context {
     }
 
     fn expr(&mut self, expr: &Expr) -> Expr {
-        let s = expr.span();
-        let t = self.ty(expr.ty());
+        let s = expr.span_of();
+        let t = self.ty(expr.type_of());
         match expr {
             Expr::Path(_, _, _) => unreachable!(),
             Expr::Int(_, _, v) => Expr::Int(s, t, *v),

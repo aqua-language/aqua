@@ -216,8 +216,16 @@ pub fn ty_assoc<const N: usize, const M: usize, const K: usize>(
     Type::Assoc(trait_bound(x0, ts0, xts0), name(x1), vec(ts1))
 }
 
+pub fn ty_record<const N: usize>(xts: [(&'static str, Type); N]) -> Type {
+    Type::Record(name_map(xts))
+}
+
+pub fn ty_unit() -> Type {
+    Type::Tuple(vec([]))
+}
+
 pub fn pat_record<const N: usize>(xps: [(&'static str, Pat); N]) -> Pat {
-    Pat::Record(span(), Type::hole(), name_map(xps))
+    Pat::Record(span(), Type::Hole, name_map(xps))
 }
 
 pub mod unresolved {
@@ -247,7 +255,7 @@ pub mod unresolved {
     pub fn expr_var(x: &'static str) -> Expr {
         Expr::Path(
             span(),
-            Type::hole(),
+            Type::Hole,
             Path::new(vec([segment(x, vec([]), map([]))])),
         )
     }
@@ -260,7 +268,7 @@ pub mod unresolved {
     ) -> Expr {
         Expr::Call(
             span(),
-            Type::hole(),
+            Type::Hole,
             Rc::new(name_expr(x, ts)),
             app(xes, |(x, e)| expr_assign(expr_var(x), e)),
         )
@@ -271,7 +279,7 @@ pub mod unresolved {
     }
 
     fn name_expr<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
-        Expr::Path(span(), Type::hole(), name_path(x, ts, []))
+        Expr::Path(span(), Type::Hole, name_path(x, ts, []))
     }
 
     pub fn expr_variant<const N: usize, const M: usize>(
@@ -282,10 +290,10 @@ pub mod unresolved {
     ) -> Expr {
         Expr::Call(
             span(),
-            Type::hole(),
+            Type::Hole,
             Rc::new(Expr::Path(
                 span(),
-                Type::hole(),
+                Type::Hole,
                 path([(x0, vec(ts), map([])), (x1, vec([]), map([]))]),
             )),
             vec(es),
@@ -299,7 +307,7 @@ pub mod unresolved {
     ) -> Expr {
         Expr::Path(
             span(),
-            Type::hole(),
+            Type::Hole,
             path([(x0, vec(ts), map([])), (x1, vec([]), map([]))]),
         )
     }
@@ -319,7 +327,7 @@ pub mod unresolved {
     ) -> Expr {
         Expr::Path(
             span(),
-            Type::hole(),
+            Type::Hole,
             path([(x0, vec(ts), name_map(xts)), (x1, vec([]), map([]))]),
         )
     }
@@ -327,7 +335,7 @@ pub mod unresolved {
     pub fn expr_binop(x0: &'static str, x1: &'static str, e0: Expr, e1: Expr) -> Expr {
         Expr::Call(
             span(),
-            Type::hole(),
+            Type::Hole,
             Rc::new(expr_assoc(x0, [], [], x1)),
             vec([e0, e1]),
         )
@@ -336,7 +344,7 @@ pub mod unresolved {
     pub fn expr_enum(x0: &'static str, x1: &'static str) -> Expr {
         Expr::Path(
             span(),
-            Type::hole(),
+            Type::Hole,
             Path::new(vec([
                 segment(x0, vec([]), map([])),
                 segment(x1, vec([]), map([])),
@@ -347,7 +355,7 @@ pub mod unresolved {
     pub fn expr_unop(x0: &'static str, x1: &'static str, e: Expr) -> Expr {
         Expr::Call(
             span(),
-            Type::hole(),
+            Type::Hole,
             Rc::new(expr_assoc(x0, [], [], x1)),
             vec([e]),
         )
@@ -401,7 +409,7 @@ pub mod unresolved {
     }
 
     pub fn pat_var(x: &'static str) -> Pat {
-        Pat::Path(span(), Type::hole(), name_path(x, [], []), None)
+        Pat::Path(span(), Type::Hole, name_path(x, [], []), None)
     }
 
     pub fn pat_enum<const N: usize>(
@@ -412,7 +420,7 @@ pub mod unresolved {
     ) -> Pat {
         Pat::Path(
             span(),
-            Type::hole(),
+            Type::Hole,
             path([(x0, vec(ts), map([])), (x1, vec([]), map([]))]),
             Some(vec([PathPatField::Unnamed(p)])),
         )
@@ -425,14 +433,14 @@ pub mod unresolved {
     ) -> Pat {
         Pat::Path(
             span(),
-            Type::hole(),
+            Type::Hole,
             path([(x0, vec(ts), map([]))]),
             Some(app(xps, |(x, p)| PathPatField::Named(name(x), p))),
         )
     }
 
     pub fn pat_unit_struct<const N: usize>(x: &'static str, ts: [Type; N]) -> Pat {
-        Pat::Path(span(), Type::hole(), path([(x, vec(ts), map([]))]), None)
+        Pat::Path(span(), Type::Hole, path([(x, vec(ts), map([]))]), None)
     }
 
     pub fn ty_con<const N: usize>(x: &'static str, ts: [Type; N]) -> Type {
@@ -484,11 +492,11 @@ pub mod unresolved {
 }
 
 pub fn expr_assoc<const N: usize>(b: Bound, x1: &'static str, ts1: [Type; N]) -> Expr {
-    Expr::Assoc(span(), Type::hole(), b, name(x1), vec(ts1))
+    Expr::Assoc(span(), Type::Hole, b, name(x1), vec(ts1))
 }
 
 pub fn expr_assign(e0: Expr, e1: Expr) -> Expr {
-    Expr::Assign(span(), Type::hole(), Rc::new(e0), Rc::new(e1))
+    Expr::Assign(span(), Type::Hole, Rc::new(e0), Rc::new(e1))
 }
 
 // pub fn stmt_mod<const N: usize>(x: &'static str, ss: [Stmt; N]) -> Stmt {
@@ -507,6 +515,10 @@ pub fn type_body(t: Type) -> StmtTypeBody {
     StmtTypeBody::UserDefined(t)
 }
 
+pub fn expr_record<const N: usize>(xes: [(&'static str, Expr); N]) -> Expr {
+    Expr::Record(span(), Type::Hole, name_map(xes))
+}
+
 pub fn stmt_type<const N: usize>(
     x: &'static str,
     generics: [&'static str; N],
@@ -520,11 +532,7 @@ pub fn stmt_expr(e: Expr) -> Stmt {
 }
 
 pub fn expr_unit() -> Expr {
-    Expr::Tuple(span(), Type::hole(), vec([]))
-}
-
-pub fn ty_unit() -> Type {
-    Type::Tuple(vec([]))
+    Expr::Tuple(span(), Type::Hole, vec([]))
 }
 
 pub fn expr_struct<const N: usize, const M: usize>(
@@ -532,19 +540,19 @@ pub fn expr_struct<const N: usize, const M: usize>(
     ts: [Type; N],
     xes: [(&'static str, Expr); M],
 ) -> Expr {
-    Expr::Struct(span(), Type::hole(), name(x), vec(ts), name_map(xes))
+    Expr::Struct(span(), Type::Hole, name(x), vec(ts), name_map(xes))
 }
 
 pub fn expr_tuple<const N: usize>(es: [Expr; N]) -> Expr {
-    Expr::Tuple(span(), Type::hole(), vec(es))
+    Expr::Tuple(span(), Type::Hole, vec(es))
 }
 
 pub fn expr_array<const N: usize>(es: [Expr; N]) -> Expr {
-    Expr::Array(span(), Type::hole(), vec(es))
+    Expr::Array(span(), Type::Hole, vec(es))
 }
 
 pub fn expr_index(e1: Expr, i: Index) -> Expr {
-    Expr::Index(span(), Type::hole(), Rc::new(e1), i)
+    Expr::Index(span(), Type::Hole, Rc::new(e1), i)
 }
 
 pub fn index(i: &'static str) -> Index {
@@ -552,7 +560,7 @@ pub fn index(i: &'static str) -> Index {
 }
 
 pub fn expr_field(e: Expr, x: &'static str) -> Expr {
-    Expr::Field(span(), Type::hole(), Rc::new(e), name(x))
+    Expr::Field(span(), Type::Hole, Rc::new(e), name(x))
 }
 
 pub fn expr_enum<const N: usize>(
@@ -561,14 +569,7 @@ pub fn expr_enum<const N: usize>(
     x1: &'static str,
     e: Expr,
 ) -> Expr {
-    Expr::Enum(
-        span(),
-        Type::hole(),
-        name(x0),
-        vec(ts),
-        name(x1),
-        Rc::new(e),
-    )
+    Expr::Enum(span(), Type::Hole, name(x0), vec(ts), name(x1), Rc::new(e))
 }
 
 pub fn expr_body(e: Expr) -> StmtDefBody {
@@ -634,11 +635,11 @@ pub fn stmt_enum<const N: usize, const M: usize>(
 }
 
 pub fn expr_call<const N: usize>(e: Expr, es: [Expr; N]) -> Expr {
-    Expr::Call(span(), Type::hole(), Rc::new(e), vec(es))
+    Expr::Call(span(), Type::Hole, Rc::new(e), vec(es))
 }
 
 pub fn expr_unresolved<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
-    Expr::Unresolved(span(), Type::hole(), name(x), vec(ts))
+    Expr::Unresolved(span(), Type::Hole, name(x), vec(ts))
 }
 
 pub fn expr_call_direct<const N: usize, const M: usize>(
@@ -652,7 +653,7 @@ pub fn expr_call_direct<const N: usize, const M: usize>(
 pub fn expr_and(e0: Expr, e1: Expr) -> Expr {
     Expr::Match(
         span(),
-        Type::hole(),
+        Type::Hole,
         Rc::new(e0),
         arms([(pat_bool(true), e1), (pat_wild(), expr_bool(false))]),
     )
@@ -661,57 +662,50 @@ pub fn expr_and(e0: Expr, e1: Expr) -> Expr {
 pub fn expr_or(e0: Expr, e1: Expr) -> Expr {
     Expr::Match(
         span(),
-        Type::hole(),
+        Type::Hole,
         Rc::new(e0),
         arms([(pat_bool(true), expr_bool(true)), (pat_wild(), e1)]),
     )
 }
 
 pub fn expr_var(x: &'static str) -> Expr {
-    Expr::Var(span(), Type::hole(), name(x))
+    Expr::Var(span(), Type::Hole, name(x))
 }
 
 pub fn pat_var(x: &'static str) -> Pat {
-    Pat::Var(span(), Type::hole(), name(x))
+    Pat::Var(span(), Type::Hole, name(x))
 }
 
 pub fn pat_int(v: &'static str) -> Pat {
-    Pat::Int(span(), Type::hole(), v.into())
+    Pat::Int(span(), Type::Hole, v.into())
 }
 
 pub fn pat_string(s: &'static str) -> Pat {
-    Pat::String(span(), Type::hole(), s.into())
+    Pat::String(span(), Type::Hole, s.into())
 }
 
 pub fn pat_unit() -> Pat {
-    Pat::Tuple(span(), Type::hole(), vec([]))
+    Pat::Tuple(span(), Type::Hole, vec([]))
 }
 
 pub fn pat_bool(b: bool) -> Pat {
-    Pat::Bool(span(), Type::hole(), b)
+    Pat::Bool(span(), Type::Hole, b)
 }
 
 pub fn pat_char(c: char) -> Pat {
-    Pat::Char(span(), Type::hole(), c)
+    Pat::Char(span(), Type::Hole, c)
 }
 
 pub fn pat_wild() -> Pat {
-    Pat::Wildcard(span(), Type::hole())
+    Pat::Wildcard(span(), Type::Hole)
 }
 
 pub fn pat_tuple<const N: usize>(ps: [Pat; N]) -> Pat {
-    Pat::Tuple(span(), Type::hole(), vec(ps))
+    Pat::Tuple(span(), Type::Hole, vec(ps))
 }
 
 pub fn pat_enum<const N: usize>(x0: &'static str, ts: [Type; N], x1: &'static str, p: Pat) -> Pat {
-    Pat::Enum(
-        span(),
-        Type::hole(),
-        name(x0),
-        vec(ts),
-        name(x1),
-        Rc::new(p),
-    )
+    Pat::Enum(span(), Type::Hole, name(x0), vec(ts), name(x1), Rc::new(p))
 }
 
 pub fn pat_struct<const N: usize, const M: usize>(
@@ -719,7 +713,7 @@ pub fn pat_struct<const N: usize, const M: usize>(
     ts: [Type; N],
     xps: [(&'static str, Pat); M],
 ) -> Pat {
-    Pat::Struct(span(), Type::hole(), name(x), vec(ts), name_map(xps))
+    Pat::Struct(span(), Type::Hole, name(x), vec(ts), name_map(xps))
 }
 
 pub fn pat_annot(t: Type, p: Pat) -> Pat {
@@ -733,13 +727,13 @@ pub fn arms<const N: usize>(arms: [(Pat, Expr); N]) -> Vec<Arm> {
 }
 
 pub fn expr_match<const N: usize>(e: Expr, pes: [(Pat, Expr); N]) -> Expr {
-    Expr::Match(span(), Type::hole(), Rc::new(e), arms(pes))
+    Expr::Match(span(), Type::Hole, Rc::new(e), arms(pes))
 }
 
 pub fn expr_if(e0: Expr, b1: Block) -> Expr {
     Expr::Match(
         span(),
-        Type::hole(),
+        Type::Hole,
         Rc::new(e0),
         arms([
             (pat_bool(true), Expr::Block(span(), Type::Hole, b1)),
@@ -751,7 +745,7 @@ pub fn expr_if(e0: Expr, b1: Block) -> Expr {
 pub fn expr_if_else(e0: Expr, b1: Block, b2: Block) -> Expr {
     Expr::Match(
         span(),
-        Type::hole(),
+        Type::Hole,
         Rc::new(e0),
         arms([
             (pat_bool(true), Expr::Block(span(), Type::Hole, b1)),
@@ -761,27 +755,27 @@ pub fn expr_if_else(e0: Expr, b1: Block, b2: Block) -> Expr {
 }
 
 pub fn expr_def<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
-    Expr::Def(span(), Type::hole(), name(x), vec(ts))
+    Expr::Def(span(), Type::Hole, name(x), vec(ts))
 }
 
 pub fn expr_int(i: &'static str) -> Expr {
-    Expr::Int(span(), Type::hole(), i.into())
+    Expr::Int(span(), Type::Hole, i.into())
 }
 
 pub fn expr_float(f: &'static str) -> Expr {
-    Expr::Float(span(), Type::hole(), f.into())
+    Expr::Float(span(), Type::Hole, f.into())
 }
 
 pub fn expr_bool(b: bool) -> Expr {
-    Expr::Bool(span(), Type::hole(), b)
+    Expr::Bool(span(), Type::Hole, b)
 }
 
 pub fn expr_string(s: &'static str) -> Expr {
-    Expr::String(span(), Type::hole(), s.into())
+    Expr::String(span(), Type::Hole, s.into())
 }
 
 pub fn expr_char(c: char) -> Expr {
-    Expr::Char(span(), Type::hole(), c)
+    Expr::Char(span(), Type::Hole, c)
 }
 
 pub fn block<const N: usize>(ss: [Stmt; N], e: Expr) -> Block {
@@ -789,23 +783,23 @@ pub fn block<const N: usize>(ss: [Stmt; N], e: Expr) -> Block {
 }
 
 pub fn expr_block<const N: usize>(ss: [Stmt; N], e: Expr) -> Expr {
-    Expr::Block(span(), Type::hole(), block(ss, e))
+    Expr::Block(span(), Type::Hole, block(ss, e))
 }
 
 pub fn spanned_expr_block<const N: usize>(span: Span, ss: [Stmt; N], e: Expr) -> Expr {
-    Expr::Block(span, Type::hole(), block(ss, e))
+    Expr::Block(span, Type::Hole, block(ss, e))
 }
 
 pub fn expr_err() -> Expr {
-    Expr::Err(span(), Type::hole())
+    Expr::Err(span(), Type::Hole)
 }
 
 pub fn expr_fun<const N: usize>(ps: [&'static str; N], e: Expr) -> Expr {
     Expr::Fun(
         span(),
-        Type::hole(),
-        app(ps, |s| (name(s), Type::hole())).into(),
-        Type::hole(),
+        Type::Hole,
+        app(ps, |s| (name(s), Type::Hole)).into(),
+        Type::Hole,
         Rc::new(e),
     )
 }
@@ -815,35 +809,35 @@ fn param((x, t): (&'static str, Type)) -> (Name, Type) {
 }
 
 pub fn expr_fun_typed<const N: usize>(ps: [(&'static str, Type); N], t: Type, e: Expr) -> Expr {
-    Expr::Fun(span(), Type::hole(), app(ps, param).into(), t, Rc::new(e))
+    Expr::Fun(span(), Type::Hole, app(ps, param).into(), t, Rc::new(e))
 }
 
 pub fn expr_return(e: Expr) -> Expr {
-    Expr::Return(span(), Type::hole(), Rc::new(e))
+    Expr::Return(span(), Type::Hole, Rc::new(e))
 }
 
 pub fn expr_continue() -> Expr {
-    Expr::Continue(span(), Type::hole())
+    Expr::Continue(span(), Type::Hole)
 }
 
 pub fn expr_break() -> Expr {
-    Expr::Break(span(), Type::hole())
+    Expr::Break(span(), Type::Hole)
 }
 
 pub fn expr_query<const N: usize>(qs: [Query; N]) -> Expr {
-    Expr::Query(span(), Type::hole(), vec(qs))
+    Expr::Query(span(), Type::Hole, vec(qs))
 }
 
 pub fn query_select<const N: usize>(xes: [(&'static str, Expr); N]) -> Query {
-    Query::Select(span(), Type::hole(), name_map(xes))
+    Query::Select(span(), Type::Hole, name_map(xes))
 }
 
 pub fn query_where(e: Expr) -> Query {
-    Query::Where(span(), Type::hole(), Rc::new(e))
+    Query::Where(span(), Type::Hole, Rc::new(e))
 }
 
 pub fn query_from(x: &'static str, e: Expr) -> Query {
-    Query::From(span(), Type::hole(), name(x), Rc::new(e))
+    Query::From(span(), Type::Hole, name(x), Rc::new(e))
 }
 
 pub fn query_into<const N: usize, const M: usize>(
@@ -851,31 +845,31 @@ pub fn query_into<const N: usize, const M: usize>(
     ts: [Type; N],
     es: [Expr; M],
 ) -> Query {
-    Query::Into(span(), Type::hole(), name(x), vec(ts), vec(es))
+    Query::Into(span(), Type::Hole, name(x), vec(ts), vec(es))
 }
 
 pub fn query_var(x: &'static str, e: Expr) -> Query {
-    Query::Var(span(), Type::hole(), name(x), Rc::new(e))
+    Query::Var(span(), Type::Hole, name(x), Rc::new(e))
 }
 
 pub fn query_join(x: &'static str, e0: Expr, e1: Expr) -> Query {
-    Query::Join(span(), Type::hole(), name(x), Rc::new(e0), Rc::new(e1))
+    Query::Join(span(), Type::Hole, name(x), Rc::new(e0), Rc::new(e1))
 }
 
 pub fn query_group<const N: usize>(e: Expr, qs: [Query; N]) -> Query {
-    Query::Group(span(), Type::hole(), Rc::new(e), vec(qs))
+    Query::Group(span(), Type::Hole, Rc::new(e), vec(qs))
 }
 
 pub fn query_over<const N: usize>(e: Expr, qs: [Query; N]) -> Query {
-    Query::Over(span(), Type::hole(), Rc::new(e), vec(qs))
+    Query::Over(span(), Type::Hole, Rc::new(e), vec(qs))
 }
 
 pub fn query_compute(x: &'static str, e0: Expr, e1: Expr) -> Query {
-    Query::Compute(span(), Type::hole(), name(x), Rc::new(e0), Rc::new(e1))
+    Query::Compute(span(), Type::Hole, name(x), Rc::new(e0), Rc::new(e1))
 }
 
 pub fn expr_while(e: Expr, b: Block) -> Expr {
-    Expr::While(span(), Type::hole(), Rc::new(e), b)
+    Expr::While(span(), Type::Hole, Rc::new(e), b)
 }
 
 pub fn span() -> Span {
@@ -884,6 +878,41 @@ pub fn span() -> Span {
 
 pub fn seg<const N: usize>(x: &'static str, ts: [Type; N]) -> (Name, Vec<Type>) {
     (name(x), vec(ts))
+}
+
+pub mod types {
+    use compiler::ast::Type;
+
+    use super::ty;
+    use super::ty_con;
+
+    pub fn ty_i32() -> Type {
+        ty("i32")
+    }
+
+    pub fn ty_i64() -> Type {
+        ty("i64")
+    }
+
+    pub fn ty_bool() -> Type {
+        ty("bool")
+    }
+
+    pub fn ty_string() -> Type {
+        ty("String")
+    }
+
+    pub fn ty_vec(t: Type) -> Type {
+        ty_con("Vec", [t])
+    }
+
+    pub fn ty_option(t: Type) -> Type {
+        ty_con("Option", [t])
+    }
+
+    pub fn ty_stream(t: Type) -> Type {
+        ty_con("Stream", [t])
+    }
 }
 
 pub mod traits {

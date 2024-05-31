@@ -50,6 +50,7 @@ impl Hash for Value {
             Value::U64(v) => v.hash(state),
             Value::U8(v) => v.hash(state),
             Value::Instance(_) => unreachable!(),
+            Value::Ordering(v) => v.hash(state),
         }
     }
 }

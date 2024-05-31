@@ -19,10 +19,13 @@ use common::ty_gen;
 use compiler::ast::Bound;
 use compiler::ast::Map;
 use compiler::ast::StmtImpl;
-use compiler::ast::Type;
 use compiler::infer::Context;
 
 use crate::common::traits::impls;
+use crate::common::types::ty_i32;
+use crate::common::types::ty_i64;
+use crate::common::types::ty_stream;
+use crate::common::types::ty_vec;
 
 #[allow(unused)]
 fn debug(impls: &[Rc<StmtImpl>], goal: &Bound) {
@@ -39,7 +42,7 @@ fn debug(impls: &[Rc<StmtImpl>], goal: &Bound) {
 fn test_trait1() {
     let impls = impls([impl_clone(["T"], ty_gen("T"), [])]);
     let mut sub = Map::new();
-    let goal = tr_clone(Type::i32());
+    let goal = tr_clone(ty_i32());
     let mut ctx = Context::new();
     ctx.impls = impls.to_vec();
 
@@ -53,8 +56,8 @@ fn test_trait2() {
     let mut sub = Map::new();
 
     let mut ctx = Context::new();
-    ctx.impls = impls([impl_clone([], Type::i32(), [])]);
-    let goal = tr_clone(Type::i32());
+    ctx.impls = impls([impl_clone([], ty_i32(), [])]);
+    let goal = tr_clone(ty_i32());
 
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
 }
@@ -66,11 +69,11 @@ fn test_trait2() {
 fn test_trait3() {
     let mut sub = Map::new();
 
-    let goal = tr_clone(Type::vec(Type::i32()));
+    let goal = tr_clone(ty_vec(ty_i32()));
     let mut ctx = Context::new();
     ctx.impls = impls([
-        impl_clone(["T"], Type::vec(ty_gen("T")), [tr_clone(ty_gen("T"))]),
-        impl_clone([], Type::i32(), []),
+        impl_clone(["T"], ty_vec(ty_gen("T")), [tr_clone(ty_gen("T"))]),
+        impl_clone([], ty_i32(), []),
     ]);
 
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
@@ -82,12 +85,12 @@ fn test_trait3() {
 #[test]
 fn test_trait4() {
     let mut sub = Map::new();
-    let goal = tr_clone(Type::vec(Type::vec(Type::i32())));
+    let goal = tr_clone(ty_vec(ty_vec(ty_i32())));
 
     let mut ctx = Context::new();
     ctx.impls = impls([
-        impl_clone(["T"], Type::vec(ty_gen("T")), [tr_clone(ty_gen("T"))]),
-        impl_clone([], Type::i32(), []),
+        impl_clone(["T"], ty_vec(ty_gen("T")), [tr_clone(ty_gen("T"))]),
+        impl_clone([], ty_i32(), []),
     ]);
 
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
@@ -100,17 +103,12 @@ fn test_trait4() {
 #[test]
 fn test_trait5() {
     let mut sub = Map::new();
-    let goal = tr_iterator(Type::vec(Type::i32()));
+    let goal = tr_iterator(ty_vec(ty_i32()));
     let mut ctx = Context::new();
-    ctx.impls = impls([impl_iterator(
-        ["T"],
-        Type::vec(ty_gen("T")),
-        ty_gen("T"),
-        [],
-    )]);
+    ctx.impls = impls([impl_iterator(["T"], ty_vec(ty_gen("T")), ty_gen("T"), [])]);
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
-    let t0 = ty_iterator_item(Type::vec(Type::i32()));
-    let t1 = Type::i32();
+    let t0 = ty_iterator_item(ty_vec(ty_i32()));
+    let t1 = ty_i32();
     assert!(ctx.try_unify(&mut sub, &t0, &t1).is_ok());
 }
 
@@ -121,15 +119,15 @@ fn test_trait5() {
 #[test]
 fn test_trait6() {
     let mut sub = Map::new();
-    let goal = tr_add([Type::i32(), Type::i32()]);
+    let goal = tr_add([ty_i32(), ty_i32()]);
     let mut ctx = Context::new();
     ctx.impls = impls([
-        impl_add([], [Type::i32(), Type::i32()], Type::i32(), []),
+        impl_add([], [ty_i32(), ty_i32()], ty_i32(), []),
         impl_add([], [ty("f32"), ty("f32")], ty("f32"), []),
     ]);
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
-    let t0 = ty_add_output([Type::i32(), Type::i32()]);
-    let t1 = Type::i32();
+    let t0 = ty_add_output([ty_i32(), ty_i32()]);
+    let t1 = ty_i32();
     assert!(ctx.try_unify(&mut sub, &t0, &t1).is_ok());
 }
 
@@ -143,23 +141,23 @@ fn test_trait6() {
 #[test]
 fn test_trait7() {
     let mut sub = Map::new();
-    let goal = tr_add([Type::vec(Type::i32()), Type::i32()]);
+    let goal = tr_add([ty_vec(ty_i32()), ty_i32()]);
     let mut ctx = Context::new();
     ctx.impls = [
-        impl_add([], [Type::i32(), Type::i32()], Type::i32(), []),
+        impl_add([], [ty_i32(), ty_i32()], ty_i32(), []),
         impl_add(
             ["T", "R"],
-            [Type::vec(ty_gen("T")), ty_gen("R")],
-            Type::vec(ty_add_output([ty_gen("T"), ty_gen("R")])),
+            [ty_vec(ty_gen("T")), ty_gen("R")],
+            ty_vec(ty_add_output([ty_gen("T"), ty_gen("R")])),
             [tr_add([ty_gen("T"), ty_gen("R")])],
         ),
     ]
     .into_iter()
-    .map(|i| Rc::new(i.annotate(&mut ctx)))
+    .map(|i| Rc::new(i.map_type(&mut |t| t.annotate(&mut ctx))))
     .collect::<Vec<_>>();
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
-    let t0 = ty_add_output([Type::vec(Type::i32()), Type::i32()]);
-    let t1 = Type::vec(Type::i32());
+    let t0 = ty_add_output([ty_vec(ty_i32()), ty_i32()]);
+    let t1 = ty_vec(ty_i32());
     assert!(ctx.try_unify(&mut sub, &t0, &t1).is_ok());
 }
 
@@ -171,15 +169,15 @@ fn test_trait7() {
 #[test]
 fn test_trait8() {
     let mut sub = Map::new();
-    let goal = tr_add([Type::i64(), Type::i32()]);
+    let goal = tr_add([ty_i64(), ty_i32()]);
     let mut ctx = Context::new();
     ctx.impls = impls([
-        impl_add([], [Type::i32(), Type::i32()], Type::i32(), []),
-        impl_add([], [Type::i64(), Type::i32()], Type::i64(), []),
+        impl_add([], [ty_i32(), ty_i32()], ty_i32(), []),
+        impl_add([], [ty_i64(), ty_i32()], ty_i64(), []),
     ]);
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
-    let t0 = ty_add_output([Type::i64(), Type::i32()]);
-    let t1 = Type::i64();
+    let t0 = ty_add_output([ty_i64(), ty_i32()]);
+    let t1 = ty_i64();
     assert!(ctx.try_unify(&mut sub, &t0, &t1).is_ok());
 }
 
@@ -196,12 +194,12 @@ fn test_trait8() {
 #[test]
 fn test_trait9() {
     let mut sub = Map::new();
-    let goal = tr_into_iterator(Type::vec(Type::i32()));
+    let goal = tr_into_iterator(ty_vec(ty_i32()));
     let mut ctx = Context::new();
     ctx.impls = impls([
         impl_into_iterator(
             ["T"],
-            Type::vec(ty_gen("T")),
+            ty_vec(ty_gen("T")),
             ty_gen("T"),
             ty_con("VecIterator", [ty_gen("T")]),
             [],
@@ -209,8 +207,8 @@ fn test_trait9() {
         impl_iterator(["T"], ty_con("VecIterator", [ty_gen("T")]), ty_gen("T"), []),
     ]);
     assert!(ctx.solve(&goal, &[], &mut sub).is_some());
-    let t0 = ty_into_iterator_into_iter(Type::vec(Type::i32()));
-    let t1 = ty_con("VecIterator", [Type::i32()]);
+    let t0 = ty_into_iterator_into_iter(ty_vec(ty_i32()));
+    let t1 = ty_con("VecIterator", [ty_i32()]);
     assert!(ctx.try_unify(&mut sub, &t0, &t1).is_ok());
 }
 
@@ -225,21 +223,21 @@ fn test_trait9() {
 #[test]
 fn test_trait10() {
     let mut sub = Map::new();
-    let goal = tr_into_iterator(Type::vec(Type::i32()));
+    let goal = tr_into_iterator(ty_vec(ty_i32()));
     let mut ctx = Context::new();
     ctx.impls = impls([
         impl_into_iterator(
             ["T"],
-            Type::vec(ty_gen("T")),
+            ty_vec(ty_gen("T")),
             ty_gen("T"),
             ty_con("VecIterator", [ty_gen("T")]),
             [],
         ),
         impl_into_iterator(
             ["T"],
-            Type::stream(ty_gen("T")),
+            ty_stream(ty_gen("T")),
             ty_gen("T"),
-            Type::stream(ty_gen("T")),
+            ty_stream(ty_gen("T")),
             [],
         ),
     ]);

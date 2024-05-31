@@ -360,7 +360,7 @@ impl<'a, 'b> Rust<'a, 'b> {
             self.paren(|this| {
                 this._expr(expr)?;
                 this.punct(":")?;
-                this.ty(expr.ty())
+                this.ty(expr.type_of())
             })?;
         } else {
             self._expr(expr)?;
@@ -440,7 +440,7 @@ impl<'a, 'b> Rust<'a, 'b> {
             self.paren(|this| {
                 this._pat(p)?;
                 this.punct(":")?;
-                this.ty(p.ty())
+                this.ty(p.type_of())
             })
         } else {
             self._pat(p)

@@ -12,7 +12,6 @@ use diag::Sources;
 use lexer::Lexer;
 use parser::Parser;
 
-pub mod annotate;
 pub mod apply;
 pub mod ast;
 pub mod codegen;
@@ -28,8 +27,16 @@ pub mod lift;
 pub mod parser;
 pub mod print;
 pub mod resolve;
-
-pub mod map;
+pub mod visitor {
+    pub mod mapping_visitor;
+    pub mod unit_visitor;
+    pub mod mut_visitor;
+}
+pub mod collections {
+    pub mod map;
+    pub mod ordmap;
+    pub mod union_find;
+}
 // pub mod monomorphise;
 pub mod monomorphise;
 #[cfg(feature = "optimiser")]

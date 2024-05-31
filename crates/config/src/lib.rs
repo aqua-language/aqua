@@ -21,6 +21,15 @@ pub struct Config {
     pub version: bool,
     #[cfg_attr(feature = "clap", clap(long, default_value = history()))]
     pub history: PathBuf,
+    #[cfg_attr(feature = "clap", clap(subcommand))]
+    pub command: Option<Command>,
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
+pub enum Command {
+    /// Check but do not run the program.
+    Check,
 }
 
 #[cfg(feature = "clap")]
