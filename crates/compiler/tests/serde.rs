@@ -197,7 +197,7 @@ fn test_serde_result_err() {
 #[test]
 fn test_serde_type_variable() {
     let mut de = serde_json::Deserializer::from_str("1");
-    let t = Type::Var("a".into(), TypeVar::General);
+    let t = Type::Var(TypeVar(1).into());
     assert!(Seed(t).deserialize(&mut de).is_err());
 }
 

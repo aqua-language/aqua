@@ -1,5 +1,5 @@
 #![allow(unused)]
-use crate::ast::Arm;
+use crate::ast::Aggr;
 use crate::ast::Block;
 use crate::ast::Bound;
 use crate::ast::Expr;
@@ -28,15 +28,49 @@ use crate::ast::TypeVar;
 use crate::builtins::Value;
 use crate::print::Print;
 
-pub struct Verbose<T>(T);
+pub trait IntoVerbose {
+    fn verbose(&self) -> Verbose<&Self>;
+}
 
-impl Program {
-    pub fn verbose(&self) -> Verbose<&Self> {
+impl IntoVerbose for Vec<Stmt> {
+    fn verbose(&self) -> Verbose<&Self> {
         Verbose(self)
     }
 }
 
-impl StmtImpl {
+impl IntoVerbose for Vec<Expr> {
+    fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl IntoVerbose for Vec<Type> {
+    fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl<'a> std::fmt::Display for Verbose<&'a Vec<Stmt>> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Pretty::new(f).verbose().stmts(self.0)
+    }
+}
+
+impl<'a> std::fmt::Display for Verbose<&'a Vec<Expr>> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Pretty::new(f).verbose().expr_args(self.0)
+    }
+}
+
+impl<'a> std::fmt::Display for Verbose<&'a Vec<Type>> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Pretty::new(f).verbose().type_args(self.0)
+    }
+}
+
+pub struct Verbose<T>(T);
+
+impl Program {
     pub fn verbose(&self) -> Verbose<&Self> {
         Verbose(self)
     }
@@ -78,43 +112,51 @@ impl StmtTraitDef {
     }
 }
 
+impl StmtTrait {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl StmtImpl {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl Bound {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
 impl<'a> std::fmt::Display for Verbose<&'a Program> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut p = Pretty::new(f);
-        p.verbose = true;
-        p.program(self.0)
+        Pretty::new(f).verbose().program(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&StmtImpl> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut p = Pretty::new(f);
-        p.verbose = true;
-        p.stmt_impl(self.0)
+        Pretty::new(f).verbose().stmt_impl(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&Expr> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut p = Pretty::new(f);
-        p.verbose = true;
-        p.expr(self.0)
+        Pretty::new(f).verbose().expr(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&Pat> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut p = Pretty::new(f);
-        p.verbose = true;
-        p.pat(self.0)
+        Pretty::new(f).verbose().pat(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&Stmt> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut p = Pretty::new(f);
-        p.verbose = true;
-        p.stmt(self.0)
+        Pretty::new(f).verbose().stmt(self.0)
     }
 }
 
@@ -128,17 +170,19 @@ impl std::fmt::Display for Verbose<&Type> {
 
 impl std::fmt::Display for Verbose<&Path> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut p = Pretty::new(f);
-        p.verbose = true;
-        p.path(self.0)
+        Pretty::new(f).verbose().path(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&StmtTraitDef> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut p = Pretty::new(f);
-        p.verbose = true;
-        p.stmt_def_decl(self.0)
+        Pretty::new(f).verbose().stmt_def_decl(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&Bound> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).verbose().bound(self.0)
     }
 }
 
@@ -244,6 +288,18 @@ impl std::fmt::Display for StmtTraitDef {
     }
 }
 
+impl std::fmt::Display for TypeVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::fmt::Display for StmtTrait {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).stmt_trait(self)
+    }
+}
+
 impl<'a, 'b> Print<'b> for Pretty<'a, 'b> {
     fn fmt(&mut self) -> &mut std::fmt::Formatter<'b> {
         self.f
@@ -275,6 +331,11 @@ impl<'a, 'b> Pretty<'a, 'b> {
         }
     }
 
+    fn verbose(&mut self) -> &mut Self {
+        self.verbose = true;
+        self
+    }
+
     fn param(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
         self.name(x)?;
         self.punct(":")?;
@@ -283,7 +344,11 @@ impl<'a, 'b> Pretty<'a, 'b> {
     }
 
     fn program(&mut self, p: &Program) -> std::fmt::Result {
-        self.newline_sep(&p.stmts, Self::stmt)
+        self.stmts(&p.stmts)
+    }
+
+    fn stmts(&mut self, ss: &[Stmt]) -> std::fmt::Result {
+        self.newline_sep(ss, Self::stmt)
     }
 
     fn stmt(&mut self, s: &Stmt) -> std::fmt::Result {
@@ -304,9 +369,11 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.kw("var")?;
         self.space()?;
         self.name(&s.name)?;
-        self.punct(":")?;
-        self.space()?;
-        self.ty(&s.ty)?;
+        if s.ty != Type::Unknown {
+            self.punct(":")?;
+            self.space()?;
+            self.ty(&s.ty)?;
+        }
         self.space()?;
         self.punct("=")?;
         self.space()?;
@@ -327,14 +394,23 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.space()?;
         self.punct("=")?;
         self.space()?;
-        self.body(&s.body)?;
-        self.punct(";")
+        self.body(&s.body)
     }
 
     fn body(&mut self, e: &StmtDefBody) -> std::fmt::Result {
         match e {
-            StmtDefBody::UserDefined(e) => self.expr(e),
-            StmtDefBody::Builtin(_) => self.kw("<builtin>"),
+            StmtDefBody::UserDefined(e) => {
+                self.expr(e)?;
+                if !e.is_braced() {
+                    self.punct(";")
+                } else {
+                    Ok(())
+                }
+            }
+            StmtDefBody::Builtin(_) => {
+                self.punct("...")?;
+                self.punct(";")
+            }
         }
     }
 
@@ -348,8 +424,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.brace(|this| {
             if !s.defs.is_empty() || !s.types.is_empty() {
                 this.indented(|this| {
-                    this.newline_sep(&s.types, |ctx, s| ctx.stmt_type(s))?;
-                    this.newline_sep(&s.defs, |ctx, s| ctx.stmt_def(s))
+                    this.newline_sep(&s.types, |this, s| this.stmt_type(s))?;
+                    this.newline_sep(&s.defs, |this, s| this.stmt_def(s))
                 })?;
                 this.newline()?;
             }
@@ -388,7 +464,10 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.space()?;
         self.brace(|this| {
             this.if_nonempty(&s.variants, |this, s| {
-                this.indented(|this| this.newline_sep(s, Self::variant))?;
+                this.indented(|this| {
+                    this.newline()?;
+                    this.newline_sep(s, Self::variant)
+                })?;
                 this.newline()
             })
         })
@@ -423,12 +502,17 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
+        self.where_clause(&s.where_clause)?;
         self.space()?;
         self.brace(|this| {
             if !s.defs.is_empty() || !s.types.is_empty() {
                 this.indented(|this| {
-                    this.newline_sep(&s.defs, |ctx, s| ctx.stmt_def_decl(s))?;
-                    this.newline_sep(&s.types, |ctx, s| ctx.stmt_type_decl(s))
+                    this.newline()?;
+                    this.newline_sep(&s.defs, |this, s| this.stmt_def_decl(s))?;
+                    if !s.types.is_empty() {
+                        this.newline_sep(&s.types, |this, s| this.stmt_type_decl(s))?;
+                    }
+                    Ok(())
                 })?;
                 this.newline()?;
             }
@@ -526,6 +610,15 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Expr::Query(_, _, qs) => {
                 self.newline_sep(qs, Self::query_stmt)?;
             }
+            Expr::QueryInto(_, _, qs, x, ts, es) => {
+                self.newline_sep(qs, Self::query_stmt)?;
+                self.newline()?;
+                self.kw("into")?;
+                self.space()?;
+                self.name(x)?;
+                self.type_args(ts)?;
+                self.paren(|this| this.comma_sep(es, Self::expr))?;
+            }
             Expr::Assoc(_, _, b, x1, ts1) => {
                 self.bound(b)?;
                 self.punct("::")?;
@@ -611,6 +704,56 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.name(x)?;
                 self.type_args(ts)?;
             }
+            Expr::InfixBinaryOp(_, _, op, e0, e1) => {
+                self.expr(e0)?;
+                self.space()?;
+                self.lit(op)?;
+                self.space()?;
+                self.expr(e1)?;
+            }
+            Expr::PrefixUnaryOp(_, _, op, es) => {
+                self.lit(op)?;
+                self.expr(es)?;
+            }
+            Expr::PostfixUnaryOp(_, _, op, es) => {
+                self.expr(es)?;
+                self.lit(op)?;
+            }
+            Expr::Annotate(_, t, e) => {
+                self.expr(e)?;
+                self.punct(":")?;
+                self.space()?;
+                self.ty(t)?;
+            }
+            Expr::Paren(_, _, e) => {
+                self.paren(|this| this.expr(e))?;
+            }
+            Expr::Dot(_, _, e, x, ts, es) => {
+                self.expr(e)?;
+                self.punct(".")?;
+                self.name(x)?;
+                self.type_args(ts)?;
+                self.paren(|this| this.comma_sep(es, Self::expr))?;
+            }
+            Expr::IfElse(_, _, e, b0, b1) => {
+                self.kw("if")?;
+                self.space()?;
+                self.expr(e)?;
+                self.space()?;
+                self.block(b0)?;
+                self.space()?;
+                self.kw("else")?;
+                self.space()?;
+                self.block(b1)?;
+            }
+            Expr::IntSuffix(_, _, v, x) => {
+                self.lit(v)?;
+                self.lit(x)?;
+            }
+            Expr::FloatSuffix(_, _, v, x) => {
+                self.lit(v)?;
+                self.lit(x)?;
+            }
         }
         Ok(())
     }
@@ -618,20 +761,24 @@ impl<'a, 'b> Pretty<'a, 'b> {
     fn block(&mut self, b: &Block) -> std::fmt::Result {
         self.brace(|this| {
             this.indented(|this| {
-                this.newline_sep(&b.stmts, |this, s| this.stmt(s))?;
                 this.newline()?;
-                this.expr(&b.expr)
+                this.newline_sep(&b.stmts, |this, s| this.stmt(s))?;
+                if this.verbose || !b.expr.is_unit() {
+                    this.newline()?;
+                    this.expr(&b.expr)?;
+                }
+                Ok(())
             })?;
             this.newline()
         })
     }
 
-    fn arm(&mut self, arm: &Arm) -> std::fmt::Result {
-        self.pat(&arm.p)?;
+    fn arm(&mut self, (p, e): &(Pat, Expr)) -> std::fmt::Result {
+        self.pat(&p)?;
         self.space()?;
         self.punct("=>")?;
         self.space()?;
-        self.expr(&arm.e)
+        self.expr(&e)
     }
 
     fn expr(&mut self, expr: &Expr) -> std::fmt::Result {
@@ -673,7 +820,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
 
     fn query_stmt(&mut self, q: &Query) -> std::fmt::Result {
         match q {
-            Query::From(_, _, x, e) => {
+            Query::From(_, x, e) => {
                 self.kw("from")?;
                 self.space()?;
                 self.name(x)?;
@@ -682,17 +829,54 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.space()?;
                 self.expr(e)?;
             }
-            Query::Where(_, _, e) => {
+            Query::Where(_, e) => {
                 self.kw("where")?;
                 self.space()?;
                 self.expr(e)?;
             }
-            Query::Select(_, _, xes) => {
+            Query::Select(_, xes) => {
                 self.kw("select")?;
                 self.space()?;
                 self.comma_scope(xes.as_ref(), Self::assign)?;
             }
-            Query::Join(_, _, x, e0, e1) => {
+            Query::GroupOverCompute(_, x, e0, e1, aggrs) => {
+                self.kw("group")?;
+                self.space()?;
+                self.name(x)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.expr(e0)?;
+                self.newline()?;
+                self.indented(|this| {
+                    this.tab()?;
+                    this.kw("over")?;
+                    this.space()?;
+                    this.expr(e1)?;
+                    this.newline()?;
+                    this.kw("compute")?;
+                    this.indented(|this| this.newline_comma_sep(aggrs, Self::aggr))
+                })?;
+            }
+            Query::OverCompute(_, e, aggrs) => {
+                self.kw("over")?;
+                self.space()?;
+                self.expr(e)?;
+                self.indented(|this| {
+                    this.kw("compute")?;
+                    this.newline_comma_sep(aggrs, Self::aggr)
+                })?;
+            }
+            Query::Var(_, x, e) => {
+                self.kw("var")?;
+                self.space()?;
+                self.name(x)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.expr(e)?;
+            }
+            Query::Join(_, x, e0, e1, e2) => {
                 self.kw("join")?;
                 self.space()?;
                 self.name(x)?;
@@ -701,83 +885,50 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.space()?;
                 self.expr(e0)?;
                 self.space()?;
-                self.punct("on")?;
+                self.kw("on")?;
                 self.space()?;
                 self.expr(e1)?;
+                self.space()?;
+                self.punct("==")?;
+                self.space()?;
+                self.expr(e2)?;
             }
-            Query::Group(_, _, e, qs) => {
-                self.kw("group")?;
-                self.space()?;
-                self.expr(e)?;
-                self.space()?;
-                self.scope(qs, Self::query_stmt)?;
-            }
-            Query::Over(_, _, e, qs) => {
-                self.kw("over")?;
-                self.space()?;
-                self.expr(e)?;
-                self.space()?;
-                self.scope(qs, Self::query_stmt)?;
-            }
-            Query::Order(_, _, e, o) => {
-                self.kw("order")?;
-                self.space()?;
-                self.expr(e)?;
-                self.space()?;
-                self.ordering(o)?;
-            }
-            Query::Var(_, _, x, e) => {
-                self.kw("val")?;
+            Query::JoinOver(_, x, e0, e1, e2, e3) => {
+                self.kw("join")?;
                 self.space()?;
                 self.name(x)?;
                 self.space()?;
-                self.punct("=")?;
-                self.space()?;
-                self.expr(e)?;
-            }
-            Query::Into(_, _, x, ts, es) => {
-                self.kw("into")?;
-                self.space()?;
-                self.name(x)?;
-                self.type_args(ts)?;
-                self.expr_args(es)?;
-            }
-            Query::Compute(_, _, x, e0, e1) => {
-                self.kw("compute")?;
-                self.space()?;
-                self.name(x)?;
-                self.space()?;
-                self.punct("=")?;
+                self.kw("in")?;
                 self.space()?;
                 self.expr(e0)?;
                 self.space()?;
-                self.kw("of")?;
+                self.kw("over")?;
                 self.space()?;
                 self.expr(e1)?;
+                self.space()?;
+                self.kw("on")?;
+                self.space()?;
+                self.expr(e2)?;
+                self.space()?;
+                self.punct("==")?;
+                self.space()?;
+                self.expr(e3)?;
             }
-            Query::Err(_, _) => {
+            Query::Err(_) => {
                 self.kw("<err>")?;
             }
         }
         Ok(())
     }
 
-    fn ordering(&mut self, o: &bool) -> std::fmt::Result {
-        if *o {
-            self.space()?;
-            self.kw("desc")?;
-        }
-        Ok(())
-    }
-
-    fn agg(&mut self, (x, e0, e1): &(Name, Expr, Expr)) -> std::fmt::Result {
-        self.name(x)?;
+    fn aggr(&mut self, a: &Aggr) -> std::fmt::Result {
+        self.name(&a.x)?;
         self.punct("=")?;
-        self.expr(e0)?;
+        self.expr(&a.e0)?;
         self.space()?;
         self.kw("of")?;
         self.space()?;
-        self.expr(e1)
+        self.expr(&a.e1)
     }
 
     fn bound(&mut self, b: &Bound) -> std::fmt::Result {
@@ -827,26 +978,11 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.name(x1)?;
                 self.type_args(ts1)?;
             }
-            Type::Var(x, k) => match k {
-                TypeVar::General => {
-                    self.name(x)?;
-                }
-                TypeVar::Int => {
-                    self.brace(|this| {
-                        this.kw("integer")?;
-                        this.punct(":")?;
-                        this.lit(x)
-                    })?;
-                }
-                TypeVar::Float => {
-                    self.brace(|this| {
-                        this.kw("float")?;
-                        this.punct(":")?;
-                        this.lit(x)
-                    })?;
-                }
-            },
-            Type::Hole => {
+            Type::Var(x) => {
+                self.punct("'")?;
+                self.lit(x)?;
+            }
+            Type::Unknown => {
                 self.punct("_")?;
             }
             Type::Err => {
@@ -877,16 +1013,19 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.path(path)?;
             }
             Type::Array(t, n) => {
-                self.brack(|ctx| {
-                    ctx.ty(t)?;
-                    ctx.if_some(n, |ctx, n| {
-                        ctx.punct(";")?;
-                        ctx.lit(n)
+                self.brack(|this| {
+                    this.ty(t)?;
+                    this.if_some(n, |this, n| {
+                        this.punct(";")?;
+                        this.lit(n)
                     })
                 })?;
             }
             Type::Never => {
                 self.punct("!")?;
+            }
+            Type::Paren(t) => {
+                self.paren(|this| this.ty(t))?;
             }
         }
         Ok(())
@@ -963,7 +1102,20 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.punct(" or ")?;
                 self.pat(p1)?;
             }
-            Pat::Char(_, _, _) => todo!(),
+            Pat::Char(_, _, v) => {
+                write!(self.f, "'{}'", v)?;
+            }
+            Pat::Annotate(_, t, e) => {
+                self.pat(e)?;
+                if !self.verbose {
+                    self.punct(":")?;
+                    self.space()?;
+                    self.ty(t)?;
+                }
+            }
+            Pat::Paren(_, _, p) => {
+                self.paren(|this| this.pat(p))?;
+            }
         }
         Ok(())
     }

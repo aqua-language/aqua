@@ -5,12 +5,14 @@ mod type_of;
 mod upcasts;
 mod with_span;
 mod with_type;
+mod utils;
 
 use std::rc::Rc;
 
 use crate::builtins::Value;
 use crate::interpret::Context;
 use crate::lexer::Span;
+use crate::lexer::Token;
 use crate::symbol::Symbol;
 
 pub use crate::collections::map::Map;
@@ -72,37 +74,34 @@ pub struct StmtTrait {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Bound {
     Path(Span, Path),
-    // Trait bound. For example: impl Clone[i32] { ... }
+    // Trait bound. For example: impl Clone[i32] { ... } and Clone[T]::clone();
     Trait(Span, Name, Vec<Type>, Map<Name, Type>),
-    // Type bound. For example: impl i32 { ... }
+    // Type bound. For example: impl[T] Vec[T] { ... } and Vec[T]::new();
     Type(Span, Rc<Type>),
     Err(Span),
 }
 
-// A type is like a proposition
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Type {
     Path(Path),
     Cons(Name, Vec<Type>),
     Alias(Name, Vec<Type>),
     Assoc(Bound, Name, Vec<Type>),
-    Var(Name, TypeVar),
+    Var(TypeVar),
     Generic(Name),
     Fun(Vec<Type>, Rc<Type>),
     Tuple(Vec<Type>),
     Record(Map<Name, Type>),
     Array(Rc<Type>, Option<usize>),
     Never,
-    Hole,
+    Paren(Rc<Type>),
     Err,
+    // A placeholder for a type that has not been annotated yet.
+    Unknown,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum TypeVar {
-    General,
-    Float,
-    Int,
-}
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TypeVar(pub u32);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Candidate {
@@ -110,6 +109,15 @@ pub enum Candidate {
     Impl(StmtImpl),
     // A bound in a where clause
     Bound(Bound),
+}
+
+impl std::fmt::Display for Candidate {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Candidate::Impl(stmt) => write!(f, "{}", stmt),
+            Candidate::Bound(bound) => write!(f, "{}", bound),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -221,6 +229,8 @@ pub enum Expr {
     Unresolved(Span, Type, Name, Vec<Type>),
     Int(Span, Type, Symbol),
     Float(Span, Type, Symbol),
+    IntSuffix(Span, Type, Symbol, Symbol),
+    FloatSuffix(Span, Type, Symbol, Symbol),
     Bool(Span, Type, bool),
     String(Span, Type, Symbol),
     Char(Span, Type, char),
@@ -235,8 +245,10 @@ pub enum Expr {
     Call(Span, Type, Rc<Expr>, Vec<Expr>),
     Block(Span, Type, Block),
     Query(Span, Type, Vec<Query>),
+    QueryInto(Span, Type, Vec<Query>, Name, Vec<Type>, Vec<Expr>),
     Assoc(Span, Type, Bound, Name, Vec<Type>),
-    Match(Span, Type, Rc<Expr>, Vec<Arm>),
+    Match(Span, Type, Rc<Expr>, Map<Pat, Expr>),
+    IfElse(Span, Type, Rc<Expr>, Block, Block),
     Array(Span, Type, Vec<Expr>),
     Assign(Span, Type, Rc<Expr>, Rc<Expr>),
     Return(Span, Type, Rc<Expr>),
@@ -247,6 +259,12 @@ pub enum Expr {
     For(Span, Type, Name, Rc<Expr>, Block),
     Err(Span, Type),
     Value(Type, Value),
+    InfixBinaryOp(Span, Type, Token, Rc<Expr>, Rc<Expr>),
+    PrefixUnaryOp(Span, Type, Token, Rc<Expr>),
+    PostfixUnaryOp(Span, Type, Token, Rc<Expr>),
+    Annotate(Span, Type, Rc<Expr>),
+    Paren(Span, Type, Rc<Expr>),
+    Dot(Span, Type, Rc<Expr>, Name, Vec<Type>, Vec<Expr>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -264,13 +282,6 @@ pub enum PathPatField {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Arm {
-    pub span: Span,
-    pub p: Pat,
-    pub e: Expr,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Pat {
     Path(Span, Type, Path, Option<Vec<PathPatField>>),
     Var(Span, Type, Name),
@@ -285,19 +296,28 @@ pub enum Pat {
     Wildcard(Span, Type),
     Or(Span, Type, Rc<Pat>, Rc<Pat>),
     Err(Span, Type),
+    Annotate(Span, Type, Rc<Pat>),
+    Paren(Span, Type, Rc<Pat>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Query {
-    From(Span, Type, Name, Rc<Expr>),
-    Where(Span, Type, Rc<Expr>),
-    Select(Span, Type, Map<Name, Expr>),
-    Join(Span, Type, Name, Rc<Expr>, Rc<Expr>),
-    Group(Span, Type, Rc<Expr>, Vec<Query>),
-    Over(Span, Type, Rc<Expr>, Vec<Query>),
-    Order(Span, Type, Rc<Expr>, bool),
-    Var(Span, Type, Name, Rc<Expr>),
-    Into(Span, Type, Name, Vec<Type>, Vec<Expr>),
-    Compute(Span, Type, Name, Rc<Expr>, Rc<Expr>),
-    Err(Span, Type),
+    From(Span, Name, Rc<Expr>),
+    Var(Span, Name, Rc<Expr>),
+    Where(Span, Rc<Expr>),
+    Select(Span, Map<Name, Expr>),
+    OverCompute(Span, Rc<Expr>, Vec<Aggr>),
+    GroupOverCompute(Span, Name, Rc<Expr>, Rc<Expr>, Vec<Aggr>),
+    Join(Span, Name, Rc<Expr>, Rc<Expr>, Rc<Expr>),
+    JoinOver(Span, Name, Rc<Expr>, Rc<Expr>, Rc<Expr>, Rc<Expr>),
+    // Into(Span, Name, Vec<Type>, Vec<Expr>),
+    // Compute(Span, Name, Rc<Expr>, Rc<Expr>),
+    Err(Span),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Aggr {
+    pub x: Name,
+    pub e0: Rc<Expr>,
+    pub e1: Rc<Expr>,
 }

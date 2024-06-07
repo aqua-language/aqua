@@ -31,12 +31,22 @@ impl Expr {
             Expr::Match(s, ..) => *s,
             Expr::Err(s, ..) => *s,
             Expr::While(s, ..) => *s,
-            Expr::Record(s, _, _) => *s,
-            Expr::Path(s, _, _) => *s,
-            Expr::Value(_, _) => unreachable!(),
-            Expr::For(s, _, _, _, _) => *s,
-            Expr::Char(s, _, _) => *s,
-            Expr::Unresolved(s, _, _, _) => *s,
+            Expr::Record(s, ..) => *s,
+            Expr::Path(s, ..) => *s,
+            Expr::Value(..) => unreachable!(),
+            Expr::For(s, ..) => *s,
+            Expr::Char(s, ..) => *s,
+            Expr::Unresolved(s, ..) => *s,
+            Expr::QueryInto(s, ..) => *s,
+            Expr::InfixBinaryOp(s, ..) => *s,
+            Expr::PrefixUnaryOp(s, ..) => *s,
+            Expr::PostfixUnaryOp(s, ..) => *s,
+            Expr::Annotate(s, ..) => *s,
+            Expr::Paren(s, ..) => *s,
+            Expr::Dot(s, ..) => *s,
+            Expr::IfElse(s, ..) => *s,
+            Expr::IntSuffix(s, ..) => *s,
+            Expr::FloatSuffix(s, ..) => *s,
         }
     }
 }
@@ -44,7 +54,7 @@ impl Expr {
 impl Pat {
     pub fn span_of(&self) -> Span {
         match self {
-            Pat::Path(s, _, _, _) => *s,
+            Pat::Path(s, ..) => *s,
             Pat::Var(s, ..) => *s,
             Pat::Tuple(s, ..) => *s,
             Pat::Struct(s, ..) => *s,
@@ -53,10 +63,12 @@ impl Pat {
             Pat::Wildcard(s, ..) => *s,
             Pat::String(s, ..) => *s,
             Pat::Bool(s, ..) => *s,
-            Pat::Err(s, _) => *s,
-            Pat::Record(_, _, _) => todo!(),
-            Pat::Or(_, _, _, _) => todo!(),
-            Pat::Char(_, _, _) => todo!(),
+            Pat::Err(s, ..) => *s,
+            Pat::Record(s, ..) => *s,
+            Pat::Or(s, ..) => *s,
+            Pat::Char(s, ..) => *s,
+            Pat::Annotate(s, ..) => *s,
+            Pat::Paren(s, ..) => *s,
         }
     }
 }
@@ -67,14 +79,12 @@ impl Query {
             Query::From(s, ..) => *s,
             Query::Where(s, ..) => *s,
             Query::Select(s, ..) => *s,
-            Query::Into(s, ..) => *s,
             Query::Join(s, ..) => *s,
-            Query::Group(s, ..) => *s,
-            Query::Over(s, ..) => *s,
-            Query::Order(s, ..) => *s,
+            Query::GroupOverCompute(s, ..) => *s,
             Query::Var(s, ..) => *s,
-            Query::Compute(s, ..) => *s,
-            Query::Err(s, _) => *s,
+            Query::OverCompute(s, ..) => *s,
+            Query::JoinOver(s, ..) => *s,
+            Query::Err(s) => *s,
         }
     }
 }

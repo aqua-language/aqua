@@ -25,11 +25,14 @@ pub struct Config {
     pub command: Option<Command>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "clap", derive(clap::Parser))]
 pub enum Command {
-    /// Check but do not run the program.
+    /// Check program for errors.
     Check,
+    /// Format program.
+    #[cfg_attr(feature = "clap", clap(name = "fmt"))]
+    Format,
 }
 
 #[cfg(feature = "clap")]

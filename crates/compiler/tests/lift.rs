@@ -4,22 +4,21 @@ use common::expr_int;
 use common::program;
 use common::stmt_def;
 
-use compiler::ast::Program;
-
 use crate::common::expr_block;
 use crate::common::expr_call_direct;
+use crate::common::lift_program;
 use crate::common::types::ty_i32;
 
 #[test]
 fn test_lift0() {
-    let a = Program::lift("def g(): i32 = 1;").unwrap();
+    let a = lift_program("def g(): i32 = 1;").unwrap();
     let b = program([stmt_def("g", [], [], ty_i32(), [], expr_int("1"))]);
     check!(a, b);
 }
 
 #[test]
 fn test_lift1() {
-    let a = Program::lift(
+    let a = lift_program(
         "def foo1(): i32 = {
             def foo2(): i32 = 1;
             foo2()
@@ -42,7 +41,7 @@ fn test_lift1() {
 
 #[test]
 fn test_lift2() {
-    let a = Program::lift(
+    let a = lift_program(
         "def foo(): i32 = {
             def foo(): i32 = 1;
             foo()
@@ -65,7 +64,7 @@ fn test_lift2() {
 
 #[test]
 fn test_lift3() {
-    let a = Program::lift(
+    let a = lift_program(
         "def f(): i32 = 1;
          def f(): i32 = 1;",
     )
@@ -79,7 +78,7 @@ fn test_lift3() {
 
 #[test]
 fn test_lift4() {
-    let a = Program::lift(
+    let a = lift_program(
         "def f(): i32 = {
             def f(): i32 = 1;
             def f(): i32 = 2;
@@ -106,7 +105,7 @@ fn test_lift4() {
 
 #[test]
 fn test_lift5() {
-    let a = Program::lift(
+    let a = lift_program(
         "def f(): i32 = {
             def f(): i32 = {
                 def f(): i32 = 1;
@@ -126,7 +125,7 @@ fn test_lift5() {
 
 #[test]
 fn test_lift6() {
-    let a = Program::lift(
+    let a = lift_program(
         "def f(): i32 = {
             def f(): i32 = {
                 def f(): i32 = 1;

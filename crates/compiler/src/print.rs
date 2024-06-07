@@ -126,7 +126,6 @@ pub trait Print<'b> {
     ) -> std::fmt::Result {
         let mut iter = iter.into_iter();
         if let Some(x) = iter.next() {
-            self.newline()?;
             f(self, x)?;
             for x in iter {
                 self.newline()?;

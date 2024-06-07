@@ -1,7 +1,5 @@
 use std::rc::Rc;
 
-use crate::ast::Arm;
-use crate::ast::Block;
 use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Name;
@@ -12,7 +10,6 @@ use crate::ast::Program;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::StmtDefBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
@@ -23,9 +20,11 @@ use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Type;
+use crate::collections::map::Map;
 use crate::diag::Report;
 use crate::lexer::Span;
-use crate::collections::map::Map;
+use crate::traversal::mapper::Mapper;
+use crate::traversal::visitor::Visitor;
 
 #[derive(Debug)]
 pub struct Stack(Vec<Scope>);
@@ -68,6 +67,448 @@ impl Default for Context {
     }
 }
 
+impl Visitor for Context {
+    fn visit_stmt(&mut self, s: &Stmt) {
+        match s {
+            Stmt::Var(_) => {}
+            Stmt::Def(s) => self.stack.bind(s.name, Binding::Def(s.clone())),
+            Stmt::Trait(s) => self.stack.bind(s.name, Binding::Trait(s.clone())),
+            Stmt::Impl(_) => {}
+            Stmt::Struct(s) => self.stack.bind(s.name, Binding::Struct(s.clone())),
+            Stmt::Enum(s) => self.stack.bind(s.name, Binding::Enum(s.clone())),
+            Stmt::Type(s) => self.stack.bind(s.name, Binding::Type(s.clone())),
+            Stmt::Expr(_) => {}
+            Stmt::Err(_) => {}
+        }
+    }
+}
+
+impl Mapper for Context {
+    fn enter_scope(&mut self) {
+        self.stack.0.push(Scope::default());
+    }
+    fn exit_scope(&mut self) {
+        self.stack.0.pop();
+    }
+
+    fn map_generic(&mut self, g: &Name) -> Name {
+        self.stack.bind(*g, Binding::Generic);
+        self._map_generic(g)
+    }
+
+    fn map_stmt_var(&mut self, s: &StmtVar) -> StmtVar {
+        self.stack.bind(s.name, Binding::Var);
+        self._map_stmt_var(s)
+    }
+
+    fn map_param(&mut self, xt: &(Name, Type)) -> (Name, Type) {
+        self.stack.bind(xt.0, Binding::Var);
+        self._map_param(xt)
+    }
+
+    fn map_stmt_trait(&mut self, stmt: &StmtTrait) -> StmtTrait {
+        self._map_stmt_trait(stmt)
+    }
+    #[inline(always)]
+    fn _map_stmt_trait(&mut self, s: &StmtTrait) -> StmtTrait {
+        self.enter_scope();
+        let span = self.map_span(&s.span);
+        let name = self.map_name(&s.name);
+        let generics = self.map_generics(&s.generics);
+        let where_clause = self.map_bounds(&s.where_clause);
+        let defs = self.map_trait_defs(&s.defs);
+        let types = self.map_trait_types(&s.types);
+        self.exit_scope();
+        StmtTrait::new(span, name, generics, where_clause, defs, types)
+    }
+
+    fn map_stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
+        self.enter_scope();
+        let span = s.span;
+        let generics = self.map_generics(&s.generics);
+        let head = self.head(&s.head, &s.defs, &s.types);
+        let where_clause = self.map_bounds(&s.where_clause);
+        let defs = self.map_rc_iter(&s.defs, Self::map_stmt_def);
+        let types = self.map_rc_iter(&s.types, Self::map_stmt_type);
+        self.exit_scope();
+        StmtImpl::new(span, generics, head, where_clause, defs, types)
+    }
+
+    fn map_expr(&mut self, e: &Expr) -> Expr {
+        match e {
+            Expr::Path(s, t, path) => {
+                let t = self.map_type(&t);
+                let path = self.map_path(path);
+                let mut iter = path.segments.into_iter();
+                let seg0 = iter.next().unwrap();
+                match self.stack.get(&seg0.name) {
+                    Some(Binding::Var) => {
+                        if !seg0.ts.is_empty() {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), 0);
+                            return Expr::Err(*s, t.clone());
+                        }
+                        if let Some(seg1) = iter.next() {
+                            self.unexpected_assoc("Variable", "item", &seg0.name, &seg1.name);
+                            return Expr::Err(*s, t.clone());
+                        }
+                        Expr::Var(*s, t, seg0.name)
+                    }
+                    Some(Binding::Def(stmt)) => {
+                        if seg0.ts.len() != stmt.generics.len() && !seg0.ts.is_empty() {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            return Expr::Err(*s, t);
+                        }
+                        if let Some(seg1) = iter.next() {
+                            self.unexpected_assoc("Def", "item", &seg0.name, &seg1.name);
+                            return Expr::Err(*s, t);
+                        }
+                        let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
+                        Expr::Def(*s, t, seg0.name, ts0.clone())
+                    }
+                    // Unit Struct
+                    Some(Binding::Struct(stmt)) => {
+                        if !seg0.has_optional_arity(stmt.generics.len()) {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            return Expr::Err(*s, t.clone());
+                        }
+                        if !stmt.fields.is_empty() {
+                            self.wrong_fields::<Type, _>(&seg0.name, None, &stmt.fields);
+                            return Expr::Err(*s, t.clone());
+                        }
+                        if let Some(seg1) = iter.next() {
+                            self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
+                            return Expr::Err(*s, t);
+                        }
+                        let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
+                        let x0 = seg0.name;
+                        Expr::Struct(*s, t, x0, ts0.clone(), Map::new())
+                    }
+                    Some(Binding::Trait(stmt)) => {
+                        if !seg0.has_optional_arity(stmt.generics.len()) {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            return Expr::Err(*s, t);
+                        }
+                        if seg0.has_named_args() {
+                            self.unexpected_named_type_args(&seg0.name);
+                            return Expr::Err(*s, t);
+                        }
+                        let Some(seg1) = iter.next() else {
+                            self.expected_assoc("function", &seg0.name);
+                            return Expr::Err(*s, t);
+                        };
+                        let Some(def) = stmt.defs.iter().find(|def| def.name == seg1.name) else {
+                            self.unexpected_assoc("Trait", "function", &seg0.name, &seg1.name);
+                            return Expr::Err(*s, t);
+                        };
+                        if !seg1.has_optional_arity(def.generics.len()) {
+                            self.wrong_arity(&seg1.name, seg1.ts.len(), def.generics.len());
+                            return Expr::Err(*s, t);
+                        }
+                        let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
+                        let xts0 = stmt.types.iter().map(|t| (t.name, Type::Unknown)).collect();
+                        let b = Bound::Trait(*s, seg0.name, ts0, xts0);
+                        Expr::Assoc(*s, t, b, seg1.name, seg1.ts.clone())
+                    }
+                    Some(Binding::Type(stmt)) => {
+                        if !seg0.has_optional_arity(stmt.generics.len()) {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            return Expr::Err(*s, t.clone());
+                        }
+                        let x0 = seg0.name;
+                        let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
+                        let Some(seg1) = iter.next() else {
+                            self.expected_assoc("function", &seg0.name);
+                            return Expr::Err(*s, t);
+                        };
+                        let ts1 = seg1.ts;
+                        let x1 = seg1.name;
+                        let b = Bound::Type(*s, Rc::new(Type::Cons(x0, ts0)));
+                        Expr::Assoc(*s, t, b, x1, ts1)
+                    }
+                    Some(b) => {
+                        self.unexpected(&seg0.name, b.name(), "expression");
+                        Expr::Err(*s, t.clone())
+                    }
+                    None => {
+                        let ts = self.map_types(&seg0.ts);
+                        Expr::Unresolved(*s, t, seg0.name, ts)
+                    }
+                }
+            }
+            Expr::Call(s, t, e, es) => {
+                let t = self.map_type(t);
+                if let Expr::Path(_s, _t, path) = e.as_ref() {
+                    let path = self.map_path(path);
+                    let mut iter = path.segments.into_iter();
+                    let seg0 = iter.next().unwrap();
+                    match self.stack.get(&seg0.name) {
+                        Some(Binding::Struct(stmt)) => {
+                            let Some(ts0) = seg0.try_create_unnamed_holes(stmt.generics.len())
+                            else {
+                                self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                                return Expr::Err(*s, t);
+                            };
+                            if seg0.has_named_args() {
+                                self.unexpected_named_type_args(&seg0.name);
+                                return Expr::Err(*s, t);
+                            }
+                            if let Some(seg1) = iter.next() {
+                                self.unexpected_assoc("Struct", "field", &seg0.name, &seg1.name);
+                                return Expr::Err(*s, t);
+                            }
+                            let xes: Map<_, _> =
+                                es.iter().flat_map(|e| self.expr_field(e)).collect();
+                            if !fields_are_defined(&stmt.fields, &xes) {
+                                self.wrong_fields(&seg0.name, Some(&xes), &stmt.fields);
+                                return Expr::Err(*s, t);
+                            }
+                            return Expr::Struct(*s, t, seg0.name, ts0, xes);
+                        }
+                        Some(Binding::Enum(stmt)) => {
+                            if !seg0.has_optional_arity(stmt.generics.len()) {
+                                self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                                return Expr::Err(*s, t);
+                            }
+                            if seg0.has_named_args() {
+                                self.unexpected_named_type_args(&seg0.name);
+                                return Expr::Err(*s, t);
+                            }
+                            let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
+                            let Some(seg1) = iter.next() else {
+                                self.expected_assoc("variant", &seg0.name);
+                                return Expr::Err(*s, t);
+                            };
+                            if !stmt.variants.contains_key(&seg1.name) {
+                                self.unexpected_assoc("Enum", "variant", &seg0.name, &seg1.name);
+                                return Expr::Err(*s, t);
+                            }
+                            if !seg1.ts.is_empty() {
+                                self.wrong_arity(&seg1.name, seg1.ts.len(), 0);
+                                return Expr::Err(*s, t);
+                            }
+                            if let Some(seg2) = iter.next() {
+                                self.unexpected_assoc("Enum", "item", &seg1.name, &seg2.name);
+                                return Expr::Err(*s, t);
+                            }
+                            let es = es.iter().map(|e| self.map_expr(e)).collect::<Vec<_>>();
+                            let e = match es.len() {
+                                1 => es.into_iter().next().unwrap(),
+                                _ => Expr::Tuple(*s, Type::Unknown, es),
+                            };
+                            return Expr::Enum(*s, t, seg0.name, ts0, seg1.name, Rc::new(e));
+                        }
+                        _ => {}
+                    }
+                }
+                let e = self.map_expr(e);
+                let es = self.map_exprs(es);
+                Expr::Call(*s, t, Rc::new(e), es)
+            }
+
+            Expr::Assign(s, t, e0, e1) => {
+                let t = self.map_type(t);
+                let e0 = self.map_expr(e0);
+                let e1 = self.map_expr(e1);
+                let e1 = self.lvalue(&e1);
+                Expr::Assign(*s, t, Rc::new(e0), Rc::new(e1))
+            }
+            _ => self._map_expr(e),
+        }
+    }
+
+    fn map_stmts(&mut self, stmts: &[Stmt]) -> Vec<Stmt> {
+        self.visit_stmts(stmts);
+        self._map_stmts(stmts)
+    }
+
+    fn map_type(&mut self, t: &Type) -> Type {
+        match t {
+            Type::Path(p) => {
+                let p = self.map_path(p);
+                let mut iter = p.segments.into_iter();
+                let seg0 = iter.next().unwrap();
+                match self.stack.get(&seg0.name) {
+                    Some(Binding::Generic) => {
+                        if seg0.has_args() {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), 0);
+                            return Type::Err;
+                        }
+                        if let Some(seg1) = iter.next() {
+                            self.unexpected_assoc("Generic", "item", &seg0.name, &seg1.name);
+                            return Type::Err;
+                        }
+                        Type::Generic(seg0.name)
+                    }
+                    Some(Binding::Enum(stmt)) => {
+                        if !seg0.has_arity(stmt.generics.len()) {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            return Type::Err;
+                        }
+                        if let Some(seg1) = iter.next() {
+                            self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
+                            return Type::Err;
+                        }
+                        Type::Cons(seg0.name, seg0.ts.clone())
+                    }
+                    Some(Binding::Struct(stmt)) => {
+                        if !seg0.has_arity(stmt.generics.len()) {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            return Type::Err;
+                        }
+                        if let Some(seg1) = iter.next() {
+                            self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
+                            return Type::Err;
+                        }
+                        Type::Cons(seg0.name, seg0.ts.clone())
+                    }
+                    Some(Binding::Type(stmt)) => {
+                        if !seg0.has_arity(stmt.generics.len()) {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            return Type::Err;
+                        }
+                        if let Some(seg1) = iter.next() {
+                            self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
+                            return Type::Err;
+                        }
+                        match &stmt.body {
+                            StmtTypeBody::UserDefined(_) => Type::Alias(seg0.name, seg0.ts.clone()),
+                            StmtTypeBody::Builtin(_) => Type::Cons(seg0.name, seg0.ts.clone()),
+                        }
+                    }
+                    Some(Binding::Trait(stmt)) => {
+                        if !seg0.has_arity(stmt.generics.len()) {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            return Type::Err;
+                        }
+                        let Some(seg1) = iter.next() else {
+                            self.expected_assoc("type", &seg0.name);
+                            return Type::Err;
+                        };
+                        let Some(t) = stmt.types.iter().find(|t| t.name == seg1.name) else {
+                            self.unexpected_assoc("Trait", "type", &seg0.name, &seg1.name);
+                            return Type::Err;
+                        };
+                        if !seg1.has_arity(t.generics.len()) {
+                            self.wrong_arity(&seg1.name, seg1.ts.len(), t.generics.len());
+                            return Type::Err;
+                        }
+                        let xts = stmt.types.iter().map(|t| (t.name, Type::Unknown)).collect();
+                        let s = seg0.span + seg1.span;
+                        let b = Bound::Trait(s, seg0.name, seg0.ts.clone(), xts);
+                        Type::Assoc(b, seg1.name, seg1.ts.clone())
+                    }
+                    Some(b) => {
+                        self.unexpected(&seg0.name, b.name(), "type");
+                        Type::Err
+                    }
+                    None => {
+                        self.not_found(&seg0.name, "type");
+                        Type::Err
+                    }
+                }
+            }
+            Type::Generic(x) => Type::Generic(*x),
+            _ => self._map_type(t),
+        }
+    }
+
+    fn map_pattern(&mut self, p: &Pat) -> Pat {
+        match p {
+            Pat::Path(s, t, path, args) => {
+                let t = self.map_type(t);
+                let path = self.map_path(path);
+                let mut iter = path.segments.into_iter();
+                let seg0 = iter.next().unwrap();
+                match self.stack.get(&seg0.name) {
+                    Some(Binding::Enum(stmt)) => {
+                        if !seg0.has_optional_arity(stmt.generics.len()) {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            return Pat::Err(*s, t.clone());
+                        }
+                        let ts0 = Self::create_type_arg_holes(seg0.ts, stmt.generics.len());
+                        let Some(seg1) = iter.next() else {
+                            self.expected_assoc("variant", &seg0.name);
+                            return Pat::Err(*s, t.clone());
+                        };
+                        if !stmt.variants.contains_key(&seg1.name) {
+                            self.unexpected_assoc("Enum", "variant", &seg0.name, &seg1.name);
+                            return Pat::Err(*s, t.clone());
+                        }
+                        if !seg1.ts.is_empty() {
+                            self.wrong_arity(&seg1.name, seg1.ts.len(), 0);
+                            return Pat::Err(*s, t.clone());
+                        }
+                        if let Some(seg2) = iter.next() {
+                            self.unexpected_assoc("Enum", "item", &seg1.name, &seg2.name);
+                            return Pat::Err(*s, t.clone());
+                        }
+                        let Some(ps) = self.enum_pat_args(args, stmt.variants.is_empty()) else {
+                            return Pat::Err(*s, t.clone());
+                        };
+                        let p = match ps.len() {
+                            1 => ps.into_iter().next().unwrap(),
+                            _ => Pat::Tuple(*s, Type::Unknown, ps),
+                        };
+                        Pat::Enum(*s, t, seg0.name, ts0.clone(), seg1.name, Rc::new(p))
+                    }
+                    Some(Binding::Struct(stmt)) => {
+                        if !seg0.has_arity(stmt.generics.len()) {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            return Pat::Err(*s, t.clone());
+                        }
+                        let ts0 = Self::create_type_arg_holes(seg0.ts, stmt.generics.len());
+                        if let Some(seg1) = iter.next() {
+                            self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
+                            return Pat::Err(*s, t.clone());
+                        }
+                        let Some(xps) = self.struct_pat_args(args) else {
+                            return Pat::Err(*s, t.clone());
+                        };
+                        if !fields_are_defined(&stmt.fields, &xps) {
+                            self.wrong_fields(&seg0.name, Some(&xps), &stmt.fields);
+                            return Pat::Err(*s, t.clone());
+                        }
+                        Pat::Struct(*s, t, seg0.name, ts0.clone(), xps)
+                    }
+                    Some(b) => {
+                        self.unexpected(&seg0.name, b.name(), "pattern");
+                        Pat::Err(*s, t.clone())
+                    }
+                    None => {
+                        if !seg0.ts.is_empty() {
+                            self.wrong_arity(&seg0.name, seg0.ts.len(), 0);
+                            return Pat::Err(*s, t.clone());
+                        }
+                        if let Some(seg) = iter.next() {
+                            self.unexpected_assoc("Struct", "item", &seg0.name, &seg.name);
+                            return Pat::Err(*s, t.clone());
+                        }
+                        Pat::Var(*s, t, seg0.name)
+                    }
+                }
+            }
+            Pat::Var(_, _, x) => {
+                let t = self.map_type(p.type_of());
+                let s = p.span_of();
+                Pat::Var(s, t, *x)
+            }
+            _ => self._map_pattern(p),
+        }
+    }
+
+    // impl ... where Foo[T] { ... }
+    #[allow(clippy::type_complexity)]
+    fn map_bound(&mut self, bound: &Bound) -> Bound {
+        let span = bound.span();
+        match bound {
+            Bound::Path(_, path) => self.resolve_bound_path(span, path),
+            Bound::Trait(..) => unreachable!(),
+            Bound::Type(..) => unreachable!(),
+            Bound::Err(_) => Bound::Err(span),
+        }
+    }
+}
+
 impl Context {
     pub fn new() -> Context {
         Context {
@@ -76,25 +517,8 @@ impl Context {
         }
     }
 
-    pub fn supress<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        self.report.supress = true;
-        let v = f(self);
-        self.report.supress = false;
-        v
-    }
-
-    pub fn resolve(&mut self, p: &Program) -> Program {
-        Program::new(self.stmts(&p.stmts))
-    }
-
-    fn scoped<F, T>(&mut self, f: F) -> T
-    where
-        F: FnOnce(&mut Self) -> T,
-    {
-        self.stack.0.push(Scope::default());
-        let t = f(self);
-        self.stack.0.pop();
-        t
+    pub fn resolve(&mut self, program: &Program) -> Program {
+        self.map_program(&program)
     }
 
     fn not_found(&mut self, name: &Name, expected: &'static str) {
@@ -210,433 +634,22 @@ impl Context {
         );
     }
 
-    fn declare_stmt(&mut self, s: &Stmt) {
-        match s {
-            Stmt::Var(_) => {}
-            Stmt::Def(s) => self.stack.bind(s.name, Binding::Def(s.clone())),
-            Stmt::Trait(s) => self.stack.bind(s.name, Binding::Trait(s.clone())),
-            Stmt::Impl(_) => {}
-            Stmt::Struct(s) => self.stack.bind(s.name, Binding::Struct(s.clone())),
-            Stmt::Enum(s) => self.stack.bind(s.name, Binding::Enum(s.clone())),
-            Stmt::Type(s) => self.stack.bind(s.name, Binding::Type(s.clone())),
-            Stmt::Expr(_) => {}
-            Stmt::Err(_) => {}
-        }
-    }
-
-    fn stmts(&mut self, stmts: &[Stmt]) -> Vec<Stmt> {
-        stmts.iter().for_each(|s| self.declare_stmt(s));
-        stmts.iter().filter_map(|s| self.stmt(s)).collect()
-    }
-
-    fn stmt(&mut self, s: &Stmt) -> Option<Stmt> {
-        match s {
-            Stmt::Var(s) => Some(Stmt::Var(Rc::new(self.stmt_var(s)))),
-            Stmt::Def(s) => Some(Stmt::Def(Rc::new(self.stmt_def(s)))),
-            Stmt::Trait(s) => Some(Stmt::Trait(Rc::new(self.stmt_trait(s)))),
-            Stmt::Impl(s) => Some(Stmt::Impl(Rc::new(self.stmt_impl(s)))),
-            Stmt::Struct(s) => Some(Stmt::Struct(Rc::new(self.stmt_struct(s)))),
-            Stmt::Enum(s) => Some(Stmt::Enum(Rc::new(self.stmt_enum(s)))),
-            Stmt::Type(s) => Some(Stmt::Type(Rc::new(self.stmt_type(s)))),
-            Stmt::Expr(s) => Some(Stmt::Expr(Rc::new(self.expr(s)))),
-            Stmt::Err(s) => Some(Stmt::Err(*s)),
-        }
-    }
-
-    fn stmt_var(&mut self, s: &StmtVar) -> StmtVar {
-        let span = s.span;
-        let name = s.name;
-        let ty = self.ty(&s.ty);
-        let expr = self.expr(&s.expr);
-        self.stack.bind(name, Binding::Var);
-        StmtVar::new(span, name, ty, expr)
-    }
-
-    fn stmt_def(&mut self, s: &StmtDef) -> StmtDef {
-        self.scoped(|ctx| {
-            let span = s.span;
-            let name = s.name;
-            s.generics
-                .iter()
-                .for_each(|g| ctx.stack.bind(*g, Binding::Generic));
-            let generics = s.generics.clone();
-            let where_clause = s.where_clause.iter().map(|p| ctx.bound(p)).collect();
-            let params = s.params.iter().map(|p| ctx.param(p)).collect();
-            let ty = ctx.ty(&s.ty);
-            let body = ctx.body(&s.body);
-            StmtDef::new(span, name, generics, params, ty, where_clause, body)
-        })
-    }
-
-    fn body(&mut self, body: &StmtDefBody) -> StmtDefBody {
-        match body {
-            StmtDefBody::UserDefined(e) => StmtDefBody::UserDefined(self.expr(e)),
-            StmtDefBody::Builtin(b) => StmtDefBody::Builtin(b.clone()),
-        }
-    }
-
-    fn stmt_trait(&mut self, s: &StmtTrait) -> StmtTrait {
-        self.scoped(|ctx| {
-            s.generics
-                .iter()
-                .for_each(|g| ctx.stack.bind(*g, Binding::Generic));
-            let span = s.span;
-            let name = s.name;
-            let generics = s.generics.clone();
-            let body = s.where_clause.iter().map(|p| ctx.bound(p)).collect();
-            let defs = s.defs.iter().map(|d| Rc::new(ctx.trait_def(d))).collect();
-            let types = s.types.clone();
-            StmtTrait::new(span, name, generics, body, defs, types)
-        })
-    }
-
-    fn trait_def(&mut self, s: &StmtTraitDef) -> StmtTraitDef {
-        self.scoped(|ctx| {
-            s.generics
-                .iter()
-                .for_each(|g| ctx.stack.bind(*g, Binding::Generic));
-            let span = s.span;
-            let name = s.name;
-            let generics = s.generics.clone();
-            let params = s.params.iter().map(|p| ctx.param(p)).collect();
-            let ty = ctx.ty(&s.ty);
-            let where_clause = s.where_clause.iter().map(|p| ctx.bound(p)).collect();
-            StmtTraitDef::new(span, name, generics, params, ty, where_clause)
-        })
-    }
-
-    fn stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
-        self.scoped(|ctx| {
-            s.generics
-                .iter()
-                .for_each(|g| ctx.stack.bind(*g, Binding::Generic));
-            let span = s.span;
-            let generics = s.generics.clone();
-            let head = ctx.head(&s.head, &s.defs, &s.types);
-            let where_clause = s
-                .where_clause
-                .iter()
-                .map(|p| ctx.bound(p))
-                .collect::<Vec<_>>();
-            let defs = s.defs.iter().map(|d| Rc::new(ctx.stmt_def(d))).collect();
-            let types = s.types.iter().map(|t| Rc::new(ctx.stmt_type(t))).collect();
-            StmtImpl::new(span, generics, head, where_clause, defs, types)
-        })
-    }
-
-    fn stmt_struct(&mut self, s: &StmtStruct) -> StmtStruct {
-        self.scoped(|ctx| {
-            s.generics
-                .iter()
-                .for_each(|g| ctx.stack.bind(*g, Binding::Generic));
-            let span = s.span;
-            let name = s.name;
-            let generics = s.generics.clone();
-            let fields = s.fields.iter().map(|(x, t)| (*x, ctx.ty(t))).collect();
-            StmtStruct::new(span, name, generics, fields)
-        })
-    }
-
-    fn stmt_enum(&mut self, s: &StmtEnum) -> StmtEnum {
-        self.scoped(|ctx| {
-            s.generics
-                .iter()
-                .for_each(|g| ctx.stack.bind(*g, Binding::Generic));
-            let span = s.span;
-            let name = s.name;
-            let generics = s.generics.clone();
-            let variants = s.variants.iter().map(|(x, t)| (*x, ctx.ty(t))).collect();
-            StmtEnum::new(span, name, generics, variants)
-        })
-    }
-
-    fn stmt_type(&mut self, s: &StmtType) -> StmtType {
-        self.scoped(|ctx| {
-            s.generics
-                .iter()
-                .for_each(|g| ctx.stack.bind(*g, Binding::Generic));
-            let span = s.span;
-            let name = s.name;
-            let generics = s.generics.clone();
-            let ty = ctx.stmt_type_body(&s.body);
-            StmtType::new(span, name, generics, ty)
-        })
-    }
-
-    fn stmt_type_body(&mut self, s: &StmtTypeBody) -> StmtTypeBody {
-        match s {
-            StmtTypeBody::UserDefined(t) => StmtTypeBody::UserDefined(self.ty(t)),
-            StmtTypeBody::Builtin(b) => StmtTypeBody::Builtin(b.clone()),
-        }
-    }
-
-    fn param(&mut self, (x, t): &(Name, Type)) -> (Name, Type) {
-        self.stack.bind(*x, Binding::Var);
-        let t = self.ty(t);
-        (*x, t)
-    }
-
-    fn path(&mut self, p: &Path) -> Path {
-        let segments = p
-            .segments
-            .iter()
-            .map(|seg| {
-                let x = seg.name;
-                let ts = seg.ts.iter().map(|t| self.ty(t)).collect();
-                let xts = seg.xts.iter().map(|(x, t)| (*x, self.ty(t))).collect();
-                Segment::new(seg.span, x, ts, xts)
-            })
-            .collect();
-        Path::new(segments)
-    }
-
-    fn ty(&mut self, t: &Type) -> Type {
-        match t {
-            Type::Path(p) => self.resolve_type_path(p),
-            Type::Hole => Type::Hole,
-            Type::Generic(x) => Type::Generic(*x),
-            Type::Fun(ts, t) => {
-                let ts = ts.iter().map(|t| self.ty(t)).collect();
-                let t = self.ty(t);
-                Type::Fun(ts, Rc::new(t))
-            }
-            Type::Tuple(ts) => {
-                let ts = ts.iter().map(|t| self.ty(t)).collect();
-                Type::Tuple(ts)
-            }
-            Type::Record(xts) => {
-                let xts = xts.iter().map(|(x, t)| (*x, self.ty(t))).collect();
-                Type::Record(xts)
-            }
-            Type::Array(t, n) => {
-                let t = self.ty(t);
-                let n = *n;
-                Type::Array(Rc::new(t), n)
-            }
-            Type::Never => Type::Never,
-            Type::Err => Type::Err,
-            Type::Cons(x, ts) => Type::Cons(*x, ts.iter().map(|t| self.ty(t)).collect()),
-            Type::Alias(..) => unreachable!(),
-            Type::Assoc(..) => unreachable!(),
-            Type::Var(_, _) => unreachable!(),
-        }
-    }
-
-    fn expr(&mut self, e: &Expr) -> Expr {
-        match e {
-            Expr::Path(s, t, path) => {
-                let t = self.ty(t);
-                self.resolve_expr_path(*s, t, path)
-            }
-            Expr::Int(s, t, v) => {
-                let t = self.ty(t);
-                Expr::Int(*s, t, *v)
-            }
-            Expr::Float(s, t, v) => {
-                let t = self.ty(t);
-                Expr::Float(*s, t, *v)
-            }
-            Expr::Bool(s, t, v) => {
-                let t = self.ty(t);
-                Expr::Bool(*s, t, *v)
-            }
-            Expr::Tuple(s, t, es) => {
-                let t = self.ty(t);
-                let es = es.iter().map(|e| self.expr(e)).collect();
-                Expr::Tuple(*s, t, es)
-            }
-            Expr::Call(s, t, e, es) => self.expr_call(*s, t, e, es),
-            Expr::String(s, t, v) => {
-                let t = self.ty(t);
-                Expr::String(*s, t, *v)
-            }
-            Expr::Field(s, t, e, x) => {
-                let t = self.ty(t);
-                let e = self.expr(e);
-                Expr::Field(*s, t, Rc::new(e), *x)
-            }
-            Expr::Block(s, t, b) => {
-                let t = self.ty(t);
-                let b = self.block(b);
-                Expr::Block(*s, t, b)
-            }
-            Expr::Query(..) => {
-                todo!()
-            }
-            Expr::Index(s, t, e, i) => {
-                let t = self.ty(t);
-                let e = self.expr(e);
-                let i = *i;
-                Expr::Index(*s, t, Rc::new(e), i)
-            }
-            Expr::Array(s, t, es) => {
-                let t = self.ty(t);
-                let es = es.iter().map(|e| self.expr(e)).collect();
-                Expr::Array(*s, t, es)
-            }
-            Expr::Err(s, t) => {
-                let t = self.ty(t);
-                Expr::Err(*s, t)
-            }
-            Expr::Assign(s, t, e0, e1) => {
-                let t = self.ty(t);
-                let e0 = self.expr(e0);
-                let e1 = self.expr(e1);
-                let e1 = self.lvalue(&e1);
-                Expr::Assign(*s, t, Rc::new(e0), Rc::new(e1))
-            }
-            Expr::Return(s, t, e) => {
-                let t = self.ty(t);
-                let e = self.expr(e);
-                Expr::Return(*s, t, Rc::new(e))
-            }
-            Expr::Continue(s, t) => {
-                let t = self.ty(t);
-                Expr::Continue(*s, t)
-            }
-            Expr::Break(s, t) => {
-                let t = self.ty(t);
-                Expr::Break(*s, t)
-            }
-            Expr::Fun(s, t, ps, t1, e) => {
-                let t = self.ty(t);
-                let ps = ps.iter().map(|p| self.param(p)).collect();
-                let t1 = self.ty(t1);
-                let e = self.expr(e);
-                Expr::Fun(*s, t, ps, t1, Rc::new(e))
-            }
-            Expr::Match(s, t, e, xps) => {
-                let t = self.ty(t);
-                let e = self.expr(e);
-                let xps = xps.iter().map(|arm| self.arm(arm)).collect();
-                Expr::Match(*s, t, Rc::new(e), xps)
-            }
-            Expr::While(s, t, e, b) => {
-                let t = self.ty(t);
-                let e = self.expr(e);
-                let b = self.block(b);
-                Expr::While(*s, t, Rc::new(e), b)
-            }
-            Expr::Record(s, t, xes) => {
-                let t = self.ty(t);
-                let xes = xes.iter().map(|(x, e)| (*x, self.expr(e))).collect();
-                Expr::Record(*s, t, xes)
-            }
-            Expr::Char(s, t, c) => {
-                let t = self.ty(t);
-                Expr::Char(*s, t, *c)
-            }
-            Expr::Value(_, _) => unreachable!(),
-            Expr::For(_, _, _, _, _) => todo!(),
-            Expr::Def(..) => unreachable!(),
-            Expr::Var(..) => unreachable!(),
-            Expr::Struct(..) => unreachable!(),
-            Expr::Enum(..) => unreachable!(),
-            Expr::Assoc(..) => unreachable!(),
-            Expr::Unresolved(..) => unreachable!(),
-        }
-    }
-
-    fn block(&mut self, b: &Block) -> Block {
-        self.scoped(|ctx| {
-            let stmts = ctx.stmts(&b.stmts);
-            let e = ctx.expr(&b.expr);
-            Block::new(b.span, stmts, e)
-        })
-    }
-
-    fn arm(&mut self, a: &Arm) -> Arm {
-        self.scoped(|ctx| {
-            let p = ctx.pat(&a.p);
-            let e = ctx.expr(&a.e);
-            Arm::new(a.span, p, e)
-        })
-    }
-
     fn create_type_arg_holes(args: Vec<Type>, expected: usize) -> Vec<Type> {
         args.is_empty()
-            .then(|| (0..expected).map(|_| Type::Hole).collect())
+            .then(|| (0..expected).map(|_| Type::Unknown).collect())
             .unwrap_or(args)
-    }
-
-    fn expr_call(&mut self, s: Span, t1: &Type, e: &Expr, es: &[Expr]) -> Expr {
-        let t1 = self.ty(t1);
-        if let Expr::Path(_s, _t, path) = e {
-            let path = self.path(path);
-            let mut iter = path.segments.into_iter();
-            let seg0 = iter.next().unwrap();
-            match self.stack.get(&seg0.name) {
-                Some(Binding::Struct(stmt)) => {
-                    let Some(ts0) = seg0.try_create_unnamed_holes(stmt.generics.len()) else {
-                        self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                        return Expr::Err(s, t1);
-                    };
-                    if seg0.has_named_args() {
-                        self.unexpected_named_type_args(&seg0.name);
-                        return Expr::Err(s, t1);
-                    }
-                    if let Some(seg1) = iter.next() {
-                        self.unexpected_assoc("Struct", "field", &seg0.name, &seg1.name);
-                        return Expr::Err(s, t1);
-                    }
-                    let xes: Map<_, _> = es.iter().flat_map(|e| self.expr_field(e)).collect();
-                    if !fields_are_defined(&stmt.fields, &xes) {
-                        self.wrong_fields(&seg0.name, Some(&xes), &stmt.fields);
-                        return Expr::Err(s, t1);
-                    }
-                    return Expr::Struct(s, t1, seg0.name, ts0, xes);
-                }
-                Some(Binding::Enum(stmt)) => {
-                    if !seg0.has_optional_arity(stmt.generics.len()) {
-                        self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                        return Expr::Err(s, t1);
-                    }
-                    if seg0.has_named_args() {
-                        self.unexpected_named_type_args(&seg0.name);
-                        return Expr::Err(s, t1);
-                    }
-                    let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                    let Some(seg1) = iter.next() else {
-                        self.expected_assoc("variant", &seg0.name);
-                        return Expr::Err(s, t1);
-                    };
-                    if !stmt.variants.contains_key(&seg1.name) {
-                        self.unexpected_assoc("Enum", "variant", &seg0.name, &seg1.name);
-                        return Expr::Err(s, t1);
-                    }
-                    if !seg1.ts.is_empty() {
-                        self.wrong_arity(&seg1.name, seg1.ts.len(), 0);
-                        return Expr::Err(s, t1);
-                    }
-                    if let Some(seg2) = iter.next() {
-                        self.unexpected_assoc("Enum", "item", &seg1.name, &seg2.name);
-                        return Expr::Err(s, t1);
-                    }
-                    let es = es.iter().map(|e| self.expr(e)).collect::<Vec<_>>();
-                    let e = match es.len() {
-                        1 => es.into_iter().next().unwrap(),
-                        _ => Expr::Tuple(s, Type::Hole, es),
-                    };
-                    return Expr::Enum(s, t1, seg0.name, ts0, seg1.name, Rc::new(e));
-                }
-                _ => {}
-            }
-        }
-        let e = self.expr(e);
-        let es = es.iter().map(|e| self.expr(e)).collect();
-        Expr::Call(s, t1, Rc::new(e), es)
     }
 
     fn expr_field(&mut self, e: &Expr) -> Option<(Name, Expr)> {
         let s = e.span_of();
-        let t = self.ty(e.type_of());
+        let t = self.map_type(e.type_of());
         match e {
             Expr::Field(_, _, e, x) => {
-                let e = self.expr(e);
+                let e = self.map_expr(e);
                 Some((*x, e))
             }
             Expr::Assign(_, _, e0, e1) => {
-                let e1 = self.expr(e1);
+                let e1 = self.map_expr(e1);
                 if let Expr::Path(_, _, path) = &**e0 {
                     let mut iter = path.segments.iter();
                     let seg0 = iter.next().unwrap();
@@ -687,36 +700,6 @@ impl Context {
                 );
                 None
             }
-        }
-    }
-
-    fn pat(&mut self, p: &Pat) -> Pat {
-        let t = self.ty(p.type_of());
-        let s = p.span_of();
-        match p {
-            Pat::Path(_, _, path, args) => self.resolve_pat_path(s, t, path, args),
-            Pat::Var(_, _, x) => Pat::Var(s, t, *x),
-            Pat::Tuple(_, _, ts) => {
-                let ts = ts.iter().map(|t| self.pat(t)).collect();
-                Pat::Tuple(s, t, ts)
-            }
-            Pat::Int(_, _, v) => Pat::Int(s, t, *v),
-            Pat::String(_, _, v) => Pat::String(s, t, *v),
-            Pat::Wildcard(_, _) => Pat::Wildcard(s, t),
-            Pat::Bool(_, _, v) => Pat::Bool(s, t, *v),
-            Pat::Err(_, _) => Pat::Err(s, t),
-            Pat::Record(_, _, xps) => {
-                let xps = xps.iter().map(|(x, p)| (*x, self.pat(p))).collect();
-                Pat::Record(s, t, xps)
-            }
-            Pat::Or(_, _, p0, p1) => {
-                let p0 = self.pat(p0);
-                let p1 = self.pat(p1);
-                Pat::Or(s, t, Rc::new(p0), Rc::new(p1))
-            }
-            Pat::Char(_, _, c) => Pat::Char(s, t, *c),
-            Pat::Struct(..) => unreachable!(),
-            Pat::Enum(..) => unreachable!(),
         }
     }
 
@@ -779,43 +762,6 @@ impl Context {
         }
     }
 
-    // impl ... where Foo[T] { ... }
-    #[allow(clippy::type_complexity)]
-    fn bound(&mut self, bound: &Bound) -> Bound {
-        let span = bound.span();
-        match bound {
-            Bound::Path(_, path) => self.resolve_bound_path(span, path),
-            Bound::Trait(..) => unreachable!(),
-            Bound::Type(..) => unreachable!(),
-            Bound::Err(_) => Bound::Err(span),
-        }
-    }
-
-    // x = e;
-    // x.y = e;
-    // x[i] = e;
-    fn lvalue(&mut self, e: &Expr) -> Expr {
-        match e {
-            Expr::Var(s, t, x) => Expr::Var(*s, t.clone(), *x),
-            Expr::Field(s, t, e, x) => {
-                let e = self.lvalue(e.as_ref());
-                Expr::Field(*s, t.clone(), Rc::new(e), *x)
-            }
-            Expr::Index(s, t, e, i) => {
-                let e = self.lvalue(e.as_ref());
-                Expr::Index(*s, t.clone(), Rc::new(e), *i)
-            }
-            _ => {
-                self.report.err(
-                    e.span_of(),
-                    "Expression is not an lvalue.",
-                    "Only variables, field access, and tuple access are allowed.",
-                );
-                Expr::Err(e.span_of(), e.type_of().clone())
-            }
-        }
-    }
-
     #[allow(clippy::type_complexity)]
     fn resolve_head_path(
         &mut self,
@@ -824,7 +770,7 @@ impl Context {
         found_defs: &[Rc<StmtDef>],
         found_types: &[Rc<StmtType>],
     ) -> Bound {
-        let path = self.path(path);
+        let path = self.map_path(path);
         let mut iter = path.segments.into_iter();
         let seg0 = iter.next().unwrap();
         match self.stack.get(&seg0.name) {
@@ -860,7 +806,14 @@ impl Context {
                     );
                     return Bound::Err(span);
                 }
-                let xts = stmt.types.iter().map(|ty| (ty.name, Type::Hole)).collect();
+                let xts = found_types
+                    .iter()
+                    .map(|s| {
+                        let x = s.name;
+                        let t = self.map_type(s.body.as_udt().unwrap());
+                        (x, t)
+                    })
+                    .collect();
                 Bound::Trait(span, seg0.name, ts0, xts)
             }
             Some(Binding::Type(stmt)) => {
@@ -889,7 +842,7 @@ impl Context {
 
     #[allow(clippy::type_complexity)]
     fn resolve_bound_path(&mut self, span: Span, path: &Path) -> Bound {
-        let path = self.path(path);
+        let path = self.map_path(path);
         let mut iter = path.segments.into_iter();
         let seg0 = iter.next().unwrap();
         match self.stack.get(&seg0.name) {
@@ -918,266 +871,27 @@ impl Context {
         }
     }
 
-    fn resolve_expr_path(&mut self, s: Span, t: Type, path: &Path) -> Expr {
-        let t = self.ty(&t);
-        let path = self.path(path);
-        let mut iter = path.segments.into_iter();
-        let seg0 = iter.next().unwrap();
-        match self.stack.get(&seg0.name) {
-            Some(Binding::Var) => {
-                if !seg0.ts.is_empty() {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), 0);
-                    return Expr::Err(s, t.clone());
-                }
-                if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Variable", "item", &seg0.name, &seg1.name);
-                    return Expr::Err(s, t.clone());
-                }
-                Expr::Var(s, t, seg0.name)
+    // x = e;
+    // x.y = e;
+    // x[i] = e;
+    fn lvalue(&mut self, e: &Expr) -> Expr {
+        match e {
+            Expr::Var(s, t, x) => Expr::Var(*s, t.clone(), *x),
+            Expr::Field(s, t, e, x) => {
+                let e = self.lvalue(e.as_ref());
+                Expr::Field(*s, t.clone(), Rc::new(e), *x)
             }
-            Some(Binding::Def(stmt)) => {
-                if seg0.ts.len() != stmt.generics.len() && !seg0.ts.is_empty() {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Expr::Err(s, t);
-                }
-                if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Def", "item", &seg0.name, &seg1.name);
-                    return Expr::Err(s, t);
-                }
-                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                Expr::Def(s, t, seg0.name, ts0.clone())
+            Expr::Index(s, t, e, i) => {
+                let e = self.lvalue(e.as_ref());
+                Expr::Index(*s, t.clone(), Rc::new(e), *i)
             }
-            // Unit Struct
-            Some(Binding::Struct(stmt)) => {
-                if !seg0.has_optional_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Expr::Err(s, t.clone());
-                }
-                if !stmt.fields.is_empty() {
-                    self.wrong_fields::<Type, _>(&seg0.name, None, &stmt.fields);
-                    return Expr::Err(s, t.clone());
-                }
-                if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
-                    return Expr::Err(s, t);
-                }
-                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                let x0 = seg0.name;
-                Expr::Struct(s, t, x0, ts0.clone(), Map::new())
-            }
-            Some(Binding::Trait(stmt)) => {
-                if !seg0.has_optional_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Expr::Err(s, t);
-                }
-                if seg0.has_named_args() {
-                    self.unexpected_named_type_args(&seg0.name);
-                    return Expr::Err(s, t);
-                }
-                let Some(seg1) = iter.next() else {
-                    self.expected_assoc("function", &seg0.name);
-                    return Expr::Err(s, t);
-                };
-                let Some(def) = stmt.defs.iter().find(|def| def.name == seg1.name) else {
-                    self.unexpected_assoc("Trait", "function", &seg0.name, &seg1.name);
-                    return Expr::Err(s, t);
-                };
-                if !seg1.has_optional_arity(def.generics.len()) {
-                    self.wrong_arity(&seg1.name, seg1.ts.len(), def.generics.len());
-                    return Expr::Err(s, t);
-                }
-                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                let xts0 = stmt.types.iter().map(|t| (t.name, Type::Hole)).collect();
-                let b = Bound::Trait(s, seg0.name, ts0, xts0);
-                Expr::Assoc(s, t, b, seg1.name, seg1.ts.clone())
-            }
-            Some(Binding::Type(stmt)) => {
-                if !seg0.has_optional_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Expr::Err(s, t.clone());
-                }
-                let x0 = seg0.name;
-                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                let Some(seg1) = iter.next() else {
-                    self.expected_assoc("function", &seg0.name);
-                    return Expr::Err(s, t);
-                };
-                let ts1 = seg1.ts;
-                let x1 = seg1.name;
-                let b = Bound::Type(s, Rc::new(Type::Cons(x0, ts0)));
-                Expr::Assoc(s, t, b, x1, ts1)
-            }
-            Some(b) => {
-                self.unexpected(&seg0.name, b.name(), "expression");
-                Expr::Err(s, t.clone())
-            }
-            None => {
-                let ts = seg0.ts.iter().map(|t| self.ty(t)).collect();
-                Expr::Unresolved(s, t, seg0.name, ts)
-            }
-        }
-    }
-
-    fn resolve_type_path(&mut self, p: &Path) -> Type {
-        let p = self.path(p);
-        let mut iter = p.segments.into_iter();
-        let seg0 = iter.next().unwrap();
-        match self.stack.get(&seg0.name) {
-            Some(Binding::Generic) => {
-                if seg0.has_args() {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), 0);
-                    return Type::Err;
-                }
-                if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Generic", "item", &seg0.name, &seg1.name);
-                    return Type::Err;
-                }
-                Type::Generic(seg0.name)
-            }
-            Some(Binding::Enum(stmt)) => {
-                if !seg0.has_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Type::Err;
-                }
-                if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
-                    return Type::Err;
-                }
-                Type::Cons(seg0.name, seg0.ts.clone())
-            }
-            Some(Binding::Struct(stmt)) => {
-                if !seg0.has_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Type::Err;
-                }
-                if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
-                    return Type::Err;
-                }
-                Type::Cons(seg0.name, seg0.ts.clone())
-            }
-            Some(Binding::Type(stmt)) => {
-                if !seg0.has_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Type::Err;
-                }
-                if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
-                    return Type::Err;
-                }
-                match &stmt.body {
-                    StmtTypeBody::UserDefined(_) => Type::Alias(seg0.name, seg0.ts.clone()),
-                    StmtTypeBody::Builtin(_) => Type::Cons(seg0.name, seg0.ts.clone()),
-                }
-            }
-            Some(Binding::Trait(stmt)) => {
-                if !seg0.has_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Type::Err;
-                }
-                let Some(seg1) = iter.next() else {
-                    self.expected_assoc("type", &seg0.name);
-                    return Type::Err;
-                };
-                let Some(t) = stmt.types.iter().find(|t| t.name == seg1.name) else {
-                    self.unexpected_assoc("Trait", "type", &seg0.name, &seg1.name);
-                    return Type::Err;
-                };
-                if !seg1.has_arity(t.generics.len()) {
-                    self.wrong_arity(&seg1.name, seg1.ts.len(), t.generics.len());
-                    return Type::Err;
-                }
-                let xts = stmt.types.iter().map(|t| (t.name, Type::Hole)).collect();
-                let s = seg0.span + seg1.span;
-                let b = Bound::Trait(s, seg0.name, seg0.ts.clone(), xts);
-                Type::Assoc(b, seg1.name, seg1.ts.clone())
-            }
-            Some(b) => {
-                self.unexpected(&seg0.name, b.name(), "type");
-                Type::Err
-            }
-            None => {
-                self.not_found(&seg0.name, "type");
-                Type::Err
-            }
-        }
-    }
-
-    fn resolve_pat_path(
-        &mut self,
-        s: Span,
-        t: Type,
-        path: &Path,
-        args: &Option<Vec<PathPatField>>,
-    ) -> Pat {
-        let path = self.path(path);
-        let mut iter = path.segments.into_iter();
-        let seg0 = iter.next().unwrap();
-        match self.stack.get(&seg0.name) {
-            Some(Binding::Enum(stmt)) => {
-                if !seg0.has_optional_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Pat::Err(s, t.clone());
-                }
-                let ts0 = Self::create_type_arg_holes(seg0.ts, stmt.generics.len());
-                let Some(seg1) = iter.next() else {
-                    self.expected_assoc("variant", &seg0.name);
-                    return Pat::Err(s, t.clone());
-                };
-                if !stmt.variants.contains_key(&seg1.name) {
-                    self.unexpected_assoc("Enum", "variant", &seg0.name, &seg1.name);
-                    return Pat::Err(s, t.clone());
-                }
-                if !seg1.ts.is_empty() {
-                    self.wrong_arity(&seg1.name, seg1.ts.len(), 0);
-                    return Pat::Err(s, t.clone());
-                }
-                if let Some(seg2) = iter.next() {
-                    self.unexpected_assoc("Enum", "item", &seg1.name, &seg2.name);
-                    return Pat::Err(s, t.clone());
-                }
-                let Some(ps) = self.enum_pat_args(args, stmt.variants.is_empty()) else {
-                    return Pat::Err(s, t.clone());
-                };
-                let p = match ps.len() {
-                    1 => ps.into_iter().next().unwrap(),
-                    _ => Pat::Tuple(s, Type::Hole, ps),
-                };
-                Pat::Enum(s, t, seg0.name, ts0.clone(), seg1.name, Rc::new(p))
-            }
-            Some(Binding::Struct(stmt)) => {
-                if !seg0.has_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Pat::Err(s, t.clone());
-                }
-                let ts0 = Self::create_type_arg_holes(seg0.ts, stmt.generics.len());
-                if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
-                    return Pat::Err(s, t.clone());
-                }
-                let Some(xps) = self.struct_pat_args(args) else {
-                    return Pat::Err(s, t.clone());
-                };
-                if !fields_are_defined(&stmt.fields, &xps) {
-                    self.wrong_fields(&seg0.name, Some(&xps), &stmt.fields);
-                    return Pat::Err(s, t.clone());
-                }
-                Pat::Struct(s, t, seg0.name, ts0.clone(), xps)
-            }
-            Some(b) => {
-                self.unexpected(&seg0.name, b.name(), "pattern");
-                Pat::Err(s, t.clone())
-            }
-            None => {
-                if !seg0.ts.is_empty() {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), 0);
-                    return Pat::Err(s, t.clone());
-                }
-                if let Some(seg) = iter.next() {
-                    self.unexpected_assoc("Struct", "item", &seg0.name, &seg.name);
-                    return Pat::Err(s, t.clone());
-                }
-                Pat::Var(s, t, seg0.name)
+            _ => {
+                self.report.err(
+                    e.span_of(),
+                    "Expression is not an lvalue.",
+                    "Only variables, field access, and tuple access are allow on the left-hand of an assignment.",
+                );
+                Expr::Err(e.span_of(), e.type_of().clone())
             }
         }
     }
@@ -1220,7 +934,7 @@ impl Segment {
 
     fn try_create_unnamed_holes(&self, arity: usize) -> Option<Vec<Type>> {
         if self.ts.is_empty() {
-            Some(vec![Type::Hole; arity])
+            Some(vec![Type::Unknown; arity])
         } else if self.ts.len() == arity {
             Some(self.ts.clone())
         } else {
@@ -1239,7 +953,7 @@ impl Segment {
                 .iter()
                 .filter(|s| !self.xts.contains_key(&s.name))
                 .cloned()
-                .map(|s| (s.name, Type::Hole));
+                .map(|s| (s.name, Type::Unknown));
             Some(self.xts.clone().into_iter().chain(xts).collect())
         } else {
             None
@@ -1248,7 +962,7 @@ impl Segment {
 
     fn create_unnamed_holes(&self, n: usize) -> Vec<Type> {
         if self.ts.is_empty() {
-            vec![Type::Hole; n]
+            vec![Type::Unknown; n]
         } else {
             self.ts.clone()
         }

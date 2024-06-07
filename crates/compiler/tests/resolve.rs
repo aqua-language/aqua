@@ -40,7 +40,7 @@ use crate::common::type_bound;
 fn test_resolve_var0() {
     let a = Program::resolve("var x = 0; x;").unwrap();
     let b = program([
-        stmt_var("x", Type::Hole, expr_int("0")),
+        stmt_var("x", Type::Unknown, expr_int("0")),
         stmt_expr(expr_var("x")),
     ]);
     check!(a, b);
@@ -50,7 +50,7 @@ fn test_resolve_var0() {
 fn test_resolve_var_err0() {
     let a = Program::resolve("var x = 0; y;").unwrap();
     let b = program([
-        stmt_var("x", Type::Hole, expr_int("0")),
+        stmt_var("x", Type::Unknown, expr_int("0")),
         stmt_expr(expr_unresolved("y", [])),
     ]);
     check!(a, b);
@@ -438,8 +438,8 @@ fn test_resolve_struct4() {
         stmt_struct("S", ["T"], [("x", ty_gen("T"))]),
         stmt_var(
             "s",
-            Type::Hole,
-            expr_struct("S", [Type::Hole], [("x", expr_int("0"))]),
+            Type::Unknown,
+            expr_struct("S", [Type::Unknown], [("x", expr_int("0"))]),
         ),
     ]);
     check!(a, b);
@@ -595,7 +595,7 @@ fn test_resolve_type_assoc0() {
     .unwrap();
     let b = program([
         stmt_trait("Trait", [], [], [], [tr_type("A", [])]),
-        stmt_type("B", [], ty_assoc("Trait", [], [("A", Type::Hole)], "A", [])),
+        stmt_type("B", [], ty_assoc("Trait", [], [("A", Type::Unknown)], "A", [])),
     ]);
     check!(a, b);
 }
@@ -614,7 +614,7 @@ fn test_resolve_type_assoc1() {
         stmt_type(
             "B",
             [],
-            ty_assoc("Trait", [ty("i32")], [("A", Type::Hole)], "A", []),
+            ty_assoc("Trait", [ty("i32")], [("A", Type::Unknown)], "A", []),
         ),
     ]);
     check!(a, b);
@@ -634,7 +634,7 @@ fn test_resolve_type_assoc2() {
         stmt_type(
             "B",
             [],
-            ty_assoc("Trait", [ty("i32")], [("A", Type::Hole)], "A", [ty("i32")]),
+            ty_assoc("Trait", [ty("i32")], [("A", Type::Unknown)], "A", [ty("i32")]),
         ),
     ]);
     check!(a, b);
@@ -697,7 +697,7 @@ fn test_resolve_i32_abs() {
 fn test_resolve_vec_new1() {
     let a = Program::resolve("Vec::new();").unwrap();
     let b = program([stmt_expr(expr_call(
-        expr_assoc(type_bound(ty_con("Vec", [Type::Hole])), "new", []),
+        expr_assoc(type_bound(ty_con("Vec", [Type::Unknown])), "new", []),
         [],
     ))]);
     check!(a, b);

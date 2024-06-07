@@ -90,21 +90,6 @@ impl StmtDefBody {
     }
 }
 
-impl StmtTypeBody {
-    pub fn as_ty(&self) -> &Type {
-        let StmtTypeBody::UserDefined(t) = self else {
-            unreachable!()
-        };
-        t
-    }
-    pub fn as_builtin(&self) -> &BuiltinType {
-        let StmtTypeBody::Builtin(b) = self else {
-            unreachable!()
-        };
-        b
-    }
-}
-
 impl Path {
     pub fn as_name(&self) -> Option<&Name> {
         if self.segments.len() == 1 && self.segments[0].ts.is_empty() {

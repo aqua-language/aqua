@@ -22,6 +22,7 @@ impl Expr {
             Expr::Call(_, t, e, es) => Expr::Call(span, t, e, es),
             Expr::Block(_, t, b) => Expr::Block(span, t, b),
             Expr::Query(_, t, qs) => Expr::Query(span, t, qs),
+            Expr::QueryInto(_, t, qs, x, ts, es) => Expr::QueryInto(span, t, qs, x, ts, es),
             Expr::Field(_, t, e, x) => Expr::Field(span, t, e, x),
             Expr::Assoc(_, t, b, x1, ts1) => Expr::Assoc(span, t, b, x1, ts1),
             Expr::Index(_, t, e, i) => Expr::Index(span, t, e, i),
@@ -37,6 +38,15 @@ impl Expr {
             Expr::For(_, t, x, e, b) => Expr::For(span, t, x, e, b),
             Expr::Char(_, t, v) => Expr::Char(span, t, v),
             Expr::Unresolved(_, t, x, ts) => Expr::Unresolved(span, t, x, ts),
+            Expr::InfixBinaryOp(_, t, op, e0, e1) => Expr::InfixBinaryOp(span, t, op, e0, e1),
+            Expr::PrefixUnaryOp(_, t, op, e) => Expr::PrefixUnaryOp(span, t, op, e),
+            Expr::PostfixUnaryOp(_, t, op, e) => Expr::PostfixUnaryOp(span, t, op, e),
+            Expr::Annotate(_, t, e) => Expr::Annotate(span, t, e),
+            Expr::Paren(_, t, e) => Expr::Paren(span, t, e),
+            Expr::Dot(_, t, e, x, ts, es) => Expr::Dot(span, t, e, x, ts, es),
+            Expr::IfElse(_, t, e, b0, b1) => Expr::IfElse(span, t, e, b0, b1),
+            Expr::IntSuffix(_, t, v, x) => Expr::IntSuffix(span, t, v, x),
+            Expr::FloatSuffix(_, t, v, x) => Expr::FloatSuffix(span, t, v, x),
         }
     }
 }
@@ -54,9 +64,11 @@ impl Pat {
             Pat::String(_, t, v) => Pat::String(s, t, v),
             Pat::Bool(_, t, v) => Pat::Bool(s, t, v),
             Pat::Err(_, t) => Pat::Err(s, t),
-            Pat::Record(_, _, _) => todo!(),
-            Pat::Or(_, _, _, _) => todo!(),
-            Pat::Char(_, _, _) => todo!(),
+            Pat::Record(_, t, xps) => Pat::Record(s, t, xps),
+            Pat::Or(_, t, p0, p1) => Pat::Or(s, t, p0, p1),
+            Pat::Char(_, t, v) => Pat::Char(s, t, v),
+            Pat::Annotate(_, t, p) => Pat::Annotate(s, t, p),
+            Pat::Paren(_, t, p) => Pat::Paren(s, t, p),
         }
     }
 }
@@ -65,17 +77,15 @@ impl Query {
     #[inline(always)]
     pub fn with_span(self, s: Span) -> Query {
         match self {
-            Query::From(_, t, x, e) => Query::From(s, t, x, e),
-            Query::Where(_, t, e) => Query::Where(s, t, e),
-            Query::Select(_, t, xes) => Query::Select(s, t, xes),
-            Query::Into(_, t, x, ts, es) => Query::Into(s, t, x, ts, es),
-            Query::Join(_, t, x, e0, e1) => Query::Join(s, t, x, e0, e1),
-            Query::Group(_, t, xs, qs) => Query::Group(s, t, xs, qs),
-            Query::Over(_, t, e, qs) => Query::Over(s, t, e, qs),
-            Query::Order(_, t, x, o) => Query::Order(s, t, x, o),
-            Query::Var(_, t, x, e) => Query::Var(s, t, x, e),
-            Query::Compute(_, t, x, e0, e1) => Query::Compute(s, t, x, e0, e1),
-            Query::Err(_, t) => Query::Err(s, t),
+            Query::From(_, x, e) => Query::From(s, x, e),
+            Query::Where(_, e) => Query::Where(s, e),
+            Query::Select(_, xes) => Query::Select(s, xes),
+            Query::Join(_, x, e0, e1, e2) => Query::Join(s, x, e0, e1, e2),
+            Query::GroupOverCompute(_, x, e0, e1, aggs) => Query::GroupOverCompute(s, x, e0, e1, aggs),
+            Query::OverCompute(_, e, aggs) => Query::OverCompute(s, e, aggs),
+            Query::Var(_, x, e) => Query::Var(s, x, e),
+            Query::Err(_) => Query::Err(s),
+            Query::JoinOver(_, x, e0, e1, e2, e3) => Query::JoinOver(s, x, e0, e1, e2, e3),
         }
     }
 }

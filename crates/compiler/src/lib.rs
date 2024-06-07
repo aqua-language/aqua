@@ -1,10 +1,7 @@
 use std::rc::Rc;
 
-use ast::Expr;
-use ast::Pat;
 use ast::Program;
 use ast::Stmt;
-use ast::Type;
 use builtins::Value;
 use config::Config;
 use diag::Report;
@@ -19,6 +16,7 @@ pub mod diag;
 pub mod display;
 // pub mod ffi;
 pub mod builtins;
+pub mod desugar;
 pub mod infer;
 pub mod interpret;
 pub mod lexer;
@@ -27,15 +25,13 @@ pub mod lift;
 pub mod parser;
 pub mod print;
 pub mod resolve;
-pub mod visitor {
-    pub mod mapping_visitor;
-    pub mod unit_visitor;
-    pub mod mut_visitor;
+pub mod traversal {
+    pub mod mapper;
+    pub mod visitor;
 }
 pub mod collections {
     pub mod map;
     pub mod ordmap;
-    pub mod union_find;
 }
 // pub mod monomorphise;
 pub mod monomorphise;
@@ -49,14 +45,15 @@ pub mod symbol;
 #[derive(Debug)]
 pub struct Compiler {
     pub sources: Sources,
-    pub(crate) declarations: Vec<Stmt>,
-    resolve: resolve::Context,
+    pub declarations: Vec<Stmt>,
+    pub desugar: desugar::Context,
+    pub resolve: resolve::Context,
     #[allow(unused)]
-    lift: lift::Context,
-    infer: infer::Context,
-    interpret: interpret::Context,
-    monomorphise: monomorphise::Context,
-    report: Report,
+    pub lift: lift::Context,
+    pub infer: infer::Context,
+    pub interpret: interpret::Context,
+    pub monomorphise: monomorphise::Context,
+    pub report: Report,
     pub config: Config,
 }
 
@@ -79,6 +76,7 @@ impl Compiler {
         Compiler {
             declarations: Vec::new(),
             sources: Sources::new(),
+            desugar: desugar::Context::new(),
             resolve: resolve::Context::new(),
             lift: lift::Context::new(),
             infer: infer::Context::new(),
@@ -93,6 +91,7 @@ impl Compiler {
         self.declare();
         let stmts = self.declarations.drain(..).collect();
         let program = Program::new(stmts);
+        let program = self.desugar.desugar(&program);
         let program = self.resolve.resolve(&program);
         self.report.merge(&mut self.resolve.report);
         let program = self.lift.lift(&program);
@@ -100,8 +99,8 @@ impl Compiler {
         let program = self.infer.infer(&program);
         self.report.merge(&mut self.infer.report);
         let _program = self.monomorphise.monomorphise(&program);
-        // self.interpret.interpret(&program);
-        // self.report.merge(&mut self.interpret.report);
+        self.interpret.interpret(&program);
+        self.report.merge(&mut self.interpret.report);
         self
         // let result = self.inferrer.infer(&result);
         // let result = self.inferrer.infer(&result);
@@ -126,8 +125,14 @@ impl Compiler {
         self.recover(result)
     }
 
-    pub fn resolve(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
+    pub fn desugar(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
         let program = self.parse(name, input, |parser| parser.parse(Parser::program).unwrap())?;
+        let result = self.desugar.desugar(&program);
+        self.recover(result)
+    }
+
+    pub fn resolve(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
+        let program = self.desugar(name, input)?;
         let result = self.resolve.resolve(&program);
         self.report.merge(&mut self.resolve.report);
         self.recover(result)
@@ -162,7 +167,11 @@ impl Compiler {
         self.recover(value)
     }
 
-    fn recover<T>(&mut self, result: T) -> Result<T, Recovered<T>> {
+    pub fn add_report(&mut self, report: &mut Report) {
+        self.report.merge(report);
+    }
+
+    pub fn recover<T>(&mut self, result: T) -> Result<T, Recovered<T>> {
         if self.report.is_empty() {
             Ok(result)
         } else {
@@ -182,53 +191,6 @@ pub fn trim(s: &str) -> String {
         .map(|line| line.trim_end().to_string())
         .collect::<Vec<_>>()
         .join("\n")
-}
-
-impl Stmt {
-    pub fn parse(input: &str) -> Result<Stmt, Recovered<Stmt>> {
-        Compiler::default().parse("test", input, |parser| parser.parse(Parser::stmt).unwrap())
-    }
-}
-
-impl Expr {
-    pub fn parse(input: &str) -> Result<Expr, Recovered<Expr>> {
-        Compiler::default().parse("test", input, |parser| parser.parse(Parser::expr).unwrap())
-    }
-}
-
-impl Type {
-    pub fn parse(input: &str) -> Result<Type, Recovered<Type>> {
-        Compiler::default().parse("test", input, |parser| parser.parse(Parser::ty).unwrap())
-    }
-}
-
-impl Pat {
-    pub fn parse(input: &str) -> Result<Pat, Recovered<Pat>> {
-        Compiler::default().parse("test", input, |parser| parser.parse(Parser::pat).unwrap())
-    }
-}
-
-impl Program {
-    pub fn parse(input: &str) -> Result<Program, Recovered<Program>> {
-        Compiler::default().parse("test", input, |parser| {
-            parser.parse(Parser::program).unwrap()
-        })
-    }
-    pub fn resolve(input: &str) -> Result<Program, Recovered<Program>> {
-        Compiler::default().init().resolve("test", input)
-    }
-    pub fn lift(input: &str) -> Result<Program, Recovered<Program>> {
-        Compiler::default().init().lift("test", input)
-    }
-    pub fn infer(input: &str) -> Result<Program, Recovered<Program>> {
-        Compiler::default().init().infer("test", input)
-    }
-    pub fn monomorphise(input: &str) -> Result<Program, Recovered<Program>> {
-        Compiler::default().init().monomorphise("test", input)
-    }
-    pub fn interpret(input: &str) -> Result<Value, Recovered<Value>> {
-        Compiler::default().init().interpret("test", input)
-    }
 }
 
 pub struct Recovered<T> {

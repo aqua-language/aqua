@@ -23,3 +23,19 @@ fn test_monomorphise0() {
     )]);
     check!(a, b);
 }
+
+#[test]
+fn test_monomorphise1() {
+    let a = Program::monomorphise(
+        "trait Foo[T] { def foo(x: T): T; }
+         impl Foo[i32] { def foo(x: i32): i32 = 1; } 
+         1.foo();",
+    )
+    .unwrap();
+    let b = Program::monomorphise(
+        "def foo(x: i32): i32 = 1;
+         foo(1);",
+    )
+    .unwrap();
+    assert_eq!(a, b);
+}

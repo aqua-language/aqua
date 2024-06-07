@@ -1,5 +1,4 @@
 #![allow(unused)]
-use crate::ast::Arm;
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::Index;
@@ -272,6 +271,7 @@ impl<'a, 'b> Rust<'a, 'b> {
                 self.block(b)?;
             }
             Expr::Query(..) => unreachable!(),
+            Expr::QueryInto(_, _, _, _, _, _) => unreachable!(),
             Expr::Assoc(..) => unreachable!(),
             Expr::Index(_, _, e, i) => {
                 self.expr(e)?;
@@ -332,6 +332,15 @@ impl<'a, 'b> Rust<'a, 'b> {
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Char(_, _, _) => todo!(),
             Expr::Unresolved(_, _, _, _) => unreachable!(),
+            Expr::InfixBinaryOp(_, _, _, _, _) => unreachable!(),
+            Expr::PrefixUnaryOp(_, _, _, _) => unreachable!(),
+            Expr::PostfixUnaryOp(_, _, _, _) => unreachable!(),
+            Expr::Annotate(_, _, _) => unreachable!(),
+            Expr::Paren(_, _, _) => unreachable!(),
+            Expr::Dot(_, _, _, _, _, _) => unreachable!(),
+            Expr::IfElse(_, _, _, _, _) => unreachable!(),
+            Expr::IntSuffix(_, _, _, _) => unreachable!(),
+            Expr::FloatSuffix(_, _, _, _) => unreachable!(),
         }
         Ok(())
     }
@@ -347,12 +356,12 @@ impl<'a, 'b> Rust<'a, 'b> {
         })
     }
 
-    fn arm(&mut self, arm: &Arm) -> std::fmt::Result {
-        self.pat(&arm.p)?;
+    fn arm(&mut self, pe: &(Pat, Expr)) -> std::fmt::Result {
+        self.pat(&pe.0)?;
         self.space()?;
         self.punct("=>")?;
         self.space()?;
-        self.expr(&arm.e)
+        self.expr(&pe.1)
     }
 
     fn expr(&mut self, expr: &Expr) -> std::fmt::Result {
@@ -399,8 +408,8 @@ impl<'a, 'b> Rust<'a, 'b> {
                 self.type_args(ts)?;
             }
             Type::Assoc(..) => unreachable!(),
-            Type::Var(_, _) => unreachable!(),
-            Type::Hole => unreachable!(),
+            Type::Var(_) => unreachable!(),
+            Type::Unknown => unreachable!(),
             Type::Err => unreachable!(),
             Type::Generic(x) => unreachable!(),
             Type::Fun(ts, t) => {
@@ -430,6 +439,9 @@ impl<'a, 'b> Rust<'a, 'b> {
             }
             Type::Never => {
                 self.punct("!")?;
+            }
+            Type::Paren(t) => {
+                self.paren(|this| this.ty(t))?;
             }
         }
         Ok(())
@@ -494,6 +506,8 @@ impl<'a, 'b> Rust<'a, 'b> {
             Pat::Char(_, _, c) => {
                 write!(self.f, "{:?}", c)?;
             }
+            Pat::Annotate(_, _, _) => unreachable!(),
+            Pat::Paren(_, _, _) => unreachable!(),
         }
         Ok(())
     }

@@ -3,14 +3,13 @@ use std::rc::Rc;
 use crate::lexer::Span;
 use crate::symbol::Symbol;
 
-use super::Arm;
+use super::Aggr;
 use super::Block;
 use super::Bound;
 use super::Expr;
 use super::Index;
 use super::Map;
 use super::Name;
-use super::Pat;
 use super::Path;
 use super::Program;
 use super::Segment;
@@ -82,6 +81,21 @@ impl StmtTrait {
             defs,
             types,
         }
+    }
+
+    pub fn bound(&self) -> Bound {
+        Bound::Trait(
+            self.span,
+            self.name,
+            self.generics
+                .iter()
+                .map(|x| Type::Generic(*x))
+                .collect::<Vec<_>>(),
+            self.types
+                .iter()
+                .map(|s| (s.name, Type::Unknown))
+                .collect::<Map<_, _>>(),
+        )
     }
 }
 
@@ -199,12 +213,6 @@ impl Bound {
     }
 }
 
-impl Arm {
-    pub fn new(span: Span, p: Pat, e: Expr) -> Arm {
-        Arm { span, p, e }
-    }
-}
-
 impl Path {
     pub fn new(segments: Vec<Segment>) -> Self {
         Self { segments }
@@ -247,3 +255,12 @@ impl Index {
     }
 }
 
+impl Aggr {
+    pub fn new(x: Name, e0: Expr, e1: Expr) -> Aggr {
+        Aggr {
+            x,
+            e0: Rc::new(e0),
+            e1: Rc::new(e1),
+        }
+    }
+}

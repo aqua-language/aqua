@@ -149,6 +149,12 @@ impl<K, V> Deref for Map<K, V> {
     }
 }
 
+impl<K, V> std::ops::DerefMut for Map<K, V> {
+    fn deref_mut(&mut self) -> &mut [(K, V)] {
+        &mut self.0
+    }
+}
+
 impl<K, V> IntoIterator for Map<K, V> {
     type Item = (K, V);
     type IntoIter = std::vec::IntoIter<Self::Item>;

@@ -26,9 +26,10 @@
 //! * Expr, Stmt, Type, and Pat can become error nodes, which means that
 //!   they need to know when they should stop parsing. In other words, we need
 //!   to inform them of their follow set. Other nodes don't need to know this.
+
 use std::rc::Rc;
 
-use crate::ast::Arm;
+use crate::ast::Aggr;
 use crate::ast::Block;
 use crate::ast::Bound;
 use crate::ast::BuiltinDef;
@@ -55,11 +56,11 @@ use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Type;
+use crate::collections::map::Map;
 use crate::diag::Report;
 use crate::lexer::Span;
 use crate::lexer::Spanned;
 use crate::lexer::Token;
-use crate::collections::map::Map;
 
 pub struct Parser<'a, I>
 where
@@ -109,6 +110,8 @@ impl<'a, I> Parser<'a, I>
 where
     I: Iterator<Item = Spanned<Token>>,
 {
+    const FUEL: usize = 1000;
+
     pub fn new(input: &'a str, lexer: I) -> Self {
         let lexer = lexer.peekable();
         let report = Report::new();
@@ -134,7 +137,7 @@ where
 
     /// Skip the next token
     fn skip(&mut self) {
-        self.next();
+        self.lexer.next();
     }
 
     /// Get the text of a token
@@ -142,28 +145,25 @@ where
         t.text(self.input)
     }
 
-    #[allow(unused)]
-    fn debug(&mut self, follow: Token) {
-        println!("peek: {:?}", self.peek());
-        println!("follow: {:?}", follow);
-    }
-
-    #[allow(unused)]
-    fn debug2(&mut self, first: Token, follow: Token) {
-        println!("peek: {:?}", self.peek());
-        println!("first: {:?}", first);
-        println!("follow: {:?}", follow);
-    }
-
-    // Error recovery takes closing/opening braces into account
-    // 1. (+ [)]) => Recover at the second ) and report an error: Unexpected token +
-    // 2. <Open>  => Recover at the end of the file and report an error: Unmatched <Open>
-    fn recover(&mut self, first: Token, follow: Token, peek: bool) -> Result<Spanned<Token>, Span> {
+    /// Error recovery. Discards tokens until the first token is found,
+    /// or the end of the file is reached. Takes closing/opening braces into account:
+    /// 1. (+ [)]) => Recover at the second ) and report an error: Unexpected token +
+    /// 2. <Open>  => Recover at the end of the file and report an error: Unmatched <Open>
+    fn recover<const PEEK: bool>(
+        &mut self,
+        first: Token,
+        follow: Token,
+    ) -> Result<Spanned<Token>, Span> {
+        let mut fuel = Self::FUEL;
         loop {
             let t = self.peek();
             match t.v {
+                _ if fuel == 0 => {
+                    self.report.err(t.s, "Too many errors", "stopping here");
+                    return Err(t.s);
+                }
                 _ if first.contains(t.v) && self.delims.is_empty() => {
-                    return if peek { Ok(t) } else { Ok(self.next()) }
+                    return if PEEK { Ok(t) } else { Ok(self.next()) }
                 }
                 // TODO: Handle what happens when the follow set contains a closing token
                 _ if follow.contains(t.v) && self.delims.is_empty() => {
@@ -204,6 +204,7 @@ where
                 }
                 _ => self.skip(),
             }
+            fuel -= 1;
         }
     }
 
@@ -214,7 +215,7 @@ where
         } else {
             self.report
                 .err(t.s, format!("Unexpected token `{}`", t.v), first.expected());
-            self.recover(first, follow, false)
+            self.recover::<false>(first, follow)
         }
     }
 
@@ -225,7 +226,7 @@ where
         } else {
             self.report
                 .err(t.s, format!("Unexpected token `{}`", t.v), first.expected());
-            self.recover(first, follow, true)
+            self.recover::<true>(first, follow)
         }
     }
 
@@ -321,7 +322,6 @@ where
         }
     }
 
-    // )() => Skip the first
     fn group<T>(
         &mut self,
         open: Token,
@@ -592,7 +592,7 @@ where
         let t = self
             .optional(Self::ty_annot, Token::Colon, follow | Token::Eq)?
             .map(|x| x.v)
-            .unwrap_or(Type::Hole);
+            .unwrap_or(Type::Unknown);
         self.expect(Token::Eq, follow)?;
         let e = self.stmt_expr(follow)?;
         let s = t0.s + e.s;
@@ -761,7 +761,7 @@ where
             Ok(Spanned::new(s, (x.v, t.v)))
         } else {
             let s = x.s;
-            Ok(Spanned::new(s, (x.v, Type::Hole)))
+            Ok(Spanned::new(s, (x.v, Type::Unknown)))
         }
     }
 
@@ -772,7 +772,7 @@ where
 
     fn segment(&mut self, follow: Token) -> Result<Spanned<Segment>, Span> {
         let name = self.name(follow)?;
-        let args = self.ty_args(follow)?;
+        let args = self.trait_args(follow)?;
         if let Some(args) = args {
             let s = name.s + args.s;
             let seg = Segment::new(s, name.v, args.v.0, args.v.1.into());
@@ -784,14 +784,14 @@ where
         }
     }
 
-    fn ty_args(
+    fn trait_args(
         &mut self,
         follow: Token,
     ) -> Result<Option<Spanned<(Vec<Type>, Vec<(Name, Type)>)>>, Span> {
         let args = self.optional(
             |this, follow| {
                 this.brack(
-                    |this, follow| this.seq(Self::ty_arg, Token::Comma, Type::FIRST, follow),
+                    |this, follow| this.seq(Self::trait_arg, Token::Comma, Type::FIRST, follow),
                     follow,
                 )
                 .map(|x| x.flatten())
@@ -814,7 +814,7 @@ where
         }
     }
 
-    fn ty_arg(&mut self, follow: Token) -> Result<Spanned<Either<Type, (Name, Type)>>, Span> {
+    fn trait_arg(&mut self, follow: Token) -> Result<Spanned<Either<Type, (Name, Type)>>, Span> {
         let ty0 = self.ty(follow | Token::Eq)?;
         if let Some(name) = ty0.v.as_name() {
             if self.eat(Token::Eq, follow)? {
@@ -826,7 +826,7 @@ where
         Ok(Spanned::new(ty0.s, Either::A(ty0.v)))
     }
 
-    fn tys(&mut self, follow: Token) -> Result<Option<Spanned<Vec<Type>>>, Span> {
+    fn ty_args(&mut self, follow: Token) -> Result<Option<Spanned<Vec<Type>>>, Span> {
         self.seq(Self::ty, Token::Comma, Type::FIRST, follow)
     }
 
@@ -849,7 +849,7 @@ where
         Ok(Spanned::new(name.s + ty.s, (name.v, ty.v)))
     }
 
-    pub(crate) fn ty(&mut self, follow: Token) -> Result<Spanned<Type>, Span> {
+    pub fn ty(&mut self, follow: Token) -> Result<Spanned<Type>, Span> {
         self.ty_fallible(follow)
             .or_else(|s| Ok(Spanned::new(s, Type::Err)))
     }
@@ -895,16 +895,16 @@ where
             }
             Token::Underscore => {
                 self.skip();
-                Type::Hole
+                Type::Unknown
             }
             _ => unreachable!(),
         };
         Ok(Spanned::new(t.s, lhs))
     }
 
-    pub(crate) fn pat(&mut self, follow: Token) -> Result<Spanned<Pat>, Span> {
+    pub fn pat(&mut self, follow: Token) -> Result<Spanned<Pat>, Span> {
         self.pat_fallible(follow)
-            .or_else(|s| Ok(Spanned::new(s, Pat::Err(s, Type::Hole))))
+            .or_else(|s| Ok(Spanned::new(s, Pat::Err(s, Type::Unknown))))
     }
 
     fn pat_fallible(&mut self, follow: Token) -> Result<Spanned<Pat>, Span> {
@@ -914,7 +914,7 @@ where
     fn pat_bp(&mut self, follow: Token, min_bp: u8) -> Result<Spanned<Pat>, Span> {
         let mut lhs = self
             .pat_lhs(follow | Pat::FOLLOW)
-            .unwrap_or_else(|s| Spanned::new(s, Pat::Err(s, Type::Hole)));
+            .unwrap_or_else(|s| Spanned::new(s, Pat::Err(s, Type::Unknown)));
         loop {
             let op = self.start(follow | Pat::FOLLOW, follow)?;
             if let Some((lbp, ())) = op.v.postfix_bp() {
@@ -926,7 +926,7 @@ where
                         self.skip();
                         let ty = self.ty(follow)?;
                         let s = lhs.s + ty.s;
-                        lhs.v.with_ty(ty.v).with_span(s)
+                        Pat::Annotate(s, ty.v, Rc::new(lhs.v))
                     }
                     _ => unreachable!(),
                 };
@@ -941,8 +941,10 @@ where
                         self.skip();
                         let rhs = self.pat_bp(follow, rbp)?;
                         let s = lhs.s + rhs.s;
-                        lhs =
-                            Spanned::new(s, Pat::Or(s, Type::Hole, Rc::new(lhs.v), Rc::new(rhs.v)));
+                        lhs = Spanned::new(
+                            s,
+                            Pat::Or(s, Type::Unknown, Rc::new(lhs.v), Rc::new(rhs.v)),
+                        );
                     }
                     Token::Eq => break,
                     _ => unreachable!(),
@@ -962,9 +964,9 @@ where
                 if self.start(Token::LParen | follow, follow)?.v == Token::LParen {
                     let t = self.pat_args(follow)?;
                     let s = path.s + t.s;
-                    Pat::Path(s, Type::Hole, path.v, Some(t.v))
+                    Pat::Path(s, Type::Unknown, path.v, Some(t.v))
                 } else {
-                    Pat::Path(path.s, Type::Hole, path.v, None)
+                    Pat::Path(path.s, Type::Unknown, path.v, None)
                 }
             }
             Token::LParen => {
@@ -972,38 +974,38 @@ where
                 if t.v.len() == 1 {
                     t.v.into_iter().next().unwrap()
                 } else {
-                    Pat::Tuple(t.s, Type::Hole, t.v)
+                    Pat::Tuple(t.s, Type::Unknown, t.v)
                 }
             }
             Token::Record => {
                 let t0 = self.next();
                 let xps = self.pat_fields(follow)?;
                 let s = t0.s + xps.s;
-                Pat::Record(s, Type::Hole, xps.v.into())
+                Pat::Record(s, Type::Unknown, xps.v.into())
             }
             Token::Underscore => {
                 let t = self.next();
-                Pat::Wildcard(t.s, Type::Hole)
+                Pat::Wildcard(t.s, Type::Unknown)
             }
             Token::Int => {
                 let t = self.next();
                 let v = self.text(t).into();
-                Pat::Int(t.s, Type::Hole, v)
+                Pat::Int(t.s, Type::Unknown, v)
             }
             Token::String => {
                 let t = self.next();
                 let v = self.text(t).into();
-                Pat::String(t.s, Type::Hole, v)
+                Pat::String(t.s, Type::Unknown, v)
             }
             Token::Char => {
                 let t = self.next();
                 let v = self.text(t).chars().next().unwrap();
-                Pat::Char(t.s, Type::Hole, v)
+                Pat::Char(t.s, Type::Unknown, v)
             }
             Token::True | Token::False => {
                 let t = self.next();
                 let v = t.v == Token::True;
-                Pat::Bool(t.s, Type::Hole, v)
+                Pat::Bool(t.s, Type::Unknown, v)
             }
             _ => unreachable!(),
         };
@@ -1016,11 +1018,7 @@ where
     }
 
     fn expr_args(&mut self, follow: Token) -> Result<Spanned<Vec<Expr>>, Span> {
-        self.paren(
-            |p, follow| p.seq(Self::expr, Token::Comma, Expr::FIRST, follow),
-            follow,
-        )
-        .map(|x| x.flatten())
+        self.paren_seq(Self::expr, Expr::FIRST, follow)
     }
 
     fn ty_tuple(&mut self, follow: Token) -> Result<Spanned<Vec<Type>>, Span> {
@@ -1049,7 +1047,7 @@ where
 
     fn pat_arg(&mut self, follow: Token) -> Result<Spanned<PathPatField>, Span> {
         let mut p0 = self.pat(follow | Token::Eq)?;
-        if let Pat::Path(_, Type::Hole, path, fields) = &mut p0.v {
+        if let Pat::Path(_, Type::Unknown, path, fields) = &mut p0.v {
             let t1 = self.start(Token::Eq | follow, follow)?;
             if path.as_name().is_some() && fields.is_none() && t1.v == Token::Eq {
                 self.skip();
@@ -1082,12 +1080,12 @@ where
         } else {
             let s = x.s;
             let path = Path::new_name(x.v);
-            let p = Pat::Path(s, Type::Hole, path, None);
+            let p = Pat::Path(s, Type::Unknown, path, None);
             Ok(Spanned::new(s, (x.v, p)))
         }
     }
 
-    fn arms(&mut self, follow: Token) -> Result<Spanned<Vec<Arm>>, Span> {
+    fn arms(&mut self, follow: Token) -> Result<Spanned<Vec<(Pat, Expr)>>, Span> {
         self.brace(
             |p, follow| p.seq(Self::arm, Token::Comma, Pat::FIRST, follow),
             follow,
@@ -1095,14 +1093,19 @@ where
         .map(|x| x.flatten())
     }
 
-    fn arm(&mut self, follow: Token) -> Result<Spanned<Arm>, Span> {
+    fn arm(&mut self, follow: Token) -> Result<Spanned<(Pat, Expr)>, Span> {
         let p = self.pat(follow | Token::FatArrow)?;
         self.expect(Token::FatArrow, follow)?;
         let e = self.expr(follow)?;
         let s = p.s + e.s;
-        Ok(Spanned::new(p.s + e.s, Arm::new(s, p.v, e.v)))
+        Ok(Spanned::new(s, (p.v, e.v)))
     }
 
+    /// Block parsing is slightly intricate. We need to handle four cases:
+    /// * { } - An empty block
+    /// * { e } - A block with a single expression
+    /// * { s; ... } - A block with multiple statements
+    /// * { s ... } - Where s is an expression that ends
     fn block(&mut self, follow: Token) -> Result<Spanned<Block>, Span> {
         let t0 = self.expect(Token::LBrace, follow)?;
         let mut stmts = Vec::new();
@@ -1116,20 +1119,20 @@ where
                 Token::RBrace => {
                     let t1 = self.next();
                     let s = t0.s + t1.s;
-                    let expr = Expr::Tuple(s, Type::Hole, vec![]);
+                    let expr = Expr::Tuple(s, Type::Unknown, vec![]);
                     return Ok(Spanned::new(s, Block::new(s, stmts, expr)));
                 }
                 t if Expr::FIRST.contains(t) => {
                     let expr = self.expr(follow | Token::RBrace | Stmt::FIRST)?;
                     if self.eat(Token::SemiColon, follow | Stmt::FIRST | Token::RBrace)? {
-                        // {e;...}
+                        // { e; ... }
                         while self.eat(Token::SemiColon, follow | Stmt::FIRST | Token::RBrace)? {}
                         Stmt::Expr(Rc::new(expr.v))
                     } else if expr.v.is_braced() && self.peek().v != Token::RBrace {
                         // { { } ... }
                         Stmt::Expr(Rc::new(expr.v))
                     } else {
-                        // {e}
+                        // { e }
                         let t1 = self.expect(Token::RBrace, follow)?;
                         let s = t0.s + t1.s;
                         return Ok(Spanned::new(s, Block::new(s, stmts, expr.v)));
@@ -1141,9 +1144,9 @@ where
         }
     }
 
-    pub(crate) fn expr(&mut self, follow: Token) -> Result<Spanned<Expr>, Span> {
+    pub fn expr(&mut self, follow: Token) -> Result<Spanned<Expr>, Span> {
         self.expr_fallible(follow)
-            .or_else(|s| Ok(Spanned::new(s, Expr::Err(s, Type::Hole))))
+            .or_else(|s| Ok(Spanned::new(s, Expr::Err(s, Type::Unknown))))
     }
 
     fn expr_fallible(&mut self, follow: Token) -> Result<Spanned<Expr>, Span> {
@@ -1153,7 +1156,7 @@ where
     fn expr_bp(&mut self, follow: Token, min_bp: u8) -> Result<Spanned<Expr>, Span> {
         let mut lhs = self
             .expr_lhs(follow | Expr::FOLLOW | Stmt::FIRST)
-            .unwrap_or_else(|s| Spanned::new(s, Expr::Err(s, Type::Hole)));
+            .unwrap_or_else(|s| Spanned::new(s, Expr::Err(s, Type::Unknown)));
         loop {
             let follow = follow | Expr::FOLLOW | Stmt::FIRST;
             let op = self.start(follow, follow)?;
@@ -1176,13 +1179,13 @@ where
                     Token::LParen => {
                         let args = self.expr_args(follow)?;
                         let s = lhs.s + args.s;
-                        Expr::Call(s, Type::Hole, Rc::new(lhs.v), args.v)
+                        Expr::Call(s, Type::Unknown, Rc::new(lhs.v), args.v)
                     }
                     Token::Colon => {
                         self.skip();
                         let ty = self.ty(follow)?;
                         let s = lhs.s + ty.s;
-                        lhs.v.with_ty(ty.v).with_span(s)
+                        Expr::Annotate(s, ty.v, Rc::new(lhs.v))
                     }
                     Token::Dot => {
                         self.skip();
@@ -1193,25 +1196,22 @@ where
                                 let t =
                                     self.start(follow | Token::LBrack | Token::LParen, follow)?;
                                 if t.v == Token::LBrack || t.v == Token::LParen {
-                                    let tys = self.ty_args(follow | Token::LParen)?;
-                                    let args = self.expr_args(follow)?;
-                                    let s = lhs.s + args.s;
-                                    let es =
-                                        std::iter::once(lhs.v).chain(args.v).collect::<Vec<_>>();
-                                    let (ts, xts) = tys.map(|x| x.v).unwrap_or_default();
-                                    let path =
-                                        Path::new(vec![Segment::new(s, x.v, ts, xts.into())]);
-                                    let e = Expr::Path(lhs.s, Type::Hole, path);
-                                    Expr::Call(s, Type::Hole, Rc::new(e), es)
+                                    let ts = self
+                                        .ty_args(follow | Token::LParen)?
+                                        .map(|x| x.v)
+                                        .unwrap_or_default();
+                                    let es = self.expr_args(follow)?;
+                                    let s = lhs.s + es.s;
+                                    Expr::Dot(s, Type::Unknown, Rc::new(lhs.v), x.v, ts, es.v)
                                 } else {
                                     let s = lhs.s + x.s;
-                                    Expr::Field(s, Type::Hole, Rc::new(lhs.v), x.v)
+                                    Expr::Field(s, Type::Unknown, Rc::new(lhs.v), x.v)
                                 }
                             }
                             Token::Int => {
                                 let t = self.index(follow)?;
                                 let s = lhs.s + t.s;
-                                Expr::Index(s, Type::Hole, Rc::new(lhs.v), t.v)
+                                Expr::Index(s, Type::Unknown, Rc::new(lhs.v), t.v)
                             }
                             _ => unreachable!(),
                         }
@@ -1226,61 +1226,11 @@ where
                 }
                 self.skip();
                 let rhs = self.expr_bp(follow, rbp)?;
-                fn infix(
-                    s: Span,
-                    x0: &'static str,
-                    x1: &'static str,
-                    lhs: Expr,
-                    rhs: Expr,
-                ) -> Expr {
-                    let s0 = Segment::new_name(Name::new(s, x0));
-                    let s1 = Segment::new_name(Name::new(s, x1));
-                    let path = Path::new(vec![s0, s1]);
-                    let fun = Expr::Path(s, Type::Hole, path);
-                    Expr::Call(s, Type::Hole, Rc::new(fun), vec![lhs, rhs])
-                }
                 let s = lhs.s + rhs.s;
-                let e = match op.v {
-                    Token::Plus => infix(s, "Add", "add", lhs.v, rhs.v),
-                    Token::Minus => infix(s, "Sub", "sub", lhs.v, rhs.v),
-                    Token::Star => infix(s, "Mul", "mul", lhs.v, rhs.v),
-                    Token::Slash => infix(s, "Div", "div", lhs.v, rhs.v),
-                    Token::Gt => infix(s, "PartialOrd", "gt", lhs.v, rhs.v),
-                    Token::Ge => infix(s, "PartialOrd", "ge", lhs.v, rhs.v),
-                    Token::Lt => infix(s, "PartialOrd", "lt", lhs.v, rhs.v),
-                    Token::Le => infix(s, "PartialOrd", "le", lhs.v, rhs.v),
-                    Token::EqEq => infix(s, "PartialEq", "eq", lhs.v, rhs.v),
-                    Token::NotEq => infix(s, "PartialEq", "ne", lhs.v, rhs.v),
-                    Token::Eq => Expr::Assign(s, Type::Hole, Rc::new(lhs.v), Rc::new(rhs.v)),
-                    // a and b => match a { true => b, _ => false }
-                    Token::And => Expr::Match(
-                        s,
-                        Type::Hole,
-                        Rc::new(lhs.v),
-                        vec![
-                            Arm::new(s, Pat::Bool(s, Type::Hole, true), rhs.v),
-                            Arm::new(
-                                s,
-                                Pat::Wildcard(s, Type::Hole),
-                                Expr::Bool(s, Type::Hole, false),
-                            ),
-                        ],
-                    ),
-                    // a or b => match a { true => true, _ => b }
-                    Token::Or => Expr::Match(
-                        s,
-                        Type::Hole,
-                        Rc::new(lhs.v),
-                        vec![
-                            Arm::new(
-                                s,
-                                Pat::Bool(s, Type::Hole, true),
-                                Expr::Bool(s, Type::Hole, true),
-                            ),
-                            Arm::new(s, Pat::Wildcard(s, Type::Hole), rhs.v),
-                        ],
-                    ),
-                    _ => unreachable!(),
+                let e = if let Token::Eq = op.v {
+                    Expr::Assign(s, Type::Unknown, Rc::new(lhs.v), Rc::new(rhs.v))
+                } else {
+                    Expr::InfixBinaryOp(s, Type::Unknown, op.v, Rc::new(lhs.v), Rc::new(rhs.v))
                 };
                 lhs = Spanned::new(s, e);
             } else {
@@ -1296,19 +1246,19 @@ where
             Token::True | Token::False => {
                 self.skip();
                 let v = t0.v == Token::True;
-                Ok(Spanned::new(t0.s, Expr::Bool(t0.s, Type::Hole, v)))
+                Ok(Spanned::new(t0.s, Expr::Bool(t0.s, Type::Unknown, v)))
             }
             Token::Int => {
                 self.skip();
                 let v = self.text(t0).to_owned();
                 let s = t0.s;
-                Ok(Spanned::new(s, Expr::Int(s, Type::Hole, v.into())))
+                Ok(Spanned::new(s, Expr::Int(s, Type::Unknown, v.into())))
             }
             Token::Float => {
                 self.skip();
                 let v = self.text(t0).to_owned();
                 let s = t0.s;
-                Ok(Spanned::new(s, Expr::Float(s, Type::Hole, v.into())))
+                Ok(Spanned::new(s, Expr::Float(s, Type::Unknown, v.into())))
             }
             Token::IntSuffix => {
                 self.skip();
@@ -1317,12 +1267,9 @@ where
                 let i = v.chars().take_while(|c| c.is_digit(10)).count();
                 let l = &v[..i];
                 let r = smol_str::format_smolstr!("postfix_{}", &v[i..]);
-                let e0 = Expr::Int(s, Type::Hole, l.into());
-                let path = Path::new_name(Name::new(s, r));
-                let e1 = Expr::Path(s, Type::Hole, path);
                 Ok(Spanned::new(
                     s,
-                    Expr::Call(s, Type::Hole, Rc::new(e1), vec![e0]),
+                    Expr::IntSuffix(s, Type::Unknown, l.into(), r.into()),
                 ))
             }
             Token::FloatSuffix => {
@@ -1334,39 +1281,37 @@ where
                     .take_while(|c| c.is_digit(10) || *c == '.')
                     .count();
                 let l = &v[..i];
-                let r = smol_str::format_smolstr!("postfix_{}", &v[i..]);
-                let e0 = Expr::Float(s, Type::Hole, l.into());
-                let path = Path::new_name(Name::new(s, r));
-                let e1 = Expr::Path(s, Type::Hole, path);
+                let r = smol_str::format_smolstr!("suffix_{}", &v[i..]);
                 Ok(Spanned::new(
                     s,
-                    Expr::Call(s, Type::Hole, Rc::new(e1), vec![e0]),
+                    Expr::FloatSuffix(s, Type::Unknown, l.into(), r.into()),
                 ))
             }
             Token::String => {
                 self.skip();
                 let v = self.text(t0).to_owned();
                 let s = t0.s;
-                Ok(Spanned::new(s, Expr::String(s, Type::Hole, v.into())))
+                Ok(Spanned::new(s, Expr::String(s, Type::Unknown, v.into())))
             }
             Token::Char => {
                 self.skip();
                 let v = self.text(t0).chars().next().unwrap();
                 let s = t0.s;
-                Ok(Spanned::new(s, Expr::Char(s, Type::Hole, v)))
+                Ok(Spanned::new(s, Expr::Char(s, Type::Unknown, v)))
             }
             Token::Name => {
                 let path = self.path(follow)?;
                 let s = path.s;
-                Ok(Spanned::new(s, Expr::Path(s, Type::Hole, path.v)))
+                Ok(Spanned::new(s, Expr::Path(s, Type::Unknown, path.v)))
             }
             Token::LParen => {
                 let t = self.expr_args(follow)?;
                 let s = t.s;
                 if t.v.len() == 1 {
-                    Ok(Spanned::new(s, t.v.into_iter().next().unwrap()))
+                    let e = t.v.into_iter().next().unwrap();
+                    Ok(Spanned::new(s, Expr::Paren(t.s, Type::Unknown, Rc::new(e))))
                 } else {
-                    Ok(Spanned::new(s, Expr::Tuple(t.s, Type::Hole, t.v)))
+                    Ok(Spanned::new(s, Expr::Tuple(t.s, Type::Unknown, t.v)))
                 }
             }
             Token::Minus | Token::Not => {
@@ -1374,31 +1319,18 @@ where
                 let ((), rbp) = op.v.prefix_bp().unwrap();
                 let rhs = self.expr_bp(follow, rbp)?;
                 let s = op.s + rhs.s;
-
-                fn unop(s: Span, x0: &'static str, x1: &'static str, e: Expr) -> Expr {
-                    let s0 = Segment::new_name(Name::new(s, x0));
-                    let s1 = Segment::new_name(Name::new(s, x1));
-                    let path = Path::new(vec![s0, s1]);
-                    let fun = Expr::Path(s, Type::Hole, path);
-                    Expr::Call(s, Type::Hole, Rc::new(fun), vec![e])
-                }
-
-                let e = match op.v {
-                    Token::Minus => unop(op.s, "Neg", "neg", rhs.v),
-                    Token::Not => unop(op.s, "Not", "not", rhs.v),
-                    _ => unreachable!(),
-                };
+                let e = Expr::PrefixUnaryOp(s, Type::Unknown, op.v, Rc::new(rhs.v));
                 Ok(Spanned::new(s, e))
             }
             Token::Break => {
                 self.skip();
                 let s = t0.s;
-                Ok(Spanned::new(s, Expr::Break(s, Type::Hole)))
+                Ok(Spanned::new(s, Expr::Break(s, Type::Unknown)))
             }
             Token::Continue => {
                 self.skip();
                 let s = t0.s;
-                Ok(Spanned::new(s, Expr::Continue(s, Type::Hole)))
+                Ok(Spanned::new(s, Expr::Continue(s, Type::Unknown)))
             }
             Token::Return => {
                 self.skip();
@@ -1406,17 +1338,20 @@ where
                 if Expr::FIRST.contains(t.v) {
                     let e = self.expr(follow)?;
                     let s = t0.s + e.s;
-                    Ok(Spanned::new(s, Expr::Return(s, Type::Hole, Rc::new(e.v))))
+                    Ok(Spanned::new(
+                        s,
+                        Expr::Return(s, Type::Unknown, Rc::new(e.v)),
+                    ))
                 } else {
                     let s = t0.s;
-                    let e = Rc::new(Expr::Tuple(s, Type::Hole, vec![]));
-                    Ok(Spanned::new(s, Expr::Return(s, Type::Hole, e)))
+                    let e = Rc::new(Expr::Tuple(s, Type::Unknown, vec![]));
+                    Ok(Spanned::new(s, Expr::Return(s, Type::Unknown, e)))
                 }
             }
             Token::LBrack => {
                 let es = self.brack(Self::exprs, follow)?.flatten();
                 let s = t0.s + es.s;
-                Ok(Spanned::new(s, Expr::Array(s, Type::Hole, es.v)))
+                Ok(Spanned::new(s, Expr::Array(s, Type::Unknown, es.v)))
             }
             Token::Fun => {
                 let t = self.next();
@@ -1425,44 +1360,44 @@ where
                 let ty = if t1.v == Token::Colon {
                     self.ty_annot(follow | Token::Eq)?.v
                 } else {
-                    Type::Hole
+                    Type::Unknown
                 };
                 self.expect(Token::Eq, follow)?;
                 let e = self.expr(follow)?;
                 let s = t.s + e.s;
                 Ok(Spanned::new(
                     s,
-                    Expr::Fun(s, Type::Hole, params.v, ty, Rc::new(e.v)),
+                    Expr::Fun(s, Type::Unknown, params.v, ty, Rc::new(e.v)),
                 ))
             }
             Token::If => {
                 let t = self.next();
                 let e = self.expr(follow | Token::LBrace)?;
                 let b0 = self.block(follow | Token::Else | Stmt::FIRST)?;
-                let e0 = Expr::Block(b0.s, Type::Hole, b0.v);
+                let e0 = Expr::Block(b0.s, Type::Unknown, b0.v);
                 let (s, e1, s1) =
                     if self.start(follow | Token::Else | Stmt::FIRST, follow)?.v == Token::Else {
                         self.skip();
                         let b1 = self.block(follow)?;
                         let s = t.s + b1.s;
-                        let e1 = Expr::Block(b1.s, Type::Hole, b1.v);
+                        let e1 = Expr::Block(b1.s, Type::Unknown, b1.v);
                         (s, e1, b1.s)
                     } else {
                         let s = t.s + b0.s;
-                        let e1 = Expr::Tuple(s, Type::Hole, vec![]);
+                        let e1 = Expr::Tuple(s, Type::Unknown, vec![]);
                         (s, e1, b0.s)
                     };
-                let p0 = Pat::Bool(b0.s, Type::Hole, true);
-                let p1 = Pat::Wildcard(s1, Type::Hole);
+                let p0 = Pat::Bool(b0.s, Type::Unknown, true);
+                let p1 = Pat::Wildcard(s1, Type::Unknown);
                 // if a { b } else { c } => match a { true => b, _ => c }
                 // if a { b } => match a { true => b, _ => () }
                 Ok(Spanned::new(
                     s,
                     Expr::Match(
                         s,
-                        Type::Hole,
+                        Type::Unknown,
                         Rc::new(e.v),
-                        vec![Arm::new(s, p0, e0), Arm::new(s, p1, e1)],
+                        vec![(p0, e0), (p1, e1)].into(),
                     ),
                 ))
             }
@@ -1473,7 +1408,7 @@ where
                 let s = t.s + arms.s;
                 Ok(Spanned::new(
                     s,
-                    Expr::Match(s, Type::Hole, Rc::new(e.v), arms.v),
+                    Expr::Match(s, Type::Unknown, Rc::new(e.v), arms.v.into()),
                 ))
             }
             Token::While => {
@@ -1483,7 +1418,7 @@ where
                 let s = t.s + b.s;
                 Ok(Spanned::new(
                     s,
-                    Expr::While(s, Type::Hole, Rc::new(e.v), b.v),
+                    Expr::While(s, Type::Unknown, Rc::new(e.v), b.v),
                 ))
             }
             Token::For => {
@@ -1495,7 +1430,7 @@ where
                 let s = t.s + b.s;
                 Ok(Spanned::new(
                     s,
-                    Expr::For(s, Type::Hole, x.v, Rc::new(e.v), b.v),
+                    Expr::For(s, Type::Unknown, x.v, Rc::new(e.v), b.v),
                 ))
             }
             Token::Record => {
@@ -1507,26 +1442,49 @@ where
                     )
                     .map(|x| x.flatten())?;
                 let s = t.s + es.s;
-                Ok(Spanned::new(s, Expr::Record(s, Type::Hole, es.v.into())))
+                Ok(Spanned::new(s, Expr::Record(s, Type::Unknown, es.v.into())))
             }
             Token::From => {
                 let qs = self
                     .repeat(Self::query, Query::FIRST, follow | Query::FOLLOW)?
                     .unwrap();
-                let s = t0.s + qs.s;
-                Ok(Spanned::new(s, Expr::Query(s, Type::Hole, qs.v)))
+                if self.start(follow | Token::Into, follow)?.v == Token::Into {
+                    self.skip();
+                    let x = self.name(follow)?;
+                    let t = self.start(follow | Token::LBrack | Token::LParen, follow)?;
+                    if t.v == Token::LBrack || t.v == Token::LParen {
+                        let ts = self.optional(
+                            |p, follow| p.brack(Self::ty_args, follow).map(|x| x.flatten()),
+                            Token::LBrack,
+                            follow,
+                        )?;
+                        let ts = ts.map(|x| x.v).unwrap_or_default();
+                        let es = self.expr_args(follow)?;
+                        let s = qs.s + es.s;
+                        Ok(Spanned::new(
+                            s,
+                            Expr::QueryInto(s, Type::Unknown, qs.v, x.v, ts, es.v),
+                        ))
+                    } else {
+                        let s = qs.s + x.s;
+                        Ok(Spanned::new(s, Expr::Query(s, Type::Unknown, qs.v)))
+                    }
+                } else {
+                    let s = t0.s + qs.s;
+                    Ok(Spanned::new(s, Expr::Query(s, Type::Unknown, qs.v)))
+                }
             }
             Token::LBrace => {
                 let b = self.block(follow)?;
-                Ok(Spanned::new(b.s, Expr::Block(b.s, Type::Hole, b.v)))
+                Ok(Spanned::new(b.s, Expr::Block(b.s, Type::Unknown, b.v)))
             }
-            _ => unreachable!(),
+            t => unreachable!("{:?}", t),
         }
     }
 
     fn query(&mut self, follow: Token) -> Result<Spanned<Query>, Span> {
         self.query_fallible(follow)
-            .or_else(|s| Ok(Spanned::new(s, Query::Err(s, Type::Hole))))
+            .or_else(|s| Ok(Spanned::new(s, Query::Err(s))))
     }
 
     fn query_fallible(&mut self, follow: Token) -> Result<Spanned<Query>, Span> {
@@ -1538,48 +1496,42 @@ where
                 self.expect(Token::In, follow)?;
                 let e = self.expr(follow)?;
                 let s = t.s + e.s;
-                Ok(Spanned::new(
-                    s,
-                    Query::From(s, Type::Hole, x.v, Rc::new(e.v)),
-                ))
+                Ok(Spanned::new(s, Query::From(s, x.v, Rc::new(e.v))))
             }
             Token::Where => {
                 let t = self.next();
                 let e = self.expr(follow)?;
                 let s = t.s + e.s;
-                Ok(Spanned::new(s, Query::Where(s, Type::Hole, Rc::new(e.v))))
+                Ok(Spanned::new(s, Query::Where(s, Rc::new(e.v))))
             }
             Token::Select => {
                 let t = self.next();
                 let es = self.seq_nonempty(Self::field_expr, Token::Comma, Token::Name, follow)?;
                 let s = t.s + es.s;
-                Ok(Spanned::new(s, Query::Select(s, Type::Hole, es.v.into())))
-            }
-            Token::Compute => {
-                let t = self.next();
-                let x = self.name(follow | Token::Eq)?;
-                self.expect(Token::Eq, follow)?;
-                let e0 = self.expr(follow | Token::Of)?;
-                self.expect(Token::Of, follow)?;
-                let e1 = self.expr(follow)?;
-                let s = t.s + e1.s;
-                Ok(Spanned::new(
-                    s,
-                    Query::Compute(s, Type::Hole, x.v, Rc::new(e0.v), Rc::new(e1.v)),
-                ))
+                Ok(Spanned::new(s, Query::Select(s, es.v.into())))
             }
             Token::Group => {
                 let t = self.next();
-                let e = self.expr(follow | Token::LBrace)?;
-                let qs = self.brace(
-                    |p, follow| p.repeat(Self::query, Query::FIRST, follow),
-                    follow,
-                )?;
-                let s = t.s + qs.s;
+                let x = self.name(follow | Token::Eq)?;
+                self.expect(Token::Eq, follow | Expr::FIRST)?;
+                let e0 = self.expr(follow | Token::Over)?;
+                self.expect(Token::Over, follow)?;
+                let e1 = self.expr(follow | Token::Compute)?;
+                self.expect(Token::Compute, follow)?;
+                let aggs = self.seq_nonempty(Self::aggr, Token::Comma, Token::Name, follow)?;
+                let s = t.s + aggs.s;
                 Ok(Spanned::new(
                     s,
-                    Query::Group(s, Type::Hole, Rc::new(e.v), qs.v.unwrap_or_default()),
+                    Query::GroupOverCompute(s, x.v, Rc::new(e0.v), Rc::new(e1.v), aggs.v),
                 ))
+            }
+            Token::Over => {
+                let t = self.next();
+                let e = self.expr(follow | Token::Compute)?;
+                self.expect(Token::Compute, follow | Expr::FIRST)?;
+                let aggs = self.seq_nonempty(Self::aggr, Token::Comma, Token::Name, follow)?;
+                let s = t.s + e.s;
+                Ok(Spanned::new(s, Query::OverCompute(s, Rc::new(e.v), aggs.v)))
             }
             Token::Var => {
                 let t = self.next();
@@ -1587,44 +1539,20 @@ where
                 self.expect(Token::Eq, follow)?;
                 let e = self.expr(follow | Query::FIRST)?;
                 let s = t.s + e.s;
-                Ok(Spanned::new(
-                    s,
-                    Query::Var(s, Type::Hole, x.v, Rc::new(e.v)),
-                ))
+                Ok(Spanned::new(s, Query::Var(s, x.v, Rc::new(e.v))))
             }
-            Token::Into => {
-                let t = self.next();
-                let x = self.name(follow | Token::LParen)?;
-                let tys = self
-                    .optional(
-                        |this, follow| this.brack(Self::tys, follow).map(|x| x.flatten()),
-                        Token::LBrack,
-                        follow,
-                    )?
-                    .map(|x| x.v)
-                    .unwrap_or_default();
-                let es = self.expr_args(follow | Query::FIRST)?;
-                let s = t.s + es.s;
-                Ok(Spanned::new(s, Query::Into(s, Type::Hole, x.v, tys, es.v)))
-            }
-            Token::Over => {
-                let t = self.next();
-                let e = self.expr(follow | Token::LBrace)?;
-                let qs = self
-                    .brace(
-                        |p, follow| p.repeat(Self::query, Query::FIRST, follow),
-                        follow,
-                    )?
-                    .v
-                    .unwrap_or_default();
-                let s = t.s + e.s;
-                Ok(Spanned::new(
-                    s,
-                    Query::Over(s, Type::Hole, Rc::new(e.v), qs),
-                ))
-            }
-            _ => unreachable!(),
+            t => unreachable!("{:?}", t),
         }
+    }
+
+    fn aggr(&mut self, follow: Token) -> Result<Spanned<Aggr>, Span> {
+        let x = self.name(follow | Token::Eq)?;
+        self.expect(Token::Eq, follow)?;
+        let e0 = self.expr(follow | Token::Of)?;
+        self.expect(Token::Of, follow)?;
+        let e1 = self.expr(follow)?;
+        let s = x.s + e1.s;
+        Ok(Spanned::new(s, Aggr::new(x.v, e0.v, e1.v)))
     }
 
     fn field_expr(&mut self, follow: Token) -> Result<Spanned<(Name, Expr)>, Span> {
@@ -1639,27 +1567,9 @@ where
             _ => {
                 let path = Path::new_name(x.v);
                 let s = x.s;
-                Ok(Spanned::new(s, (x.v, Expr::Path(s, Type::Hole, path))))
+                Ok(Spanned::new(s, (x.v, Expr::Path(s, Type::Unknown, path))))
             }
         }
-    }
-}
-
-impl Expr {
-    fn is_braced(&self) -> bool {
-        matches!(
-            self,
-            Expr::Block(..) | Expr::Match(..) | Expr::While(..) | Expr::For(..)
-        ) || matches!(self, Expr::Query(_, _, qs) if qs.last().is_some_and(|x| x.is_braced()))
-    }
-}
-
-impl Query {
-    fn is_braced(&self) -> bool {
-        matches!(
-            self,
-            Query::Group(..) | Query::Over(..) | Query::Compute(..)
-        )
     }
 }
 
@@ -1687,7 +1597,7 @@ impl Expr {
         .or(Token::Char)
         .or(Token::LBrace)
         .or(Token::Record)
-        .or(Query::FIRST);
+        .or(Token::From);
     const FOLLOW: Token = Token::Eof
         .or(Token::And)
         .or(Token::DotDot)
@@ -1754,7 +1664,6 @@ impl Query {
         .or(Token::Group)
         .or(Token::Var)
         .or(Token::Select)
-        .or(Token::Compute)
-        .or(Token::Into);
-    const FOLLOW: Token = Expr::FOLLOW.or(Query::FIRST);
+        .or(Token::Compute);
+    const FOLLOW: Token = Expr::FOLLOW.or(Query::FIRST).or(Token::Into);
 }

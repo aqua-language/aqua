@@ -4,7 +4,7 @@ use super::Type;
 
 impl Expr {
     #[inline(always)]
-    pub fn with_ty(self, t: Type) -> Expr {
+    pub fn with_type(self, t: Type) -> Expr {
         match self {
             Expr::Int(s, _, v) => Expr::Int(s, t, v),
             Expr::Float(s, _, v) => Expr::Float(s, t, v),
@@ -15,6 +15,7 @@ impl Expr {
             Expr::Call(s, _, e, es) => Expr::Call(s, t, e, es),
             Expr::Block(s, _, b) => Expr::Block(s, t, b),
             Expr::Query(s, _, qs) => Expr::Query(s, t, qs),
+            Expr::QueryInto(s, _, qs, x, ts, es) => Expr::QueryInto(s, t, qs, x, ts, es),
             Expr::Struct(s, _, x, ts, xes) => Expr::Struct(s, t, x, ts, xes),
             Expr::Enum(s, _, x0, ts, x1, e) => Expr::Enum(s, t, x0, ts, x1, e),
             Expr::Field(s, _, e, x) => Expr::Field(s, t, e, x),
@@ -36,13 +37,22 @@ impl Expr {
             Expr::For(s, _, x, e, b) => Expr::For(s, t, x, e, b),
             Expr::Char(s, _, v) => Expr::Char(s, t, v),
             Expr::Unresolved(s, _, x, ts) => Expr::Unresolved(s, t, x, ts),
+            Expr::InfixBinaryOp(s, _, op, e0, e1) => Expr::InfixBinaryOp(s, t, op, e0, e1),
+            Expr::PrefixUnaryOp(s, _, op, e) => Expr::PrefixUnaryOp(s, t, op, e),
+            Expr::PostfixUnaryOp(s, _, op, e) => Expr::PostfixUnaryOp(s, t, op, e),
+            Expr::Annotate(s, _, e) => Expr::Annotate(s, t, e),
+            Expr::Paren(s, _, e) => Expr::Paren(s, t, e),
+            Expr::Dot(s, _, e, x, ts, es) => Expr::Dot(s, t, e, x, ts, es),
+            Expr::IfElse(s, _, e, b0, b1) => Expr::IfElse(s, t, e, b0, b1),
+            Expr::IntSuffix(s, _, v, x) => Expr::IntSuffix(s, t, v, x),
+            Expr::FloatSuffix(s, _, v, x) => Expr::FloatSuffix(s, t, v, x),
         }
     }
 }
 
 impl Pat {
     #[inline(always)]
-    pub fn with_ty(self, t: Type) -> Pat {
+    pub fn with_type(self, t: Type) -> Pat {
         match self {
             Pat::Path(s, _, p, a) => Pat::Path(s, t, p, a),
             Pat::Var(s, _, x) => Pat::Var(s, t, x),
@@ -54,9 +64,11 @@ impl Pat {
             Pat::Wildcard(s, _) => Pat::Wildcard(s, t),
             Pat::Bool(s, _, v) => Pat::Bool(s, t, v),
             Pat::Err(s, _) => Pat::Err(s, t),
-            Pat::Record(_, _, _) => todo!(),
-            Pat::Or(_, _, _, _) => todo!(),
-            Pat::Char(_, _, _) => todo!(),
+            Pat::Record(s, _, xps) => Pat::Record(s, t, xps),
+            Pat::Or(s, _, p0, p1) => Pat::Or(s, t, p0, p1),
+            Pat::Char(s, _, v) => Pat::Char(s, t, v),
+            Pat::Annotate(s, _, p) => Pat::Annotate(s, t, p),
+            Pat::Paren(s, _, p) => Pat::Paren(s, t, p),
         }
     }
 }

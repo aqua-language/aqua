@@ -8,12 +8,12 @@ use common::stmt_struct;
 use common::ty;
 use common::ty_fun;
 use common::ty_tuple;
-use common::unresolved::expr_add;
-use common::unresolved::expr_div;
-use common::unresolved::expr_eq;
-use common::unresolved::expr_mul;
-use common::unresolved::expr_ne;
-use common::unresolved::expr_sub;
+use common::desugared::expr_add;
+use common::desugared::expr_div;
+use common::desugared::expr_eq;
+use common::desugared::expr_mul;
+use common::desugared::expr_ne;
+use common::desugared::expr_sub;
 
 #[test]
 fn test_display_int0() {

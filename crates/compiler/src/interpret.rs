@@ -207,6 +207,7 @@ impl Context {
             }
             Expr::Block(_, _, b) => self.block(b),
             Expr::Query(_, _, _) => unreachable!(),
+            Expr::QueryInto(_, _, _, _, _, _) => todo!(),
             Expr::Match(_, _, _, _) => unreachable!(),
             Expr::Array(_, _, _) => unreachable!(),
             Expr::Assign(_, _, _, _) => unreachable!(),
@@ -224,6 +225,15 @@ impl Context {
             Expr::Value(_, _) => unreachable!(),
             Expr::For(_, _, _, _, _) => unreachable!(),
             Expr::Unresolved(_, _, _, _) => unreachable!(),
+            Expr::InfixBinaryOp(_, _, _, _, _) => todo!(),
+            Expr::PrefixUnaryOp(_, _, _, _) => todo!(),
+            Expr::PostfixUnaryOp(_, _, _, _) => todo!(),
+            Expr::Annotate(_, _, _) => unreachable!(),
+            Expr::Paren(_, _, _) => unreachable!(),
+            Expr::Dot(_, _, _, _, _, _) => unreachable!(),
+            Expr::IfElse(_, _, _, _, _) => unreachable!(),
+            Expr::IntSuffix(_, _, _, _) => unreachable!(),
+            Expr::FloatSuffix(_, _, _, _) => unreachable!(),
         }
     }
 }

@@ -317,14 +317,15 @@ impl<'de> DeserializeSeed<'de> for Seed {
                 deserializer.deserialize_tuple(n, ArrayVisitor(t.as_ref().clone()))
             }
             Type::Never => unreachable!(),
-            Type::Var(_, _) => Err(serde::de::Error::custom(
+            Type::Var(_) => Err(serde::de::Error::custom(
                 "Attempted to deserialize a type variable",
             )),
             Type::Err => unreachable!(),
             Type::Alias(_, _) => unreachable!(),
             Type::Assoc(_, _, _) => unreachable!(),
-            Type::Hole => unreachable!(),
-            Type::Path(_) => todo!(),
+            Type::Unknown => unreachable!(),
+            Type::Path(_) => unreachable!(),
+            Type::Paren(_) => unreachable!(),
         }
     }
 }
