@@ -5,7 +5,6 @@ use crate::symbol::Symbol;
 
 use super::Aggr;
 use super::Block;
-use super::Bound;
 use super::Expr;
 use super::Index;
 use super::Map;
@@ -25,11 +24,12 @@ use super::StmtTraitType;
 use super::StmtType;
 use super::StmtTypeBody;
 use super::StmtVar;
+use super::Trait;
 use super::Type;
 
 impl Program {
-    pub fn new(stmts: Vec<Stmt>) -> Program {
-        Program { stmts }
+    pub fn new(span: Span, stmts: Vec<Stmt>) -> Program {
+        Program { span, stmts }
     }
 }
 
@@ -37,8 +37,8 @@ impl StmtImpl {
     pub fn new(
         span: Span,
         generics: Vec<Name>,
-        head: Bound,
-        where_clause: Vec<Bound>,
+        head: Trait,
+        where_clause: Vec<Trait>,
         defs: Vec<Rc<StmtDef>>,
         types: Vec<Rc<StmtType>>,
     ) -> StmtImpl {
@@ -69,7 +69,7 @@ impl StmtTrait {
         span: Span,
         name: Name,
         generics: Vec<Name>,
-        where_clause: Vec<Bound>,
+        where_clause: Vec<Trait>,
         defs: Vec<Rc<StmtTraitDef>>,
         types: Vec<Rc<StmtTraitType>>,
     ) -> StmtTrait {
@@ -83,9 +83,8 @@ impl StmtTrait {
         }
     }
 
-    pub fn bound(&self) -> Bound {
-        Bound::Trait(
-            self.span,
+    pub fn bound(&self) -> Trait {
+        Trait::Cons(
             self.name,
             self.generics
                 .iter()
@@ -127,7 +126,7 @@ impl StmtDef {
         generics: Vec<Name>,
         params: Map<Name, Type>,
         ty: Type,
-        where_clause: Vec<Bound>,
+        where_clause: Vec<Trait>,
         body: StmtDefBody,
     ) -> StmtDef {
         StmtDef {
@@ -171,7 +170,7 @@ impl StmtTraitDef {
         generics: Vec<Name>,
         params: Map<Name, Type>,
         ty: Type,
-        where_clause: Vec<Bound>,
+        where_clause: Vec<Trait>,
     ) -> Self {
         Self {
             span,
@@ -190,25 +189,6 @@ impl Block {
             span,
             stmts,
             expr: Rc::new(expr),
-        }
-    }
-}
-
-impl Bound {
-    pub fn span(&self) -> Span {
-        match self {
-            Bound::Path(s, ..) => *s,
-            Bound::Trait(s, ..) => *s,
-            Bound::Type(s, ..) => *s,
-            Bound::Err(s) => *s,
-        }
-    }
-    pub fn get_type(&self, x: &Name) -> Option<&Type> {
-        match self {
-            Bound::Path(_, _) => None,
-            Bound::Trait(_, _, _, xts) => xts.get(x),
-            Bound::Type(_, _) => None,
-            Bound::Err(_) => None,
         }
     }
 }

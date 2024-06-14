@@ -39,7 +39,6 @@ pub enum Token {
     Compute,
     Continue,
     Def,
-    Deploy,
     Desc,
     Else,
     Enum,
@@ -54,10 +53,10 @@ pub enum Token {
     Into,
     Join,
     Match,
+    Let,
     Of,
     On,
     Or,
-    Order,
     Over,
     Return,
     Struct,
@@ -84,95 +83,52 @@ pub enum Token {
     Err,
 }
 
+#[test]
+fn test_token() {
+    let t = Token::Bar | Token::Colon | Token::ColonColon;
+    let mut iter = t.into_iter();
+    assert_eq!(iter.next(), Some(Token::Bar));
+    assert_eq!(iter.next(), Some(Token::Colon));
+    assert_eq!(iter.next(), Some(Token::ColonColon));
+}
+
+impl IntoIterator for Token {
+    type Item = Token;
+
+    type IntoIter = TokenIterator;
+
+    fn into_iter(self) -> Self::IntoIter {
+        TokenIterator { n: self.bits() }
+    }
+}
+
+pub struct TokenIterator {
+    n: u128,
+}
+
+impl Iterator for TokenIterator {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.n == 0 {
+            None
+        } else {
+            let trailing_zeros = self.n.trailing_zeros();
+            let bit = 1 << trailing_zeros;
+            self.n &= !bit;
+            Some(Token::from(bit))
+        }
+    }
+}
+
 impl Token {
     pub fn expected(self) -> String {
         let mut vec = Vec::new();
-        for v in [
-            // Punctuations
-            Token::Bar,
-            Token::Colon,
-            Token::ColonColon,
-            Token::Comma,
-            Token::Dot,
-            Token::DotDot,
-            Token::Eq,
-            Token::EqEq,
-            Token::FatArrow,
-            Token::Ge,
-            Token::Gt,
-            Token::LBrace,
-            Token::LBrack,
-            Token::LParen,
-            Token::Le,
-            Token::Lt,
-            Token::Minus,
-            Token::Not,
-            Token::NotEq,
-            Token::Plus,
-            Token::Question,
-            Token::RBrace,
-            Token::RBrack,
-            Token::RParen,
-            Token::SemiColon,
-            Token::Slash,
-            Token::Star,
-            Token::Underscore,
-            // Keywords
-            Token::And,
-            Token::As,
-            Token::Break,
-            Token::Compute,
-            Token::Continue,
-            Token::Def,
-            Token::Deploy,
-            Token::Desc,
-            Token::Else,
-            Token::Enum,
-            Token::False,
-            Token::For,
-            Token::From,
-            Token::Fun,
-            Token::Group,
-            Token::If,
-            Token::Impl,
-            Token::In,
-            Token::Into,
-            Token::Join,
-            Token::Match,
-            Token::Of,
-            Token::On,
-            Token::Or,
-            Token::Order,
-            Token::Over,
-            Token::Return,
-            Token::Select,
-            Token::Struct,
-            Token::Trait,
-            Token::True,
-            Token::Type,
-            Token::Var,
-            Token::Where,
-            Token::While,
-            Token::With,
-            // Literals
-            Token::Char,
-            Token::Code,
-            Token::Float,
-            Token::FloatSuffix,
-            Token::Int,
-            Token::IntSuffix,
-            Token::Name,
-            Token::String,
-            // Special
-            Token::Eof,
-            Token::Err,
-        ] {
-            if self.contains(v) {
-                if vec.len() > 5 {
-                    break;
-                }
-                vec.push(format!("`{}`", v.as_str()));
+        for token in self {
+            if vec.len() > 5 {
+                break;
             }
+            vec.push(format!("`{}`", token.as_str()));
         }
         if vec.len() == 1 {
             format!("Expected {}", vec.pop().unwrap())
@@ -220,7 +176,6 @@ impl Token {
             Token::Break => "break",
             Token::Continue => "continue",
             Token::Def => "def",
-            Token::Deploy => "deploy",
             Token::Desc => "desc",
             Token::Else => "else",
             Token::Enum => "enum",
@@ -237,12 +192,12 @@ impl Token {
             Token::Match => "match",
             Token::On => "on",
             Token::Or => "or",
-            Token::Order => "order",
             Token::Over => "over",
             Token::Return => "return",
             Token::Record => "record",
             Token::Select => "select",
             Token::Struct => "struct",
+            Token::Let => "let",
             Token::True => "true",
             Token::Type => "type",
             Token::Var => "var",
@@ -474,7 +429,6 @@ impl<'a> Lexer<'a> {
                             "compute" => Token::Compute,
                             "continue" => Token::Continue,
                             "def" => Token::Def,
-                            "deploy" => Token::Deploy,
                             "else" => Token::Else,
                             "enum" => Token::Enum,
                             "false" => Token::False,
@@ -488,10 +442,10 @@ impl<'a> Lexer<'a> {
                             "into" => Token::Into,
                             "join" => Token::Join,
                             "match" => Token::Match,
+                            "let" => Token::Let,
                             "of" => Token::Of,
                             "on" => Token::On,
                             "or" => Token::Or,
-                            "order" => Token::Order,
                             "over" => Token::Over,
                             "return" => Token::Return,
                             "select" => Token::Select,

@@ -1,3 +1,4 @@
+#[macro_use]
 mod common;
 
 use common::bound_err;
@@ -30,7 +31,6 @@ use common::ty_assoc;
 use common::ty_con;
 use common::ty_gen;
 use common::ty_tuple;
-use compiler::ast::Program;
 use compiler::ast::Type;
 
 use crate::common::expr_unresolved;
@@ -38,7 +38,7 @@ use crate::common::type_bound;
 
 #[test]
 fn test_resolve_var0() {
-    let a = Program::resolve("var x = 0; x;").unwrap();
+    let a = resolve_program!("var x = 0; x;").unwrap();
     let b = program([
         stmt_var("x", Type::Unknown, expr_int("0")),
         stmt_expr(expr_var("x")),
@@ -48,7 +48,7 @@ fn test_resolve_var0() {
 
 #[test]
 fn test_resolve_var_err0() {
-    let a = Program::resolve("var x = 0; y;").unwrap();
+    let a = resolve_program!("var x = 0; y;").unwrap();
     let b = program([
         stmt_var("x", Type::Unknown, expr_int("0")),
         stmt_expr(expr_unresolved("y", [])),
@@ -58,7 +58,7 @@ fn test_resolve_var_err0() {
 
 #[test]
 fn test_resolve_def0() {
-    let a = Program::resolve("def f(): i32 = 0; f();").unwrap();
+    let a = resolve_program!("def f(): i32 = 0; f();").unwrap();
     let b = program([
         stmt_def("f", [], [], ty("i32"), [], expr_int("0")),
         stmt_expr(expr_call(expr_def("f", []), [])),
@@ -68,7 +68,7 @@ fn test_resolve_def0() {
 
 #[test]
 fn test_resolve_def1() {
-    let a = Program::resolve("def f(x: i32): i32 = x;").unwrap();
+    let a = resolve_program!("def f(x: i32): i32 = x;").unwrap();
     let b = program([stmt_def(
         "f",
         [],
@@ -82,7 +82,7 @@ fn test_resolve_def1() {
 
 #[test]
 fn test_resolve_def2() {
-    let a = Program::resolve("def f(x: i32): i32 = f(x);").unwrap();
+    let a = resolve_program!("def f(x: i32): i32 = f(x);").unwrap();
     let b = program([stmt_def(
         "f",
         [],
@@ -96,11 +96,11 @@ fn test_resolve_def2() {
 
 #[test]
 fn test_resolve_def3() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "def f(x: i32): i32 = {
              def g(y: i32): i32 = 1;
              g(x)
-         }",
+         }"
     )
     .unwrap();
     let b = program([stmt_def(
@@ -126,7 +126,7 @@ fn test_resolve_def3() {
 
 #[test]
 fn test_resolve_def_param1() {
-    let a = Program::resolve("def f(): i32 = x;").unwrap();
+    let a = resolve_program!("def f(): i32 = x;").unwrap();
     let b = program([stmt_def(
         "f",
         [],
@@ -140,7 +140,7 @@ fn test_resolve_def_param1() {
 
 #[test]
 fn test_resolve_def_generic() {
-    let a = Program::resolve("def f[T](x: T): T = x;").unwrap();
+    let a = resolve_program!("def f[T](x: T): T = x;").unwrap();
     let b = program([stmt_def(
         "f",
         ["T"],
@@ -154,9 +154,9 @@ fn test_resolve_def_generic() {
 
 #[test]
 fn test_resolve_type0() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "type T = i32;
-         var x: T = 0;",
+         var x: T = 0;"
     )
     .unwrap();
     let b = program([
@@ -168,9 +168,9 @@ fn test_resolve_type0() {
 
 #[test]
 fn test_resolve_type1() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "type T[U] = (i32, U);
-         var x: T[i32] = (0, 0);",
+         var x: T[i32] = (0, 0);"
     )
     .unwrap();
     let b = program([
@@ -186,9 +186,9 @@ fn test_resolve_type1() {
 
 #[test]
 fn test_resolve_type2() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "type T[U] = (i32, U);
-         var x: T[i32, i32] = (0, 0);",
+         var x: T[i32, i32] = (0, 0);"
     )
     .unwrap_err();
     let b = program([
@@ -210,10 +210,10 @@ fn test_resolve_type2() {
 
 #[test]
 fn test_resolve_trait0() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "trait Trait[T] {
              def f(x:T): T;
-         }",
+         }"
     )
     .unwrap();
     let b = program([stmt_trait(
@@ -228,11 +228,11 @@ fn test_resolve_trait0() {
 
 #[test]
 fn test_resolve_trait_assoc0() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "trait Trait[T] {
              def f(x:T): T;
          }
-         def g[T](x:T): T where Trait[T] = f(x);",
+         def g[T](x:T): T where Trait[T] = f(x);"
     )
     .unwrap();
     let b = program([
@@ -257,13 +257,13 @@ fn test_resolve_trait_assoc0() {
 
 #[test]
 fn test_resolve_trait_impl0() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "trait Trait[T] {
              def f(x:T): T;
          }
          impl Trait[i32] {
              def f(x:i32): i32 = x;
-         }",
+         }"
     )
     .unwrap();
     let b = program([
@@ -295,13 +295,13 @@ fn test_resolve_trait_impl0() {
 #[ignore]
 #[test]
 fn test_resolve_trait_impl1() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "trait Trait[T] {
              type A[U];
          }
          impl Trait[i32] {
              type A[U] = U;
-         }",
+         }"
     )
     .unwrap();
     let b = program([
@@ -319,13 +319,13 @@ fn test_resolve_trait_impl1() {
 
 #[test]
 fn test_resolve_trait_impl2() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "trait Trait[T] {
              def f(x:T): T;
          }
          impl Trait[i32] {
              def g(x:i32): i32 = x;
-         }",
+         }"
     )
     .unwrap_err();
     let b = program([
@@ -366,16 +366,16 @@ fn test_resolve_trait_impl2() {
 
 #[test]
 fn test_resolve_struct0() {
-    let a = Program::resolve("struct S[T](x:T);").unwrap();
+    let a = resolve_program!("struct S[T](x:T);").unwrap();
     let b = program([stmt_struct("S", ["T"], [("x", ty_gen("T"))])]);
     check!(a, b);
 }
 
 #[test]
 fn test_resolve_struct1() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "struct S[T](x:T);
-         var s: S[i32] = S[i32](x=0);",
+         var s: S[i32] = S[i32](x=0);"
     )
     .unwrap();
     let b = program([
@@ -391,9 +391,9 @@ fn test_resolve_struct1() {
 
 #[test]
 fn test_resolve_struct2() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "struct S(x:i32);
-         S(y=0);",
+         S(y=0);"
     )
     .unwrap_err();
     let b = program([
@@ -415,9 +415,9 @@ fn test_resolve_struct2() {
 
 #[test]
 fn test_resolve_struct3() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "struct S;
-         var s: S = S;",
+         var s: S = S;"
     )
     .unwrap();
     let b = program([
@@ -429,9 +429,9 @@ fn test_resolve_struct3() {
 
 #[test]
 fn test_resolve_struct4() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "struct S[T](x:T);
-         var s = S(x=0);",
+         var s = S(x=0);"
     )
     .unwrap();
     let b = program([
@@ -447,16 +447,16 @@ fn test_resolve_struct4() {
 
 #[test]
 fn test_resolve_enum0() {
-    let a = Program::resolve("enum E[T] { A(T) }").unwrap();
+    let a = resolve_program!("enum E[T] { A(T) }").unwrap();
     let b = program([stmt_enum("E", ["T"], [("A", ty_gen("T"))])]);
     check!(a, b);
 }
 
 #[test]
 fn test_resolve_enum1() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "enum E[T] { A(T) }
-         var e: E[i32] = E[i32]::A(0);",
+         var e: E[i32] = E[i32]::A(0);"
     )
     .unwrap();
     let b = program([
@@ -472,9 +472,9 @@ fn test_resolve_enum1() {
 
 #[test]
 fn test_resolve_unordered0() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "def f(): i32 = g();
-         def g(): i32 = 0;",
+         def g(): i32 = 0;"
     )
     .unwrap();
     let b = program([
@@ -486,9 +486,9 @@ fn test_resolve_unordered0() {
 
 #[test]
 fn test_resolve_unordered1() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "def f(): i32 = g();
-         def g(): i32 = f();",
+         def g(): i32 = f();"
     )
     .unwrap();
     let b = program([
@@ -500,9 +500,9 @@ fn test_resolve_unordered1() {
 
 #[test]
 fn test_resolve_unordered2() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "type A = B;
-         type B = A;",
+         type B = A;"
     )
     .unwrap();
     let b = program([
@@ -514,11 +514,11 @@ fn test_resolve_unordered2() {
 
 #[test]
 fn test_resolve_expr_assoc0() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "trait Trait {
              def f(x:i32): i32;
          }
-         Trait::f(0);",
+         Trait::f(0);"
     )
     .unwrap();
     let b = program([
@@ -539,11 +539,11 @@ fn test_resolve_expr_assoc0() {
 
 #[test]
 fn test_resolve_expr_assoc1() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "trait Trait {
              def f(x:i32): i32;
          }
-         f(0);",
+         f(0);"
     )
     .unwrap();
     let b = program([
@@ -561,11 +561,11 @@ fn test_resolve_expr_assoc1() {
 
 #[test]
 fn test_resolve_expr_assoc2() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "trait Trait[A] {
              def f(x:A): A;
          }
-         Trait[i32]::f(0);",
+         Trait[i32]::f(0);"
     )
     .unwrap();
     let b = program([
@@ -586,11 +586,11 @@ fn test_resolve_expr_assoc2() {
 
 #[test]
 fn test_resolve_type_assoc0() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "trait Trait {
              type A;
          }
-         type B = Trait::A;",
+         type B = Trait::A;"
     )
     .unwrap();
     let b = program([
@@ -602,11 +602,11 @@ fn test_resolve_type_assoc0() {
 
 #[test]
 fn test_resolve_type_assoc1() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "trait Trait[T] {
              type A;
          }
-         type B = Trait[i32]::A;",
+         type B = Trait[i32]::A;"
     )
     .unwrap();
     let b = program([
@@ -622,11 +622,11 @@ fn test_resolve_type_assoc1() {
 
 #[test]
 fn test_resolve_type_assoc2() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "trait Trait[T] {
              type A[U];
          }
-         type B = Trait[i32]::A[i32];",
+         type B = Trait[i32]::A[i32];"
     )
     .unwrap();
     let b = program([
@@ -642,10 +642,10 @@ fn test_resolve_type_assoc2() {
 
 #[test]
 fn test_resolve_type_impl() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "impl i32 {
              def zero(): i32 = 0;
-         }",
+         }"
     )
     .unwrap();
     let b = program([stmt_impl(
@@ -660,10 +660,10 @@ fn test_resolve_type_impl() {
 
 #[test]
 fn test_resolve_type_impl2() {
-    let a = Program::resolve(
+    let a = resolve_program!(
         "impl[T] Vec[T] {
              def push(v:Vec[T], x:T): () = ();
-         }",
+         }"
     )
     .unwrap();
     let b = program([stmt_impl(
@@ -685,7 +685,7 @@ fn test_resolve_type_impl2() {
 
 #[test]
 fn test_resolve_i32_abs() {
-    let a = Program::resolve("1.abs();").unwrap();
+    let a = resolve_program!("1.abs();").unwrap();
     let b = program([stmt_expr(expr_call(
         expr_unresolved("abs", []),
         [expr_int("1")],
@@ -695,7 +695,7 @@ fn test_resolve_i32_abs() {
 
 #[test]
 fn test_resolve_vec_new1() {
-    let a = Program::resolve("Vec::new();").unwrap();
+    let a = resolve_program!("Vec::new();").unwrap();
     let b = program([stmt_expr(expr_call(
         expr_assoc(type_bound(ty_con("Vec", [Type::Unknown])), "new", []),
         [],
@@ -705,7 +705,7 @@ fn test_resolve_vec_new1() {
 
 #[test]
 fn test_resolve_vec_new2() {
-    let a = Program::resolve("Vec[i32]::new();").unwrap();
+    let a = resolve_program!("Vec[i32]::new();").unwrap();
     let b = program([stmt_expr(expr_call(
         expr_assoc(type_bound(ty_con("Vec", [ty("i32")])), "new", []),
         [],

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::Block;
 use crate::ast::Expr;
+use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Program;
 use crate::ast::Stmt;
@@ -47,7 +48,7 @@ impl Stack {
     }
 
     fn bind_val(&mut self, name: Name, val: Value) {
-        self.locals.last_mut().unwrap().0.push((name, val));
+        self.locals.last_mut().unwrap().0.insert(name, val);
     }
 
     fn get_def(&self, name: &Name) -> &StmtDef {
@@ -65,11 +66,11 @@ impl Stack {
 }
 
 #[derive(Debug)]
-struct Scope(Vec<(Name, Value)>);
+struct Scope(Map<Name, Value>);
 
 impl Scope {
     fn new() -> Scope {
-        Scope(Vec::new())
+        Scope(Map::new())
     }
 }
 
@@ -190,7 +191,7 @@ impl Context {
             Expr::Index(_, _, e, i) => self.expr(e).as_tuple()[i].clone(),
             Expr::Var(_, _, x) => self.stack.get_val(x).clone(),
             Expr::Def(_, _, x, ts) => Value::from(Fun::new(*x, ts.clone())),
-            Expr::Assoc(_, _, _, _, _) => unreachable!(),
+            Expr::TraitMethod(_, _, _, _, _) => unreachable!(),
             Expr::Call(_, _, e, es) => {
                 let f = self.expr(e).as_function();
                 let vs = es.iter().map(|e| self.expr(e)).collect::<Vec<_>>();
@@ -206,8 +207,8 @@ impl Context {
                 }
             }
             Expr::Block(_, _, b) => self.block(b),
-            Expr::Query(_, _, _) => unreachable!(),
-            Expr::QueryInto(_, _, _, _, _, _) => todo!(),
+            Expr::Query(..) => unreachable!(),
+            Expr::QueryInto(..) => todo!(),
             Expr::Match(_, _, _, _) => unreachable!(),
             Expr::Array(_, _, _) => unreachable!(),
             Expr::Assign(_, _, _, _) => unreachable!(),
@@ -234,6 +235,8 @@ impl Context {
             Expr::IfElse(_, _, _, _, _) => unreachable!(),
             Expr::IntSuffix(_, _, _, _) => unreachable!(),
             Expr::FloatSuffix(_, _, _, _) => unreachable!(),
+            Expr::LetIn(_, _, _, _, _, _) => todo!(),
+            Expr::Update(_, _, _, _, _) => todo!(),
         }
     }
 }

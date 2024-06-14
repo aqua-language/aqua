@@ -1,3 +1,4 @@
+mod standard;
 use smol_str::SmolStr;
 use std::collections::HashMap;
 use std::sync::Mutex;

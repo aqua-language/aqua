@@ -14,8 +14,10 @@ pub mod ast;
 pub mod codegen;
 pub mod diag;
 pub mod display;
+pub mod flatten;
 // pub mod ffi;
 pub mod builtins;
+pub mod controlflow;
 pub mod desugar;
 pub mod infer;
 pub mod interpret;
@@ -24,6 +26,7 @@ pub mod lexer;
 pub mod lift;
 pub mod parser;
 pub mod print;
+pub mod query;
 pub mod resolve;
 pub mod traversal {
     pub mod mapper;
@@ -33,14 +36,10 @@ pub mod collections {
     pub mod map;
     pub mod ordmap;
 }
-// pub mod monomorphise;
 pub mod monomorphise;
 #[cfg(feature = "optimiser")]
 pub mod opt;
-// pub mod ordmap;
 pub mod symbol;
-// pub mod union_find;
-// mod visitor;
 
 #[derive(Debug)]
 pub struct Compiler {
@@ -89,8 +88,9 @@ impl Compiler {
 
     pub fn init(&mut self) -> &mut Self {
         self.declare();
-        let stmts = self.declarations.drain(..).collect();
-        let program = Program::new(stmts);
+        let stmts: Vec<Stmt> = self.declarations.drain(..).collect();
+        let s = stmts.first().unwrap().span_of() + stmts.last().unwrap().span_of();
+        let program = Program::new(s, stmts);
         let program = self.desugar.desugar(&program);
         let program = self.resolve.resolve(&program);
         self.report.merge(&mut self.resolve.report);
@@ -115,7 +115,7 @@ impl Compiler {
         input: &str,
         f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>) -> T,
     ) -> Result<T, Recovered<T>> {
-        let input: Rc<str> = unindent::unindent(input).into();
+        let input: Rc<str> = Rc::from(input);
         let id = self.sources.add(name, input.clone());
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
@@ -158,7 +158,7 @@ impl Compiler {
     }
 
     pub fn interpret(&mut self, name: &str, input: &str) -> Result<Value, Recovered<Value>> {
-        let mut result = self.infer(name, input).unwrap();
+        let mut result = self.monomorphise(name, input).unwrap();
         let stmt = result.stmts.pop().unwrap();
         let expr = stmt.as_expr().unwrap();
         self.interpret.interpret(&result);
@@ -211,5 +211,14 @@ impl<T: std::fmt::Display> std::fmt::Debug for Recovered<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", &self.val)?;
         write!(f, "\n{}", &self.msg)
+    }
+}
+
+impl Program {
+    pub fn parse(input: &str) -> Result<Program, Recovered<Program>> {
+        let mut compiler = Compiler::default();
+        compiler.parse("test", input, |parser| {
+            parser.parse(Parser::program).unwrap()
+        })
     }
 }

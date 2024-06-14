@@ -1,7 +1,6 @@
 use std::rc::Rc;
 
 use crate::ast::Block;
-use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Name;
 use crate::ast::Pat;
@@ -22,6 +21,7 @@ use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
+use crate::ast::Trait;
 use crate::ast::Type;
 use crate::lexer::Span;
 
@@ -38,8 +38,9 @@ pub(crate) trait Mapper {
     }
     #[inline(always)]
     fn _map_program(&mut self, program: &Program) -> Program {
+        let span = self.map_span(&program.span);
         let stmts = self.map_stmts(&program.stmts);
-        Program::new(stmts)
+        Program::new(span, stmts)
     }
 
     #[inline(always)]
@@ -154,38 +155,37 @@ pub(crate) trait Mapper {
     }
 
     #[inline(always)]
-    fn map_bounds(&mut self, bs: &[Bound]) -> Vec<Bound> {
+    fn map_bounds(&mut self, bs: &[Trait]) -> Vec<Trait> {
         self._map_bounds(bs)
     }
     #[inline(always)]
-    fn _map_bounds(&mut self, bs: &[Bound]) -> Vec<Bound> {
+    fn _map_bounds(&mut self, bs: &[Trait]) -> Vec<Trait> {
         self.map_iter(bs, Self::map_bound)
     }
 
-    fn map_bound(&mut self, b: &Bound) -> Bound {
+    fn map_bound(&mut self, b: &Trait) -> Trait {
         self._map_bound(b)
     }
     #[inline(always)]
-    fn _map_bound(&mut self, b: &Bound) -> Bound {
+    fn _map_bound(&mut self, b: &Trait) -> Trait {
         match b {
-            Bound::Path(span, path) => {
+            Trait::Path(span, path) => {
                 let span = self.map_span(span);
                 let path = self.map_path(path);
-                Bound::Path(span, path)
+                Trait::Path(span, path)
             }
-            Bound::Trait(span, x, ts, xts) => {
-                let span = self.map_span(span);
+            Trait::Cons(x, ts, xts) => {
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
                 let xts = self.map_iter(xts, Self::map_assoc_type).into();
-                Bound::Trait(span, x, ts, xts)
+                Trait::Cons(x, ts, xts)
             }
-            Bound::Type(span, t) => {
-                let span = self.map_span(span);
+            Trait::Type(t) => {
                 let t = self.map_type(t);
-                Bound::Type(span, Rc::new(t))
+                Trait::Type(Rc::new(t))
             }
-            Bound::Err(s) => Bound::Err(self.map_span(s)),
+            Trait::Err => Trait::Err,
+            Trait::Var(v) => Trait::Var(*v),
         }
     }
 
@@ -382,111 +382,110 @@ pub(crate) trait Mapper {
 
     #[inline(always)]
     fn _map_expr(&mut self, expr: &Expr) -> Expr {
-        let span = self.map_span(&expr.span_of());
-        let ty = self.map_type(&expr.type_of());
+        let s = self.map_span(&expr.span_of());
+        let t = self.map_type(&expr.type_of());
         match expr {
             Expr::Path(_, _, path) => {
                 let path = self.map_path(path);
-                Expr::Path(span, ty, path)
+                Expr::Path(s, t, path)
             }
             Expr::Unresolved(_, _, x, ts) => {
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
-                Expr::Unresolved(span, ty, x, ts)
+                Expr::Unresolved(s, t, x, ts)
             }
-            Expr::Int(_, _, v) => Expr::Int(span, ty, *v),
-            Expr::Float(_, _, v) => Expr::Float(span, ty, *v),
-            Expr::Bool(_, _, v) => Expr::Bool(span, ty, *v),
-            Expr::String(_, _, v) => Expr::String(span, ty, *v),
-            Expr::Char(_, _, v) => Expr::Char(span, ty, *v),
+            Expr::Int(_, _, v) => Expr::Int(s, t, *v),
+            Expr::Float(_, _, v) => Expr::Float(s, t, *v),
+            Expr::Bool(_, _, v) => Expr::Bool(s, t, *v),
+            Expr::String(_, _, v) => Expr::String(s, t, *v),
+            Expr::Char(_, _, v) => Expr::Char(s, t, *v),
             Expr::Struct(_, _, x, ts, xes) => {
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
                 let xes = self.map_expr_fields(xes).into();
-                Expr::Struct(span, ty, x, ts, xes)
+                Expr::Struct(s, t, x, ts, xes)
             }
             Expr::Tuple(_, _, es) => {
                 let es = self.map_exprs(es);
-                Expr::Tuple(span, ty, es)
+                Expr::Tuple(s, t, es)
             }
             Expr::Record(_, _, xes) => {
                 let xes = self.map_iter(xes, Self::map_expr_field).into();
-                Expr::Record(span, ty, xes)
+                Expr::Record(s, t, xes)
             }
             Expr::Enum(_, _, x0, ts, x1, e) => {
                 let x0 = self.map_name(x0);
                 let ts = self.map_types(ts);
                 let x1 = self.map_name(x1);
                 let e = self.map_expr(e);
-                Expr::Enum(span, ty, x0, ts, x1, Rc::new(e))
+                Expr::Enum(s, t, x0, ts, x1, Rc::new(e))
             }
             Expr::Field(_, _, e, x) => {
                 let e = self.map_expr(e);
                 let x = self.map_name(x);
-                Expr::Field(span, ty, Rc::new(e), x)
+                Expr::Field(s, t, Rc::new(e), x)
             }
             Expr::Index(_, _, e, i) => {
                 let e = self.map_expr(e);
                 let i = *i;
-                Expr::Index(span, ty, Rc::new(e), i)
+                Expr::Index(s, t, Rc::new(e), i)
             }
             Expr::Var(_, _, x) => {
                 let x = self.map_name(x);
-                Expr::Var(span, ty, x)
+                Expr::Var(s, t, x)
             }
             Expr::Def(_, _, x, ts) => {
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
-                Expr::Def(span, ty, x, ts)
+                Expr::Def(s, t, x, ts)
             }
             Expr::Call(_, _, e, es) => {
                 let e = self.map_expr(e);
                 let es = self.map_exprs(es);
-                Expr::Call(span, ty, Rc::new(e), es)
+                Expr::Call(s, t, Rc::new(e), es)
             }
             Expr::Block(_, _, b) => {
                 let b = self.map_block(b);
-                Expr::Block(span, ty, b)
+                Expr::Block(s, t, b)
             }
-            Expr::Query(_, _, _) => todo!(),
-            Expr::Assoc(_, _, b, x, ts) => {
+            Expr::TraitMethod(_, _, b, x, ts) => {
                 let b = self.map_bound(b);
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
-                Expr::Assoc(span, ty, b, x, ts)
+                Expr::TraitMethod(s, t, b, x, ts)
             }
             Expr::Match(_, _, e, arms) => {
                 let e = self.map_expr(e);
                 let arms = self.map_iter(arms, Self::map_arm).into();
-                Expr::Match(span, ty, Rc::new(e), arms)
+                Expr::Match(s, t, Rc::new(e), arms)
             }
             Expr::Array(_, _, es) => {
                 let es = self.map_exprs(es);
-                Expr::Array(span, ty, es)
+                Expr::Array(s, t, es)
             }
             Expr::Assign(_, _, e0, e1) => {
                 let e0 = self.map_expr(e0);
                 let e1 = self.map_expr(e1);
-                Expr::Assign(span, ty, Rc::new(e0), Rc::new(e1))
+                Expr::Assign(s, t, Rc::new(e0), Rc::new(e1))
             }
             Expr::Return(_, _, e) => {
                 let e = self.map_expr(e);
-                Expr::Return(span, ty, Rc::new(e))
+                Expr::Return(s, t, Rc::new(e))
             }
-            Expr::Continue(_, _) => Expr::Continue(span, ty),
-            Expr::Break(_, _) => Expr::Break(span, ty),
+            Expr::Continue(_, _) => Expr::Continue(s, t),
+            Expr::Break(_, _) => Expr::Break(s, t),
             Expr::While(_, _, e, b) => {
                 let e = self.map_expr(e);
                 let b = self.map_block(b);
-                Expr::While(span, ty, Rc::new(e), b)
+                Expr::While(s, t, Rc::new(e), b)
             }
-            Expr::Fun(_, _, ps, t, e) => {
+            Expr::Fun(_, _, ps, t1, e) => {
                 self.enter_scope();
                 let ps = self.map_params(ps).into();
-                let t = self.map_type(t);
+                let t1 = self.map_type(t1);
                 let e = self.map_expr(e);
                 self.exit_scope();
-                Expr::Fun(span, ty, ps, t, Rc::new(e))
+                Expr::Fun(s, t, ps, t1, Rc::new(e))
             }
             Expr::For(_, _, x, e, b) => {
                 self.enter_scope();
@@ -494,53 +493,74 @@ pub(crate) trait Mapper {
                 let e = self.map_expr(e);
                 let b = self.map_block(b);
                 self.exit_scope();
-                Expr::For(span, ty, x, Rc::new(e), b)
+                Expr::For(s, t, x, Rc::new(e), b)
             }
-            Expr::Err(_, _) => Expr::Err(span, ty),
-            Expr::Value(_, _) => todo!(),
-            Expr::QueryInto(_, _, qs, x, ts, es) => {
-                let qs = self.map_query_stmts(qs);
+            Expr::Err(_, _) => Expr::Err(s, t),
+            Expr::Value(_, _) => unreachable!(),
+            Expr::Query(_, _, x, e, qs) => {
                 let x = self.map_name(x);
+                let e = self.map_expr(e);
+                let qs = self.map_query_stmts(qs);
+                Expr::Query(s, t, x, Rc::new(e), qs)
+            }
+            Expr::QueryInto(_, _, x0, e, qs, x1, ts, es) => {
+                let x0 = self.map_name(x0);
+                let e = self.map_expr(e);
+                let qs = self.map_query_stmts(qs);
+                let x1 = self.map_name(x1);
                 let ts = self.map_types(ts);
                 let es = self.map_exprs(es);
-                Expr::QueryInto(span, ty, qs, x, ts, es)
+                Expr::QueryInto(s, t, x0, Rc::new(e), qs, x1, ts, es)
             }
             Expr::InfixBinaryOp(_, _, op, e0, e1) => {
                 let e0 = self.map_expr(e0);
                 let e1 = self.map_expr(e1);
-                Expr::InfixBinaryOp(span, ty, *op, Rc::new(e0), Rc::new(e1))
+                Expr::InfixBinaryOp(s, t, *op, Rc::new(e0), Rc::new(e1))
             }
             Expr::PrefixUnaryOp(_, _, op, e) => {
                 let e = self.map_expr(e);
-                Expr::PrefixUnaryOp(span, ty, *op, Rc::new(e))
+                Expr::PrefixUnaryOp(s, t, *op, Rc::new(e))
             }
             Expr::PostfixUnaryOp(_, _, op, e) => {
                 let e = self.map_expr(e);
-                Expr::PostfixUnaryOp(span, ty, *op, Rc::new(e))
+                Expr::PostfixUnaryOp(s, t, *op, Rc::new(e))
             }
             Expr::Annotate(_, _, e) => {
                 let e = self.map_expr(e);
-                Expr::Annotate(span, ty, Rc::new(e))
+                Expr::Annotate(s, t, Rc::new(e))
             }
             Expr::Paren(_, _, e) => {
                 let e = self.map_expr(e);
-                Expr::Paren(span, ty, Rc::new(e))
+                Expr::Paren(s, t, Rc::new(e))
             }
             Expr::Dot(_, _, e, x, ts, es) => {
                 let e = self.map_expr(e);
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
                 let es = self.map_exprs(es);
-                Expr::Dot(span, ty, Rc::new(e), x, ts, es)
+                Expr::Dot(s, t, Rc::new(e), x, ts, es)
             }
             Expr::IfElse(_, _, e, b0, b1) => {
                 let e = self.map_expr(e);
                 let b0 = self.map_block(b0);
                 let b1 = self.map_block(b1);
-                Expr::IfElse(span, ty, Rc::new(e), b0, b1)
+                Expr::IfElse(s, t, Rc::new(e), b0, b1)
             }
-            Expr::IntSuffix(_, _, v, x) => Expr::IntSuffix(span, ty, *v, *x),
-            Expr::FloatSuffix(_, _, v, x) => Expr::FloatSuffix(span, ty, *v, *x),
+            Expr::IntSuffix(_, _, v, x) => Expr::IntSuffix(s, t, *v, *x),
+            Expr::FloatSuffix(_, _, v, x) => Expr::FloatSuffix(s, t, *v, *x),
+            Expr::LetIn(_, _, x, t1, e0, e1) => {
+                let x = self.map_name(x);
+                let t1 = self.map_type(t1);
+                let e0 = self.map_expr(e0);
+                let e1 = self.map_expr(e1);
+                Expr::LetIn(s, t, x, t1, Rc::new(e0), Rc::new(e1))
+            }
+            Expr::Update(_, _, e0, x, e1) => {
+                let e0 = self.map_expr(e0);
+                let x = self.map_name(x);
+                let e1 = self.map_expr(e1);
+                Expr::Update(s, t, Rc::new(e0), x, Rc::new(e1))
+            }
         }
     }
 
@@ -587,20 +607,18 @@ pub(crate) trait Mapper {
                 let e1 = self.map_expr(e1);
                 Query::GroupOverCompute(s, x, Rc::new(e0), Rc::new(e1), aggs.clone())
             }
-            Query::Join(_, x, e0, e1, e2) => {
+            Query::JoinOn(_, x, e0, e1) => {
                 let x = self.map_name(x);
                 let e0 = self.map_expr(e0);
                 let e1 = self.map_expr(e1);
-                let e2 = self.map_expr(e2);
-                Query::Join(s, x, Rc::new(e0), Rc::new(e1), Rc::new(e2))
+                Query::JoinOn(s, x, Rc::new(e0), Rc::new(e1))
             }
-            Query::JoinOver(_, x, e0, e1, e2, e3) => {
+            Query::JoinOverOn(_, x, e0, e1, e2) => {
                 let x = self.map_name(x);
                 let e0 = self.map_expr(e0);
                 let e1 = self.map_expr(e1);
                 let e2 = self.map_expr(e2);
-                let e3 = self.map_expr(e3);
-                Query::JoinOver(s, x, Rc::new(e0), Rc::new(e1), Rc::new(e2), Rc::new(e3))
+                Query::JoinOverOn(s, x, Rc::new(e0), Rc::new(e1), Rc::new(e2))
             }
             Query::Err(_) => Query::Err(s),
         }

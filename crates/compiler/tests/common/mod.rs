@@ -4,7 +4,6 @@ use std::rc::Rc;
 
 use compiler::ast::Aggr;
 use compiler::ast::Block;
-use compiler::ast::Bound;
 use compiler::ast::Expr;
 use compiler::ast::Index;
 use compiler::ast::Map;
@@ -24,6 +23,7 @@ use compiler::ast::StmtTraitType;
 use compiler::ast::StmtType;
 use compiler::ast::StmtTypeBody;
 use compiler::ast::StmtVar;
+use compiler::ast::Trait;
 use compiler::ast::Type;
 
 use compiler::ast::TypeVar;
@@ -81,13 +81,13 @@ pub fn diff(a: String, b: String) -> String {
 }
 
 pub fn program<const N: usize>(ss: [Stmt; N]) -> Program {
-    Program::new(vec(ss))
+    Program::new(span(), vec(ss))
 }
 
 pub fn stmt_trait<const N: usize, const M: usize, const K: usize, const L: usize>(
     x: &'static str,
     gs: [&'static str; N],
-    bounds: [Bound; M],
+    bounds: [Trait; M],
     defs: [StmtTraitDef; K],
     types: [StmtTraitType; L],
 ) -> Stmt {
@@ -131,8 +131,8 @@ fn map3<const N: usize, T, U, S, V: Clone>(xs: [(T, U, S); N], f: impl Fn(T, U, 
 // impl<{gs}> {head} where {body}
 pub fn stmt_impl<const N: usize, const M: usize, const K: usize, const L: usize>(
     gs: [&'static str; N],
-    head: Bound,
-    body: [Bound; M],
+    head: Trait,
+    body: [Trait; M],
     defs: [Stmt; K],
     types: [Stmt; L],
 ) -> Stmt {
@@ -151,7 +151,7 @@ pub fn stmt_impl<const N: usize, const M: usize, const K: usize, const L: usize>
 // impl<{gs}> {head}
 pub fn fact<const N: usize, const M: usize, const K: usize>(
     gs: [&'static str; N],
-    head: Bound,
+    head: Trait,
     defs: [StmtDef; M],
     types: [StmtType; K],
 ) -> StmtImpl {
@@ -165,20 +165,20 @@ pub fn fact<const N: usize, const M: usize, const K: usize>(
     )
 }
 
-pub fn type_bound(t: Type) -> Bound {
-    Bound::Type(span(), Rc::new(t))
+pub fn type_bound(t: Type) -> Trait {
+    Trait::Type(Rc::new(t))
 }
 
 pub fn trait_bound<const N: usize, const M: usize>(
     x: &'static str,
     ts: [Type; N],
     xts: [(&'static str, Type); M],
-) -> Bound {
-    Bound::Trait(span(), name(x), vec(ts), name_map(xts))
+) -> Trait {
+    Trait::Cons(name(x), vec(ts), name_map(xts))
 }
 
-pub fn bound_err() -> Bound {
-    Bound::Err(span())
+pub fn bound_err() -> Trait {
+    Trait::Err
 }
 
 pub fn ty_alias<const N: usize>(x: &'static str, ts: [Type; N]) -> Type {
@@ -426,7 +426,6 @@ pub mod unresolved {
     use super::map3;
     use super::name_map;
     use super::vec;
-    use compiler::ast::Bound;
     use compiler::ast::Expr;
     use compiler::ast::Map;
     use compiler::ast::Name;
@@ -434,6 +433,7 @@ pub mod unresolved {
     use compiler::ast::Path;
     use compiler::ast::PathPatField;
     use compiler::ast::Segment;
+    use compiler::ast::Trait;
     use compiler::ast::Type;
 
     use super::app;
@@ -501,6 +501,16 @@ pub mod unresolved {
             path([(x0, vec(ts), map([])), (x1, vec([]), map([]))]),
         )
     }
+
+    pub fn expr_call_method<const N: usize, const M: usize>(
+        e: Expr,
+        x: &'static str,
+        ts: [Type; N],
+        es: [Expr; M],
+    ) -> Expr {
+        Expr::Dot(span(), Type::Unknown, Rc::new(e), name(x), vec(ts), vec(es))
+    }
+
     pub fn expr_call_direct<const N: usize, const M: usize>(
         x: &'static str,
         ts: [Type; N],
@@ -589,12 +599,12 @@ pub mod unresolved {
         x: &'static str,
         ts: [Type; N],
         xts: [(&'static str, Type); M],
-    ) -> Bound {
-        Bound::Path(span(), name_path(x, ts, xts))
+    ) -> Trait {
+        Trait::Path(span(), name_path(x, ts, xts))
     }
 
-    pub fn head<const N: usize>(x: &'static str, ts: [Type; N]) -> Bound {
-        Bound::Path(span(), name_path(x, ts, []))
+    pub fn head<const N: usize>(x: &'static str, ts: [Type; N]) -> Trait {
+        Trait::Path(span(), name_path(x, ts, []))
     }
 
     pub fn path<const N: usize>(segments: [(&'static str, Vec<Type>, Map<Name, Type>); N]) -> Path {
@@ -616,8 +626,8 @@ pub mod unresolved {
     }
 }
 
-pub fn expr_assoc<const N: usize>(b: Bound, x1: &'static str, ts1: [Type; N]) -> Expr {
-    Expr::Assoc(span(), Type::Unknown, b, name(x1), vec(ts1))
+pub fn expr_assoc<const N: usize>(b: Trait, x1: &'static str, ts1: [Type; N]) -> Expr {
+    Expr::TraitMethod(span(), Type::Unknown, b, name(x1), vec(ts1))
 }
 
 pub fn expr_assign(e0: Expr, e1: Expr) -> Expr {
@@ -713,7 +723,7 @@ pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
     gs: [&'static str; N],
     ps: [(&'static str, Type); K],
     t: Type,
-    qs: [Bound; M],
+    qs: [Trait; M],
     b: impl Into<StmtDefBody>,
 ) -> Stmt {
     StmtDef::new(
@@ -741,7 +751,7 @@ pub fn tr_def<const N: usize, const M: usize, const K: usize>(
     gs: [&'static str; N],
     xts: [(&'static str, Type); K],
     t: Type,
-    qs: [Bound; M],
+    qs: [Trait; M],
 ) -> StmtTraitDef {
     StmtTraitDef::new(span(), name(x), app(gs, name), params(xts), t, vec(qs))
 }
@@ -951,17 +961,36 @@ pub fn expr_break() -> Expr {
     Expr::Break(span(), Type::Unknown)
 }
 
-pub fn expr_query<const N: usize>(qs: [Query; N]) -> Expr {
-    Expr::Query(span(), Type::Unknown, vec(qs))
+pub fn expr_query<const N: usize>(x: &'static str, e: Expr, qs: [Query; N]) -> Expr {
+    Expr::Query(span(), Type::Unknown, name(x), Rc::new(e), vec(qs))
 }
 
 pub fn expr_query_into<const N: usize, const M: usize, const K: usize>(
+    x0: &'static str,
+    e: Expr,
     qs: [Query; N],
-    x: &'static str,
+    x1: &'static str,
     ts: [Type; M],
     es: [Expr; K],
 ) -> Expr {
-    Expr::QueryInto(span(), Type::Unknown, vec(qs), name(x), vec(ts), vec(es))
+    Expr::QueryInto(
+        span(),
+        Type::Unknown,
+        name(x0),
+        Rc::new(e),
+        vec(qs),
+        name(x1),
+        vec(ts),
+        vec(es),
+    )
+}
+
+pub fn query_join_on(x: &'static str, e0: Expr, e1: Expr) -> Query {
+    Query::JoinOn(span(), name(x), Rc::new(e0), Rc::new(e1))
+}
+
+pub fn query_join_over_on(x: &'static str, e0: Expr, e1: Expr, e2: Expr) -> Query {
+    Query::JoinOverOn(span(), name(x), Rc::new(e0), Rc::new(e1), Rc::new(e2))
 }
 
 pub fn query_select<const N: usize>(xes: [(&'static str, Expr); N]) -> Query {
@@ -981,18 +1010,11 @@ pub fn query_var(x: &'static str, e: Expr) -> Query {
 }
 
 pub fn query_join(x: &'static str, e0: Expr, e1: Expr, e2: Expr) -> Query {
-    Query::Join(span(), name(x), Rc::new(e0), Rc::new(e1), Rc::new(e2))
+    Query::JoinOn(span(), name(x), Rc::new(e0), Rc::new(e1))
 }
 
 pub fn query_join_over(x: &'static str, e0: Expr, e1: Expr, e2: Expr, e3: Expr) -> Query {
-    Query::JoinOver(
-        span(),
-        name(x),
-        Rc::new(e0),
-        Rc::new(e1),
-        Rc::new(e2),
-        Rc::new(e3),
-    )
+    Query::JoinOverOn(span(), name(x), Rc::new(e0), Rc::new(e1), Rc::new(e2))
 }
 
 pub fn query_group_over_compute<const N: usize>(
@@ -1062,9 +1084,9 @@ pub mod types {
 pub mod traits {
     use std::rc::Rc;
 
-    use compiler::ast::Bound;
     use compiler::ast::Stmt;
     use compiler::ast::StmtImpl;
+    use compiler::ast::Trait;
     use compiler::ast::Type;
 
     use super::app;
@@ -1077,8 +1099,8 @@ pub mod traits {
 
     pub fn imp<const N: usize, const M: usize, const K: usize, const L: usize>(
         gs: [&'static str; N],
-        head: Bound,
-        where_clause: [Bound; M],
+        head: Trait,
+        where_clause: [Trait; M],
         defs: [Stmt; K],
         types: [Stmt; L],
     ) -> StmtImpl {
@@ -1099,12 +1121,12 @@ pub mod traits {
     pub fn impl_clone<const N: usize, const M: usize>(
         gs: [&'static str; N],
         t: Type,
-        where_clause: [Bound; M],
+        where_clause: [Trait; M],
     ) -> StmtImpl {
         imp(gs, tr_clone(t), where_clause, [], [])
     }
 
-    pub fn tr_clone(t: Type) -> Bound {
+    pub fn tr_clone(t: Type) -> Trait {
         trait_bound("Clone", [t], [])
     }
 
@@ -1112,7 +1134,7 @@ pub mod traits {
         gs: [&'static str; N],
         t: Type,
         t1: Type,
-        where_clause: [Bound; M],
+        where_clause: [Trait; M],
     ) -> StmtImpl {
         imp(
             gs,
@@ -1123,7 +1145,7 @@ pub mod traits {
         )
     }
 
-    pub fn tr_iterator(t0: Type) -> Bound {
+    pub fn tr_iterator(t0: Type) -> Trait {
         trait_bound("Iterator", [t0], [])
     }
 
@@ -1135,7 +1157,7 @@ pub mod traits {
         gs: [&'static str; N],
         ts: [Type; 2],
         t: Type,
-        where_clause: [Bound; M],
+        where_clause: [Trait; M],
     ) -> StmtImpl {
         imp(
             gs,
@@ -1146,7 +1168,7 @@ pub mod traits {
         )
     }
 
-    pub fn tr_add(ts: [Type; 2]) -> Bound {
+    pub fn tr_add(ts: [Type; 2]) -> Trait {
         trait_bound("Add", ts, [])
     }
 
@@ -1159,7 +1181,7 @@ pub mod traits {
         self_ty: Type,
         item_ty: Type,
         intoiter_ty: Type,
-        where_clause: [Bound; M],
+        where_clause: [Trait; M],
     ) -> StmtImpl {
         imp(
             gs,
@@ -1173,7 +1195,7 @@ pub mod traits {
         )
     }
 
-    pub fn tr_into_iterator(t0: Type) -> Bound {
+    pub fn tr_into_iterator(t0: Type) -> Trait {
         trait_bound("IntoIterator", [t0], [])
     }
 
@@ -1192,7 +1214,7 @@ pub fn parse<T>(
     input: &str,
     f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>) -> T,
 ) -> Result<T, Recovered<T>> {
-    let input: Rc<str> = unindent::unindent(input).into();
+    let input: Rc<str> = Rc::from(input);
     let id = comp.sources.add(name, input.clone());
     let mut lexer = Lexer::new(id, input.as_ref());
     let mut parser = Parser::new(&input, &mut lexer);
@@ -1256,35 +1278,24 @@ pub fn interpret(comp: &mut Compiler, name: &str, input: &str) -> Result<Value, 
     comp.recover(value)
 }
 
-pub fn trim(s: &str) -> String {
-    // Trim space right before \n on each line
-    s.trim_end()
-        .lines()
-        .map(|line| line.trim_end().to_string())
-        .collect::<Vec<_>>()
-        .join("\n")
+pub fn parse_expr(input: &str) -> Result<Expr, Recovered<Expr>> {
+    Compiler::default().parse("test", input, |p| p.parse(Parser::expr).unwrap())
 }
 
 pub fn parse_stmt(input: &str) -> Result<Stmt, Recovered<Stmt>> {
-    Compiler::default().parse("test", input, |parser| parser.parse(Parser::stmt).unwrap())
-}
-
-pub fn parse_expr(input: &str) -> Result<Expr, Recovered<Expr>> {
-    Compiler::default().parse("test", input, |parser| parser.parse(Parser::expr).unwrap())
+    Compiler::default().parse("test", input, |p| p.parse(Parser::stmt).unwrap())
 }
 
 pub fn parse_type(input: &str) -> Result<Type, Recovered<Type>> {
-    Compiler::default().parse("test", input, |parser| parser.parse(Parser::ty).unwrap())
+    Compiler::default().parse("test", input, |p| p.parse(Parser::ty).unwrap())
 }
 
 pub fn parse_pat(input: &str) -> Result<Pat, Recovered<Pat>> {
-    Compiler::default().parse("test", input, |parser| parser.parse(Parser::pat).unwrap())
+    Compiler::default().parse("test", input, |p| p.parse(Parser::pat).unwrap())
 }
 
 pub fn parse_program(input: &str) -> Result<Program, Recovered<Program>> {
-    Compiler::default().parse("test", input, |parser| {
-        parser.parse(Parser::program).unwrap()
-    })
+    Compiler::default().parse("test", input, |p| p.parse(Parser::program).unwrap())
 }
 
 pub fn desugar_program(input: &str) -> Result<Program, Recovered<Program>> {
@@ -1309,4 +1320,73 @@ pub fn monomorphise_program(input: &str) -> Result<Program, Recovered<Program>> 
 
 pub fn interpret_program(input: &str) -> Result<Value, Recovered<Value>> {
     Compiler::default().init().interpret("test", input)
+}
+
+macro_rules! parse_program {
+    ($code:literal) => {
+        common::parse_program(indoc::indoc!($code))
+    };
+}
+
+macro_rules! parse_expr {
+    ($code:literal) => {
+        common::parse_expr(indoc::indoc!($code))
+    };
+    ($code:expr) => {
+        common::parse_stmt($code)
+    };
+}
+
+macro_rules! parse_type {
+    ($code:literal) => {
+        common::parse_type(indoc::indoc!($code))
+    };
+}
+
+macro_rules! parse_stmt {
+    ($code:literal) => {
+        common::parse_stmt(indoc::indoc!($code))
+    };
+}
+
+macro_rules! parse_pat {
+    ($code:literal) => {
+        common::parse_pat(indoc::indoc!($code))
+    };
+}
+
+macro_rules! desugar_program {
+    ($code:literal) => {
+        common::desugar_program(indoc::indoc!($code))
+    };
+}
+
+macro_rules! resolve_program {
+    ($code:literal) => {
+        common::resolve_program(indoc::indoc!($code))
+    };
+}
+
+macro_rules! lift_program {
+    ($code:literal) => {
+        common::lift_program(indoc::indoc!($code))
+    };
+}
+
+macro_rules! infer_program {
+    ($code:literal) => {
+        common::infer_program(indoc::indoc!($code))
+    };
+}
+
+macro_rules! monomorphise_program {
+    ($code:literal) => {
+        common::monomorphise_program(indoc::indoc!($code))
+    };
+}
+
+macro_rules! interpret_program {
+    ($code:literal) => {
+        common::interpret_program(indoc::indoc!($code))
+    };
 }

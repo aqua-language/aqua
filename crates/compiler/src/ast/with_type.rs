@@ -14,13 +14,15 @@ impl Expr {
             Expr::Def(s, _, x, ts) => Expr::Def(s, t, x, ts),
             Expr::Call(s, _, e, es) => Expr::Call(s, t, e, es),
             Expr::Block(s, _, b) => Expr::Block(s, t, b),
-            Expr::Query(s, _, qs) => Expr::Query(s, t, qs),
-            Expr::QueryInto(s, _, qs, x, ts, es) => Expr::QueryInto(s, t, qs, x, ts, es),
+            Expr::Query(s, _, x, e, qs) => Expr::Query(s, t, x, e, qs),
+            Expr::QueryInto(s, _, x0, e, qs, x1, ts, es) => {
+                Expr::QueryInto(s, t, x0, e, qs, x1, ts, es)
+            }
             Expr::Struct(s, _, x, ts, xes) => Expr::Struct(s, t, x, ts, xes),
             Expr::Enum(s, _, x0, ts, x1, e) => Expr::Enum(s, t, x0, ts, x1, e),
             Expr::Field(s, _, e, x) => Expr::Field(s, t, e, x),
             Expr::Tuple(s, _, es) => Expr::Tuple(s, t, es),
-            Expr::Assoc(s, _, b, x1, ts1) => Expr::Assoc(s, t, b, x1, ts1),
+            Expr::TraitMethod(s, _, b, x1, ts1) => Expr::TraitMethod(s, t, b, x1, ts1),
             Expr::Index(s, _, e, i) => Expr::Index(s, t, e, i),
             Expr::Array(s, _, es) => Expr::Array(s, t, es),
             Expr::Assign(s, _, e0, e1) => Expr::Assign(s, t, e0, e1),
@@ -46,6 +48,8 @@ impl Expr {
             Expr::IfElse(s, _, e, b0, b1) => Expr::IfElse(s, t, e, b0, b1),
             Expr::IntSuffix(s, _, v, x) => Expr::IntSuffix(s, t, v, x),
             Expr::FloatSuffix(s, _, v, x) => Expr::FloatSuffix(s, t, v, x),
+            Expr::LetIn(s, _, x, t1, e0, e1) => Expr::LetIn(s, t, x, t1, e0, e1),
+            Expr::Update(s, _, x, e0, e1) => Expr::Update(s, t, x, e0, e1),
         }
     }
 }

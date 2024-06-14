@@ -2,7 +2,6 @@ use std::rc::Rc;
 
 use crate::ast::Aggr;
 use crate::ast::Block;
-use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Name;
 use crate::ast::Pat;
@@ -23,6 +22,7 @@ use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
+use crate::ast::Trait;
 use crate::ast::Type;
 use crate::lexer::Span;
 
@@ -95,11 +95,11 @@ pub(crate) trait Visitor {
     }
 
     #[inline(always)]
-    fn visit_bounds(&mut self, bs: &[Bound]) {
+    fn visit_bounds(&mut self, bs: &[Trait]) {
         self._visit_bounds(bs);
     }
     #[inline(always)]
-    fn _visit_bounds(&mut self, bs: &[Bound]) {
+    fn _visit_bounds(&mut self, bs: &[Trait]) {
         self.visit_iter(bs, Self::visit_bound);
     }
 
@@ -149,27 +149,26 @@ pub(crate) trait Visitor {
         }
     }
 
-    fn visit_bound(&mut self, b: &Bound) {
+    fn visit_bound(&mut self, b: &Trait) {
         self._visit_bound(b);
     }
     #[inline(always)]
-    fn _visit_bound(&mut self, b: &Bound) {
+    fn _visit_bound(&mut self, b: &Trait) {
         match b {
-            Bound::Path(span, path) => {
+            Trait::Path(span, path) => {
                 self.visit_span(span);
                 self.visit_path(path);
             }
-            Bound::Trait(span, x, ts, xts) => {
-                self.visit_span(span);
+            Trait::Cons(x, ts, xts) => {
                 self.visit_name(x);
                 self.visit_types(ts);
                 self.visit_assoc_types(xts);
             }
-            Bound::Type(span, t) => {
-                self.visit_span(span);
+            Trait::Type(t) => {
                 self.visit_type(t);
             }
-            Bound::Err(s) => self.visit_span(s),
+            Trait::Err => {},
+            Trait::Var(_) => {}
         }
     }
 
@@ -429,16 +428,20 @@ pub(crate) trait Visitor {
             Expr::Block(_, _, b) => {
                 self.visit_block(b);
             }
-            Expr::Query(_, _, qs) => {
+            Expr::Query(_, _, x, e, qs) => {
+                self.visit_name(x);
+                self.visit_expr(e);
                 self.visit_query_stmts(qs);
             }
-            Expr::QueryInto(_, _, qs, x, ts, es) => {
+            Expr::QueryInto(_, _, x0, e, qs, x1, ts, es) => {
+                self.visit_name(x0);
+                self.visit_expr(e);
                 self.visit_query_stmts(qs);
-                self.visit_name(x);
+                self.visit_name(x1);
                 self.visit_types(ts);
                 self.visit_exprs(es);
             }
-            Expr::Assoc(_, _, b, x, ts) => {
+            Expr::TraitMethod(_, _, b, x, ts) => {
                 self.visit_bound(b);
                 self.visit_name(x);
                 self.visit_types(ts);
@@ -504,6 +507,17 @@ pub(crate) trait Visitor {
             }
             Expr::IntSuffix(_, _, _v, _x) => {}
             Expr::FloatSuffix(_, _, _v, _x) => {}
+            Expr::LetIn(_, _, x, t1, e0, e1) => {
+                self.visit_name(x);
+                self.visit_type(t1);
+                self.visit_expr(e0);
+                self.visit_expr(e1);
+            },
+            Expr::Update(_, _, e0, x, e1) => {
+                self.visit_expr(e0);
+                self.visit_name(x);
+                self.visit_expr(e1);
+            }
         }
     }
 
@@ -562,18 +576,16 @@ pub(crate) trait Visitor {
                 self.visit_expr(e1);
                 self.visit_aggs(aggs);
             }
-            Query::Join(_, x, e0, e1, e2) => {
+            Query::JoinOn(_, x, e0, e1) => {
                 self.visit_name(x);
                 self.visit_expr(e0);
                 self.visit_expr(e1);
-                self.visit_expr(e2);
             }
-            Query::JoinOver(_, x, e0, e1, e2, e3) => {
+            Query::JoinOverOn(_, x, e0, e1, e2) => {
                 self.visit_name(x);
                 self.visit_expr(e0);
                 self.visit_expr(e1);
                 self.visit_expr(e2);
-                self.visit_expr(e3);
             }
             Query::Err(_) => {}
         }
@@ -595,7 +607,6 @@ pub(crate) trait Visitor {
         self.visit_expr(&agg.e0);
         self.visit_expr(&agg.e1);
     }
-
 
     #[inline(always)]
     fn visit_expr_fields(&mut self, xes: &[(Name, Expr)]) {

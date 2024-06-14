@@ -5,6 +5,9 @@ use ena::unify::UnifyValue;
 use crate::ast::Type;
 use crate::ast::TypeVar;
 
+use super::floats;
+use super::ints;
+
 impl UnifyKey for TypeVar {
     type Value = TypeVarValue;
 
@@ -41,6 +44,18 @@ impl std::fmt::Display for TypeVarKind {
             TypeVarKind::Int => write!(f, "{{int}}"),
             TypeVarKind::Float => write!(f, "{{float}}"),
         }
+    }
+}
+
+impl TypeVarKind {
+    pub fn is_unifiable(self, t: &Type) -> bool {
+        self.is_general()
+            || matches!(
+                t,
+                Type::Cons(x, _)
+                if self.is_int() && ints().any(|y| *x == y)
+                || self.is_float() && floats().any(|y| *x == y)
+            )
     }
 }
 

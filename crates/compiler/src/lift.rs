@@ -6,7 +6,7 @@ use std::rc::Rc;
 use runtime::HashMap;
 
 use crate::ast::Block;
-use crate::ast::Bound;
+use crate::ast::Trait;
 use crate::ast::Expr;
 use crate::ast::Map;
 use crate::ast::Name;
@@ -147,7 +147,7 @@ impl Mapper for Context {
             self.top.push(stmt);
         }
         let stmts = std::mem::take(&mut self.top);
-        Program::new(stmts)
+        Program::new(program.span, stmts)
     }
 
     fn map_stmt_var(&mut self, s: &StmtVar) -> StmtVar {
@@ -183,16 +183,17 @@ impl Mapper for Context {
         StmtImpl::new(s.span, generics, head, where_clause, defs, types)
     }
 
-    fn map_bound(&mut self, b: &Bound) -> Bound {
+    fn map_bound(&mut self, b: &Trait) -> Trait {
         match b {
-            Bound::Path(..) => unreachable!(),
-            Bound::Trait(s, x, ts, xts) => {
+            Trait::Path(..) => unreachable!(),
+            Trait::Cons(x, ts, xts) => {
                 let ts = ts.iter().map(|t| self.map_type(t)).collect();
                 let xts = xts.iter().map(|(n, t)| (*n, self.map_type(t))).collect();
-                Bound::Trait(*s, *x, ts, xts)
+                Trait::Cons(*x, ts, xts)
             }
-            Bound::Type(s, t) => Bound::Type(*s, Rc::new(self.map_type(t))),
-            Bound::Err(s) => Bound::Err(*s),
+            Trait::Type(t) => Trait::Type(Rc::new(self.map_type(t))),
+            Trait::Err => Trait::Err,
+            Trait::Var(_) => todo!(),
         }
     }
 

@@ -1,4 +1,4 @@
-use crate::ast::Bound;
+use crate::ast::Trait;
 use crate::ast::BuiltinDef;
 use crate::ast::BuiltinType;
 use crate::ast::Map;

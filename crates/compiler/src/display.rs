@@ -1,7 +1,6 @@
 #![allow(unused)]
 use crate::ast::Aggr;
 use crate::ast::Block;
-use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Index;
 use crate::ast::Name;
@@ -23,6 +22,7 @@ use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
+use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeVar;
 use crate::builtins::Value;
@@ -124,7 +124,7 @@ impl StmtImpl {
     }
 }
 
-impl Bound {
+impl Trait {
     pub fn verbose(&self) -> Verbose<&Self> {
         Verbose(self)
     }
@@ -180,7 +180,7 @@ impl std::fmt::Display for Verbose<&StmtTraitDef> {
     }
 }
 
-impl std::fmt::Display for Verbose<&Bound> {
+impl std::fmt::Display for Verbose<&Trait> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Pretty::new(f).verbose().bound(self.0)
     }
@@ -246,7 +246,7 @@ impl std::fmt::Display for Pat {
     }
 }
 
-impl std::fmt::Display for Bound {
+impl std::fmt::Display for Trait {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Pretty::new(f).bound(self)
     }
@@ -254,7 +254,7 @@ impl std::fmt::Display for Bound {
 
 impl std::fmt::Display for Query {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).query_stmt(self)
+        Pretty::new(f).query_clause(self)
     }
 }
 
@@ -424,6 +424,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.brace(|this| {
             if !s.defs.is_empty() || !s.types.is_empty() {
                 this.indented(|this| {
+                    this.newline()?;
                     this.newline_sep(&s.types, |this, s| this.stmt_type(s))?;
                     this.newline_sep(&s.defs, |this, s| this.stmt_def(s))
                 })?;
@@ -433,7 +434,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         })
     }
 
-    fn where_clause(&mut self, ts: &[Bound]) -> std::fmt::Result {
+    fn where_clause(&mut self, ts: &[Trait]) -> std::fmt::Result {
         self.if_nonempty(ts, |this, ts| {
             this.space()?;
             this.kw("where")?;
@@ -607,19 +608,39 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Expr::Block(_, _, b) => {
                 self.block(b)?;
             }
-            Expr::Query(_, _, qs) => {
-                self.newline_sep(qs, Self::query_stmt)?;
+            Expr::Query(_, _, x, e, qs) => {
+                self.kw("from")?;
+                self.space()?;
+                self.name(x)?;
+                self.space()?;
+                self.kw("in")?;
+                self.space()?;
+                self.expr(e)?;
+                if !qs.is_empty() {
+                    self.newline()?;
+                    self.newline_sep(qs, Self::query_clause)?;
+                }
             }
-            Expr::QueryInto(_, _, qs, x, ts, es) => {
-                self.newline_sep(qs, Self::query_stmt)?;
+            Expr::QueryInto(_, _, x0, e, qs, x1, ts, es) => {
+                self.kw("from")?;
+                self.space()?;
+                self.name(x0)?;
+                self.space()?;
+                self.kw("in")?;
+                self.space()?;
+                self.expr(e)?;
+                if !qs.is_empty() {
+                    self.newline()?;
+                    self.newline_sep(qs, Self::query_clause)?;
+                }
                 self.newline()?;
                 self.kw("into")?;
                 self.space()?;
-                self.name(x)?;
+                self.name(x1)?;
                 self.type_args(ts)?;
                 self.paren(|this| this.comma_sep(es, Self::expr))?;
             }
-            Expr::Assoc(_, _, b, x1, ts1) => {
+            Expr::TraitMethod(_, _, b, x1, ts1) => {
                 self.bound(b)?;
                 self.punct("::")?;
                 self.name(x1)?;
@@ -754,6 +775,33 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.lit(v)?;
                 self.lit(x)?;
             }
+            Expr::LetIn(_, _, x, t1, e0, e1) => {
+                self.kw("let")?;
+                self.space()?;
+                self.name(x)?;
+                self.space()?;
+                self.punct(":")?;
+                self.ty(t1)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.expr(e0)?;
+                self.space()?;
+                self.kw("in")?;
+                self.space()?;
+                self.expr(e1)?;
+            }
+            Expr::Update(_, _, e0, x, e1) => {
+                self.expr(e0)?;
+                self.space()?;
+                self.kw("with")?;
+                self.space()?;
+                self.name(x)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.expr(e1)?;
+            }
         }
         Ok(())
     }
@@ -818,7 +866,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.ty(t)
     }
 
-    fn query_stmt(&mut self, q: &Query) -> std::fmt::Result {
+    fn query_clause(&mut self, q: &Query) -> std::fmt::Result {
         match q {
             Query::From(_, x, e) => {
                 self.kw("from")?;
@@ -876,7 +924,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.space()?;
                 self.expr(e)?;
             }
-            Query::Join(_, x, e0, e1, e2) => {
+            Query::JoinOn(_, x, e0, e1) => {
                 self.kw("join")?;
                 self.space()?;
                 self.name(x)?;
@@ -888,12 +936,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.kw("on")?;
                 self.space()?;
                 self.expr(e1)?;
-                self.space()?;
-                self.punct("==")?;
-                self.space()?;
-                self.expr(e2)?;
             }
-            Query::JoinOver(_, x, e0, e1, e2, e3) => {
+            Query::JoinOverOn(_, x, e0, e1, e2) => {
                 self.kw("join")?;
                 self.space()?;
                 self.name(x)?;
@@ -909,10 +953,6 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.kw("on")?;
                 self.space()?;
                 self.expr(e2)?;
-                self.space()?;
-                self.punct("==")?;
-                self.space()?;
-                self.expr(e3)?;
             }
             Query::Err(_) => {
                 self.kw("<err>")?;
@@ -931,12 +971,12 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.expr(&a.e1)
     }
 
-    fn bound(&mut self, b: &Bound) -> std::fmt::Result {
+    fn bound(&mut self, b: &Trait) -> std::fmt::Result {
         match b {
-            Bound::Path(_, path) => {
+            Trait::Path(_, path) => {
                 self.path(path)?;
             }
-            Bound::Trait(_, x, ts, xts) => {
+            Trait::Cons(x, ts, xts) => {
                 self.name(x)?;
                 if !ts.is_empty() || !xts.is_empty() {
                     self.brack(|this| {
@@ -956,12 +996,13 @@ impl<'a, 'b> Pretty<'a, 'b> {
                     })?;
                 }
             }
-            Bound::Type(_, t) => {
+            Trait::Type(t) => {
                 self.ty(t)?;
             }
-            Bound::Err(_) => {
+            Trait::Err => {
                 self.kw("<err>")?;
             }
+            Trait::Var(_) => todo!(),
         }
         Ok(())
     }

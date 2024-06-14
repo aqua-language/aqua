@@ -21,10 +21,12 @@ impl Expr {
             Expr::Def(_, t, x, ts) => Expr::Def(span, t, x, ts),
             Expr::Call(_, t, e, es) => Expr::Call(span, t, e, es),
             Expr::Block(_, t, b) => Expr::Block(span, t, b),
-            Expr::Query(_, t, qs) => Expr::Query(span, t, qs),
-            Expr::QueryInto(_, t, qs, x, ts, es) => Expr::QueryInto(span, t, qs, x, ts, es),
+            Expr::Query(_, t, x, e, qs) => Expr::Query(span, t, x, e, qs),
+            Expr::QueryInto(_, t, x0, e, qs, x1, ts, es) => {
+                Expr::QueryInto(span, t, x0, e, qs, x1, ts, es)
+            }
             Expr::Field(_, t, e, x) => Expr::Field(span, t, e, x),
-            Expr::Assoc(_, t, b, x1, ts1) => Expr::Assoc(span, t, b, x1, ts1),
+            Expr::TraitMethod(_, t, b, x1, ts1) => Expr::TraitMethod(span, t, b, x1, ts1),
             Expr::Index(_, t, e, i) => Expr::Index(span, t, e, i),
             Expr::Array(_, t, es) => Expr::Array(span, t, es),
             Expr::Assign(_, t, e0, e1) => Expr::Assign(span, t, e0, e1),
@@ -47,6 +49,8 @@ impl Expr {
             Expr::IfElse(_, t, e, b0, b1) => Expr::IfElse(span, t, e, b0, b1),
             Expr::IntSuffix(_, t, v, x) => Expr::IntSuffix(span, t, v, x),
             Expr::FloatSuffix(_, t, v, x) => Expr::FloatSuffix(span, t, v, x),
+            Expr::LetIn(_, t, x, t1, e0, e1) => Expr::LetIn(span, t, x, t1, e0, e1),
+            Expr::Update(_, t, x, e0, e1) => Expr::Update(span, t, x, e0, e1),
         }
     }
 }
@@ -80,12 +84,14 @@ impl Query {
             Query::From(_, x, e) => Query::From(s, x, e),
             Query::Where(_, e) => Query::Where(s, e),
             Query::Select(_, xes) => Query::Select(s, xes),
-            Query::Join(_, x, e0, e1, e2) => Query::Join(s, x, e0, e1, e2),
-            Query::GroupOverCompute(_, x, e0, e1, aggs) => Query::GroupOverCompute(s, x, e0, e1, aggs),
+            Query::JoinOn(_, x, e0, e1) => Query::JoinOn(s, x, e0, e1),
+            Query::GroupOverCompute(_, x, e0, e1, aggs) => {
+                Query::GroupOverCompute(s, x, e0, e1, aggs)
+            }
             Query::OverCompute(_, e, aggs) => Query::OverCompute(s, e, aggs),
             Query::Var(_, x, e) => Query::Var(s, x, e),
             Query::Err(_) => Query::Err(s),
-            Query::JoinOver(_, x, e0, e1, e2, e3) => Query::JoinOver(s, x, e0, e1, e2, e3),
+            Query::JoinOverOn(_, x, e0, e1, e2) => Query::JoinOverOn(s, x, e0, e1, e2),
         }
     }
 }

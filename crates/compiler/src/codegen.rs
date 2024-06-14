@@ -271,8 +271,8 @@ impl<'a, 'b> Rust<'a, 'b> {
                 self.block(b)?;
             }
             Expr::Query(..) => unreachable!(),
-            Expr::QueryInto(_, _, _, _, _, _) => unreachable!(),
-            Expr::Assoc(..) => unreachable!(),
+            Expr::QueryInto(..) => unreachable!(),
+            Expr::TraitMethod(..) => unreachable!(),
             Expr::Index(_, _, e, i) => {
                 self.expr(e)?;
                 self.punct(".")?;
@@ -341,6 +341,8 @@ impl<'a, 'b> Rust<'a, 'b> {
             Expr::IfElse(_, _, _, _, _) => unreachable!(),
             Expr::IntSuffix(_, _, _, _) => unreachable!(),
             Expr::FloatSuffix(_, _, _, _) => unreachable!(),
+            Expr::LetIn(_, _, _, _, _, _) => todo!(),
+            Expr::Update(_, _, _, _, _) => todo!(),
         }
         Ok(())
     }

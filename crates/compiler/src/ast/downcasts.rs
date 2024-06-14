@@ -14,6 +14,7 @@ use super::StmtTrait;
 use super::StmtType;
 use super::StmtTypeBody;
 use super::StmtVar;
+use super::Trait;
 use super::Type;
 
 impl Stmt {
@@ -89,6 +90,19 @@ impl StmtDefBody {
         b
     }
 }
+
+impl Trait {
+    pub fn as_type(&self, x: &Name) -> Option<&Type> {
+        match self {
+            Trait::Path(_, _) => None,
+            Trait::Cons(_, _, xts) => xts.get(x),
+            Trait::Type(_) => None,
+            Trait::Err => None,
+            Trait::Var(..) => None,
+        }
+    }
+}
+
 
 impl Path {
     pub fn as_name(&self) -> Option<&Name> {

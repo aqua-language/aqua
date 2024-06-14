@@ -1,6 +1,5 @@
 use std::rc::Rc;
 
-use crate::ast::Bound;
 use crate::ast::Expr;
 use crate::ast::Name;
 use crate::ast::Pat;
@@ -19,10 +18,10 @@ use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
+use crate::ast::Trait;
 use crate::ast::Type;
 use crate::collections::map::Map;
 use crate::diag::Report;
-use crate::lexer::Span;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 
@@ -206,8 +205,9 @@ impl Mapper for Context {
                         }
                         let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                         let xts0 = stmt.types.iter().map(|t| (t.name, Type::Unknown)).collect();
-                        let b = Bound::Trait(*s, seg0.name, ts0, xts0);
-                        Expr::Assoc(*s, t, b, seg1.name, seg1.ts.clone())
+                        let ts1 = seg1.create_unnamed_holes(def.generics.len());
+                        let b = Trait::Cons(seg0.name, ts0, xts0);
+                        Expr::TraitMethod(*s, t, b, seg1.name, ts1)
                     }
                     Some(Binding::Type(stmt)) => {
                         if !seg0.has_optional_arity(stmt.generics.len()) {
@@ -222,8 +222,8 @@ impl Mapper for Context {
                         };
                         let ts1 = seg1.ts;
                         let x1 = seg1.name;
-                        let b = Bound::Type(*s, Rc::new(Type::Cons(x0, ts0)));
-                        Expr::Assoc(*s, t, b, x1, ts1)
+                        let b = Trait::Type(Rc::new(Type::Cons(x0, ts0)));
+                        Expr::TraitMethod(*s, t, b, x1, ts1)
                     }
                     Some(b) => {
                         self.unexpected(&seg0.name, b.name(), "expression");
@@ -393,8 +393,7 @@ impl Mapper for Context {
                             return Type::Err;
                         }
                         let xts = stmt.types.iter().map(|t| (t.name, Type::Unknown)).collect();
-                        let s = seg0.span + seg1.span;
-                        let b = Bound::Trait(s, seg0.name, seg0.ts.clone(), xts);
+                        let b = Trait::Cons(seg0.name, seg0.ts.clone(), xts);
                         Type::Assoc(b, seg1.name, seg1.ts.clone())
                     }
                     Some(b) => {
@@ -498,13 +497,13 @@ impl Mapper for Context {
 
     // impl ... where Foo[T] { ... }
     #[allow(clippy::type_complexity)]
-    fn map_bound(&mut self, bound: &Bound) -> Bound {
-        let span = bound.span();
+    fn map_bound(&mut self, bound: &Trait) -> Trait {
         match bound {
-            Bound::Path(_, path) => self.resolve_bound_path(span, path),
-            Bound::Trait(..) => unreachable!(),
-            Bound::Type(..) => unreachable!(),
-            Bound::Err(_) => Bound::Err(span),
+            Trait::Path(_span, path) => self.resolve_bound_path(path),
+            Trait::Cons(..) => unreachable!(),
+            Trait::Type(..) => unreachable!(),
+            Trait::Err => Trait::Err,
+            Trait::Var(_v) => todo!(),
         }
     }
 }
@@ -753,23 +752,23 @@ impl Context {
 
     // impl Foo[T] { ... }
     #[allow(clippy::type_complexity)]
-    fn head(&mut self, head: &Bound, defs: &[Rc<StmtDef>], types: &[Rc<StmtType>]) -> Bound {
+    fn head(&mut self, head: &Trait, defs: &[Rc<StmtDef>], types: &[Rc<StmtType>]) -> Trait {
         match head {
-            Bound::Path(s, path) => self.resolve_head_path(*s, path, defs, types),
-            Bound::Trait(_, _, _, _) => unreachable!(),
-            Bound::Type(_, _) => unreachable!(),
-            Bound::Err(s) => Bound::Err(*s),
+            Trait::Path(_, path) => self.resolve_head_path(path, defs, types),
+            Trait::Cons(_, _, _) => unreachable!(),
+            Trait::Type(_) => unreachable!(),
+            Trait::Err => Trait::Err,
+            Trait::Var(_) => todo!(),
         }
     }
 
     #[allow(clippy::type_complexity)]
     fn resolve_head_path(
         &mut self,
-        span: Span,
         path: &Path,
         found_defs: &[Rc<StmtDef>],
         found_types: &[Rc<StmtType>],
-    ) -> Bound {
+    ) -> Trait {
         let path = self.map_path(path);
         let mut iter = path.segments.into_iter();
         let seg0 = iter.next().unwrap();
@@ -777,16 +776,16 @@ impl Context {
             Some(Binding::Trait(stmt)) => {
                 if !seg0.has_optional_arity(stmt.generics.len()) {
                     self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Bound::Err(span);
+                    return Trait::Err;
                 }
                 let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                 if seg0.has_named_args() {
                     self.unexpected_named_type_args(&seg0.name);
-                    return Bound::Err(span);
+                    return Trait::Err;
                 }
                 if let Some(seg1) = iter.next() {
                     self.unexpected_assoc("Trait", "item", &seg0.name, &seg1.name);
-                    return Bound::Err(span);
+                    return Trait::Err;
                 }
                 if !defs_are_defined(&stmt.defs, found_defs) {
                     self.wrong_items(
@@ -795,7 +794,7 @@ impl Context {
                         found_defs.iter().map(|def| &def.name),
                         stmt.defs.iter().map(|def| &def.name),
                     );
-                    return Bound::Err(span);
+                    return Trait::Err;
                 }
                 if !types_are_defined(&stmt.types, found_types) {
                     self.wrong_items(
@@ -804,7 +803,7 @@ impl Context {
                         found_types.iter().map(|ty| &ty.name),
                         stmt.types.iter().map(|ty| &ty.name),
                     );
-                    return Bound::Err(span);
+                    return Trait::Err;
                 }
                 let xts = found_types
                     .iter()
@@ -814,34 +813,34 @@ impl Context {
                         (x, t)
                     })
                     .collect();
-                Bound::Trait(span, seg0.name, ts0, xts)
+                Trait::Cons(seg0.name, ts0, xts)
             }
             Some(Binding::Type(stmt)) => {
                 if !seg0.has_optional_arity(stmt.generics.len()) {
                     self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Bound::Err(span);
+                    return Trait::Err;
                 }
                 let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                 let t = Type::Cons(seg0.name, ts0.clone());
                 if let Some(seg1) = iter.next() {
                     self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
-                    return Bound::Err(span);
+                    return Trait::Err;
                 }
-                Bound::Type(span, Rc::new(t))
+                Trait::Type(Rc::new(t))
             }
             Some(b) => {
                 self.unexpected(&seg0.name, b.name(), "trait");
-                Bound::Err(span)
+                Trait::Err
             }
             None => {
                 self.not_found(&seg0.name, "trait");
-                Bound::Err(span)
+                Trait::Err
             }
         }
     }
 
     #[allow(clippy::type_complexity)]
-    fn resolve_bound_path(&mut self, span: Span, path: &Path) -> Bound {
+    fn resolve_bound_path(&mut self, path: &Path) -> Trait {
         let path = self.map_path(path);
         let mut iter = path.segments.into_iter();
         let seg0 = iter.next().unwrap();
@@ -849,24 +848,24 @@ impl Context {
             Some(Binding::Trait(stmt)) => {
                 let Some(ts0) = seg0.try_create_unnamed_holes(stmt.generics.len()) else {
                     self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Bound::Err(span);
+                    return Trait::Err;
                 };
                 let Some(xts0) = seg0.try_create_named_holes(&stmt.types) else {
-                    return Bound::Err(span);
+                    return Trait::Err;
                 };
                 if let Some(seg1) = iter.next() {
                     self.unexpected_assoc("Trait", "item", &seg0.name, &seg1.name);
-                    return Bound::Err(span);
+                    return Trait::Err;
                 }
-                Bound::Trait(span, seg0.name, ts0, xts0)
+                Trait::Cons(seg0.name, ts0, xts0)
             }
             Some(b) => {
                 self.unexpected(&seg0.name, b.name(), "trait");
-                Bound::Err(span)
+                Trait::Err
             }
             None => {
                 self.not_found(&seg0.name, "trait");
-                Bound::Err(span)
+                Trait::Err
             }
         }
     }

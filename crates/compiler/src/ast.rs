@@ -3,9 +3,9 @@ mod downcasts;
 mod span_of;
 mod type_of;
 mod upcasts;
+mod utils;
 mod with_span;
 mod with_type;
-mod utils;
 
 use std::rc::Rc;
 
@@ -38,6 +38,7 @@ pub struct Name {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Program {
+    pub span: Span,
     pub stmts: Vec<Stmt>,
 }
 
@@ -49,16 +50,10 @@ pub struct Program {
 pub struct StmtImpl {
     pub span: Span,
     pub generics: Vec<Name>,
-    pub head: Bound,
-    pub where_clause: Vec<Bound>,
+    pub head: Trait,
+    pub where_clause: Vec<Trait>,
     pub defs: Vec<Rc<StmtDef>>,
     pub types: Vec<Rc<StmtType>>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ImplKind {
-    Trait,
-    Type,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -66,27 +61,31 @@ pub struct StmtTrait {
     pub span: Span,
     pub name: Name,
     pub generics: Vec<Name>,
-    pub where_clause: Vec<Bound>,
+    pub where_clause: Vec<Trait>,
     pub defs: Vec<Rc<StmtTraitDef>>,
     pub types: Vec<Rc<StmtTraitType>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Bound {
+pub enum Trait {
     Path(Span, Path),
     // Trait bound. For example: impl Clone[i32] { ... } and Clone[T]::clone();
-    Trait(Span, Name, Vec<Type>, Map<Name, Type>),
+    Cons(Name, Vec<Type>, Map<Name, Type>),
+    Var(TraitVar),
     // Type bound. For example: impl[T] Vec[T] { ... } and Vec[T]::new();
-    Type(Span, Rc<Type>),
-    Err(Span),
+    Type(Rc<Type>),
+    Err,
 }
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct TraitVar(u32);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Type {
     Path(Path),
     Cons(Name, Vec<Type>),
     Alias(Name, Vec<Type>),
-    Assoc(Bound, Name, Vec<Type>),
+    Assoc(Trait, Name, Vec<Type>),
     Var(TypeVar),
     Generic(Name),
     Fun(Vec<Type>, Rc<Type>),
@@ -108,7 +107,7 @@ pub enum Candidate {
     // An implementation of a trait for a type.
     Impl(StmtImpl),
     // A bound in a where clause
-    Bound(Bound),
+    Bound(Trait),
 }
 
 impl std::fmt::Display for Candidate {
@@ -147,7 +146,7 @@ pub struct StmtTraitDef {
     pub generics: Vec<Name>,
     pub params: Map<Name, Type>,
     pub ty: Type,
-    pub where_clause: Vec<Bound>,
+    pub where_clause: Vec<Trait>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -165,7 +164,7 @@ pub struct StmtDef {
     pub generics: Vec<Name>,
     pub params: Map<Name, Type>,
     pub ty: Type,
-    pub where_clause: Vec<Bound>,
+    pub where_clause: Vec<Trait>,
     pub body: StmtDefBody,
 }
 
@@ -239,14 +238,24 @@ pub enum Expr {
     Record(Span, Type, Map<Name, Expr>),
     Enum(Span, Type, Name, Vec<Type>, Name, Rc<Expr>),
     Field(Span, Type, Rc<Expr>, Name),
+    Update(Span, Type, Rc<Expr>, Name, Rc<Expr>),
     Index(Span, Type, Rc<Expr>, Index),
     Var(Span, Type, Name),
     Def(Span, Type, Name, Vec<Type>),
     Call(Span, Type, Rc<Expr>, Vec<Expr>),
     Block(Span, Type, Block),
-    Query(Span, Type, Vec<Query>),
-    QueryInto(Span, Type, Vec<Query>, Name, Vec<Type>, Vec<Expr>),
-    Assoc(Span, Type, Bound, Name, Vec<Type>),
+    Query(Span, Type, Name, Rc<Expr>, Vec<Query>),
+    QueryInto(
+        Span,
+        Type,
+        Name,
+        Rc<Expr>,
+        Vec<Query>,
+        Name,
+        Vec<Type>,
+        Vec<Expr>,
+    ),
+    TraitMethod(Span, Type, Trait, Name, Vec<Type>),
     Match(Span, Type, Rc<Expr>, Map<Pat, Expr>),
     IfElse(Span, Type, Rc<Expr>, Block, Block),
     Array(Span, Type, Vec<Expr>),
@@ -265,6 +274,7 @@ pub enum Expr {
     Annotate(Span, Type, Rc<Expr>),
     Paren(Span, Type, Rc<Expr>),
     Dot(Span, Type, Rc<Expr>, Name, Vec<Type>, Vec<Expr>),
+    LetIn(Span, Type, Name, Type, Rc<Expr>, Rc<Expr>),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -308,8 +318,8 @@ pub enum Query {
     Select(Span, Map<Name, Expr>),
     OverCompute(Span, Rc<Expr>, Vec<Aggr>),
     GroupOverCompute(Span, Name, Rc<Expr>, Rc<Expr>, Vec<Aggr>),
-    Join(Span, Name, Rc<Expr>, Rc<Expr>, Rc<Expr>),
-    JoinOver(Span, Name, Rc<Expr>, Rc<Expr>, Rc<Expr>, Rc<Expr>),
+    JoinOn(Span, Name, Rc<Expr>, Rc<Expr>),
+    JoinOverOn(Span, Name, Rc<Expr>, Rc<Expr>, Rc<Expr>),
     // Into(Span, Name, Vec<Type>, Vec<Expr>),
     // Compute(Span, Name, Rc<Expr>, Rc<Expr>),
     Err(Span),

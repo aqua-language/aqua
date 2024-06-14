@@ -19,7 +19,7 @@ impl Expr {
             Expr::Query(_, t, ..) => t,
             Expr::QueryInto(_, t, ..) => t,
             Expr::Field(_, t, ..) => t,
-            Expr::Assoc(_, t, ..) => t,
+            Expr::TraitMethod(_, t, ..) => t,
             Expr::Err(_, t) => t,
             Expr::Index(_, t, ..) => t,
             Expr::Array(_, t, ..) => t,
@@ -45,6 +45,8 @@ impl Expr {
             Expr::IfElse(_, t, ..) => t,
             Expr::IntSuffix(_, t, ..) => t,
             Expr::FloatSuffix(_, t, ..) => t,
+            Expr::LetIn(_, t, ..) => t,
+            Expr::Update(_, t, ..) => t,
         }
     }
 }

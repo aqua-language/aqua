@@ -3,6 +3,7 @@ use crate::lexer::Span;
 use super::Expr;
 use super::Pat;
 use super::Query;
+use super::Stmt;
 
 impl Expr {
     pub fn span_of(&self) -> Span {
@@ -20,7 +21,7 @@ impl Expr {
             Expr::Call(s, ..) => *s,
             Expr::Block(s, ..) => *s,
             Expr::Query(s, ..) => *s,
-            Expr::Assoc(s, ..) => *s,
+            Expr::TraitMethod(s, ..) => *s,
             Expr::Index(s, ..) => *s,
             Expr::Array(s, ..) => *s,
             Expr::Assign(s, ..) => *s,
@@ -47,6 +48,8 @@ impl Expr {
             Expr::IfElse(s, ..) => *s,
             Expr::IntSuffix(s, ..) => *s,
             Expr::FloatSuffix(s, ..) => *s,
+            Expr::LetIn(s, ..) => *s,
+            Expr::Update(s, ..) => *s,
         }
     }
 }
@@ -79,12 +82,28 @@ impl Query {
             Query::From(s, ..) => *s,
             Query::Where(s, ..) => *s,
             Query::Select(s, ..) => *s,
-            Query::Join(s, ..) => *s,
+            Query::JoinOn(s, ..) => *s,
             Query::GroupOverCompute(s, ..) => *s,
             Query::Var(s, ..) => *s,
             Query::OverCompute(s, ..) => *s,
-            Query::JoinOver(s, ..) => *s,
+            Query::JoinOverOn(s, ..) => *s,
             Query::Err(s) => *s,
+        }
+    }
+}
+
+impl Stmt {
+    pub fn span_of(&self) -> Span {
+        match self {
+            Stmt::Var(s) => s.span,
+            Stmt::Def(s) => s.span,
+            Stmt::Trait(s) => s.span,
+            Stmt::Impl(s) => s.span,
+            Stmt::Struct(s) => s.span,
+            Stmt::Enum(s) => s.span,
+            Stmt::Type(s) => s.span,
+            Stmt::Expr(s) => s.span_of(),
+            Stmt::Err(s) => *s,
         }
     }
 }

@@ -77,7 +77,7 @@ impl Compiler {
         input: &str,
         f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>, Token) -> Result<Spanned<T>, Span>,
     ) -> Option<T> {
-        let input: Rc<str> = unindent::unindent(input).into();
+        let input: Rc<str> = Rc::from(input);
         let id = self.sources.add(name, input.clone());
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
