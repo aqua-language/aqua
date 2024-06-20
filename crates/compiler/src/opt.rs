@@ -57,4 +57,8 @@ impl Optimiser {
             Err(e) => panic!("unexpected error: {:?}", e),
         }
     }
+    
+    pub fn optimise(&mut self, _a: Expr) -> Expr {
+        todo!()
+    }
 }

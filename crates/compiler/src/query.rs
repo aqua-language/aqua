@@ -34,7 +34,7 @@ impl Context {
         Self { stack: vec![] }
     }
 
-    pub fn desugar(&mut self, program: &Program) -> Program {
+    pub fn querycomp(&mut self, program: &Program) -> Program {
         self.map_program(program)
     }
 

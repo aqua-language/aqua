@@ -14,7 +14,7 @@ pub mod ast;
 pub mod codegen;
 pub mod diag;
 pub mod display;
-pub mod flatten;
+pub mod ssa;
 // pub mod ffi;
 pub mod builtins;
 pub mod controlflow;
@@ -46,7 +46,9 @@ pub struct Compiler {
     pub sources: Sources,
     pub declarations: Vec<Stmt>,
     pub desugar: desugar::Context,
+    pub query: query::Context,
     pub resolve: resolve::Context,
+    pub flatten: ssa::Context,
     #[allow(unused)]
     pub lift: lift::Context,
     pub infer: infer::Context,
@@ -76,7 +78,9 @@ impl Compiler {
             declarations: Vec::new(),
             sources: Sources::new(),
             desugar: desugar::Context::new(),
+            query: query::Context::new(),
             resolve: resolve::Context::new(),
+            flatten: ssa::Context::new(),
             lift: lift::Context::new(),
             infer: infer::Context::new(),
             monomorphise: monomorphise::Context::new(),
@@ -92,7 +96,9 @@ impl Compiler {
         let s = stmts.first().unwrap().span_of() + stmts.last().unwrap().span_of();
         let program = Program::new(s, stmts);
         let program = self.desugar.desugar(&program);
+        let program = self.query.querycomp(&program);
         let program = self.resolve.resolve(&program);
+        let program = self.flatten.flatten(&program);
         self.report.merge(&mut self.resolve.report);
         let program = self.lift.lift(&program);
         self.report.merge(&mut self.lift.report);
@@ -131,10 +137,22 @@ impl Compiler {
         self.recover(result)
     }
 
-    pub fn resolve(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
+    pub fn querycomp(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
         let program = self.desugar(name, input)?;
+        let result = self.query.querycomp(&program);
+        self.recover(result)
+    }
+
+    pub fn resolve(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
+        let program = self.querycomp(name, input)?;
         let result = self.resolve.resolve(&program);
         self.report.merge(&mut self.resolve.report);
+        self.recover(result)
+    }
+
+    pub fn flatten(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
+        let program = self.resolve(name, input)?;
+        let result = self.flatten.flatten(&program);
         self.recover(result)
     }
 

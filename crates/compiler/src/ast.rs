@@ -1,5 +1,6 @@
 mod constructors;
 mod downcasts;
+pub mod into_egg;
 mod span_of;
 mod type_of;
 mod upcasts;
@@ -16,6 +17,23 @@ use crate::lexer::Token;
 use crate::symbol::Symbol;
 
 pub use crate::collections::map::Map;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Program {
+    pub span: Span,
+    pub stmts: Vec<Stmt>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct IR {
+    pub defs: Map<Name, StmtDef>,
+    pub tys: Map<Name, StmtType>,
+    pub traits: Map<Name, StmtTrait>,
+    pub impls: Map<Name, StmtImpl>,
+    pub structs: Map<Name, StmtStruct>,
+    pub enums: Map<Name, StmtEnum>,
+    pub stmts: Vec<Stmt>
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Path {
@@ -34,12 +52,6 @@ pub struct Segment {
 pub struct Name {
     pub span: Span,
     pub data: Symbol,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Program {
-    pub span: Span,
-    pub stmts: Vec<Stmt>,
 }
 
 // An impl is like a rule

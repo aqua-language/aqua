@@ -1385,45 +1385,36 @@ where
                 let t = self.next();
                 let e = self.expr(follow | Token::LBrace)?;
                 let b0 = self.block(follow | Token::Else | Stmt::FIRST)?;
-                let e0 = Expr::Block(b0.s, Type::Unknown, b0.v);
-                let (s, e1, s1) =
-                    if self.start(follow | Token::Else | Stmt::FIRST, follow)?.v == Token::Else {
-                        self.skip();
-                        let b1 = self.block(follow)?;
-                        let s = t.s + b1.s;
-                        let e1 = Expr::Block(b1.s, Type::Unknown, b1.v);
-                        (s, e1, b1.s)
-                    } else {
-                        let s = t.s + b0.s;
-                        let e1 = Expr::Tuple(s, Type::Unknown, vec![]);
-                        (s, e1, b0.s)
-                    };
-                let p0 = Pat::Bool(b0.s, Type::Unknown, true);
-                let p1 = Pat::Wildcard(s1, Type::Unknown);
-                // if a { b } else { c } => match a { true => b, _ => c }
-                // if a { b } => match a { true => b, _ => () }
-                Ok(Spanned::new(
-                    s,
-                    Expr::Match(
+                if self.start(follow | Token::Else | Stmt::FIRST, follow)?.v == Token::Else {
+                    self.skip();
+                    let b1 = self.block(follow)?;
+                    let s = t.s + b1.s;
+                    Ok(Spanned::new(
                         s,
-                        Type::Unknown,
-                        Rc::new(e.v),
-                        vec![(p0, e0), (p1, e1)].into(),
-                    ),
-                ))
+                        Expr::IfElse(s, Type::Unknown, Rc::new(e.v), b0.v, b1.v),
+                    ))
+                } else {
+                    let s = t.s + b0.s;
+                    let e1 = Expr::Tuple(s, Type::Unknown, vec![]);
+                    let b1 = Block::new(s, vec![], e1);
+                    Ok(Spanned::new(
+                        s,
+                        Expr::IfElse(s, Type::Unknown, Rc::new(e.v), b0.v, b1),
+                    ))
+                }
             }
             Token::Let => {
                 let t = self.next();
                 let x = self.name(follow | Token::Eq)?;
-                let t1 = self.start(follow | Token::Eq, follow)?;
+                let t1 = self.start(follow | Token::Eq | Token::Colon, follow)?;
                 let ty = if t1.v == Token::Eq {
                     Type::Unknown
                 } else {
                     self.ty_annot(follow | Token::Eq)?.v
                 };
-                self.expect(Token::Eq, follow)?;
-                let e = self.expr(follow)?;
-                self.expect(Token::In, follow)?;
+                self.expect(Token::Eq, follow | Expr::FIRST)?;
+                let e = self.expr(follow | Token::In)?;
+                self.expect(Token::In, follow | Expr::FIRST)?;
                 let e0 = self.expr(follow)?;
                 let s = t.s + e0.s;
                 Ok(Spanned::new(
@@ -1682,7 +1673,8 @@ impl Expr {
         .or(Token::Char)
         .or(Token::LBrace)
         .or(Token::Record)
-        .or(Token::From);
+        .or(Token::From)
+        .or(Token::Let);
     const FOLLOW: Token = Token::Eof
         .or(Token::And)
         .or(Token::DotDot)

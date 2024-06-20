@@ -541,7 +541,7 @@ impl Mapper for Context {
         let stmts = self.map_stmts(&program.stmts);
         let program = Program::new(p.span, stmts);
         let program = Apply::new(self).map_program(&program);
-        GatherGoals::new(self, p.span).visit_program(&program);
+        GatherGoals::new(self, program.span).visit_program(&program);
         self.solve_goals();
         Defaults::new(self).visit_program(&program);
         let program = Expand::new().map_program(&program);

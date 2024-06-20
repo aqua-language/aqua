@@ -867,28 +867,18 @@ pub fn expr_match<const N: usize>(e: Expr, pes: [(Pat, Expr); N]) -> Expr {
     Expr::Match(span(), Type::Unknown, Rc::new(e), arms(pes))
 }
 
-pub fn expr_if(e0: Expr, b1: Block) -> Expr {
-    Expr::Match(
+pub fn expr_if(e0: Expr, b0: Block) -> Expr {
+    Expr::IfElse(
         span(),
         Type::Unknown,
         Rc::new(e0),
-        arms([
-            (pat_bool(true), Expr::Block(span(), Type::Unknown, b1)),
-            (pat_wild(), expr_unit()),
-        ]),
+        b0,
+        block([], expr_unit()),
     )
 }
 
-pub fn expr_if_else(e0: Expr, b1: Block, b2: Block) -> Expr {
-    Expr::Match(
-        span(),
-        Type::Unknown,
-        Rc::new(e0),
-        arms([
-            (pat_bool(true), Expr::Block(span(), Type::Unknown, b1)),
-            (pat_wild(), Expr::Block(span(), Type::Unknown, b2)),
-        ]),
-    )
+pub fn expr_if_else(e0: Expr, b0: Block, b1: Block) -> Expr {
+    Expr::IfElse(span(), Type::Unknown, Rc::new(e0), b0, b1)
 }
 
 pub fn expr_def<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
@@ -1245,6 +1235,16 @@ pub fn resolve(
     comp.recover(result)
 }
 
+pub fn flatten(
+    comp: &mut Compiler,
+    name: &str,
+    input: &str,
+) -> Result<Program, Recovered<Program>> {
+    let program = comp.resolve(name, input)?;
+    let program = comp.flatten.flatten(&program);
+    comp.recover(program)
+}
+
 pub fn lift(comp: &mut Compiler, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
     let program = comp.resolve(name, input)?;
     let program = comp.lift.lift(&program);
@@ -1302,8 +1302,16 @@ pub fn desugar_program(input: &str) -> Result<Program, Recovered<Program>> {
     Compiler::default().desugar("test", input)
 }
 
+pub fn querycomp_program(input: &str) -> Result<Program, Recovered<Program>> {
+    Compiler::default().init().querycomp("test", input)
+}
+
 pub fn resolve_program(input: &str) -> Result<Program, Recovered<Program>> {
     Compiler::default().init().resolve("test", input)
+}
+
+pub fn flatten_program(input: &str) -> Result<Program, Recovered<Program>> {
+    Compiler::default().init().flatten("test", input)
 }
 
 pub fn lift_program(input: &str) -> Result<Program, Recovered<Program>> {
@@ -1388,5 +1396,17 @@ macro_rules! monomorphise_program {
 macro_rules! interpret_program {
     ($code:literal) => {
         common::interpret_program(indoc::indoc!($code))
+    };
+}
+
+macro_rules! flatten_program {
+    ($code:literal) => {
+        common::flatten_program(indoc::indoc!($code))
+    };
+}
+
+macro_rules! querycomp_program {
+    ($code:literal) => {
+        common::querycomp_program(indoc::indoc!($code))
     };
 }

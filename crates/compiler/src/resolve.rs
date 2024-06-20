@@ -316,6 +316,11 @@ impl Mapper for Context {
         }
     }
 
+    fn map_top_stmts(&mut self, stmts: &[Stmt]) -> Vec<Stmt> {
+        self.visit_stmts(stmts);
+        self._map_stmts(stmts)
+    }
+
     fn map_stmts(&mut self, stmts: &[Stmt]) -> Vec<Stmt> {
         self.visit_stmts(stmts);
         self._map_stmts(stmts)

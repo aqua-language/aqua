@@ -33,10 +33,17 @@ pub(crate) trait Visitor {
     }
     #[inline(always)]
     fn _visit_program(&mut self, program: &Program) {
-        self.visit_stmts(&program.stmts);
+        self.visit_top_stmts(&program.stmts);
     }
 
-    #[inline(always)]
+    fn visit_top_stmts(&mut self, stmts: &[Stmt]) {
+        self.visit_iter(stmts, Self::visit_top_stmt);
+    }
+
+    fn visit_top_stmt(&mut self, s: &Stmt) {
+        self.visit_stmt(s);
+    }
+
     fn visit_stmts(&mut self, stmts: &[Stmt]) {
         self._visit_stmts(stmts);
     }
@@ -167,7 +174,7 @@ pub(crate) trait Visitor {
             Trait::Type(t) => {
                 self.visit_type(t);
             }
-            Trait::Err => {},
+            Trait::Err => {}
             Trait::Var(_) => {}
         }
     }
@@ -512,7 +519,7 @@ pub(crate) trait Visitor {
                 self.visit_type(t1);
                 self.visit_expr(e0);
                 self.visit_expr(e1);
-            },
+            }
             Expr::Update(_, _, e0, x, e1) => {
                 self.visit_expr(e0);
                 self.visit_name(x);

@@ -39,8 +39,16 @@ pub(crate) trait Mapper {
     #[inline(always)]
     fn _map_program(&mut self, program: &Program) -> Program {
         let span = self.map_span(&program.span);
-        let stmts = self.map_stmts(&program.stmts);
+        let stmts = self.map_top_stmts(&program.stmts);
         Program::new(span, stmts)
+    }
+
+    fn map_top_stmts(&mut self, stmts: &[Stmt]) -> Vec<Stmt> {
+        self.map_iter(stmts, Self::map_top_stmt)
+    }
+
+    fn map_top_stmt(&mut self, stmt: &Stmt) -> Stmt {
+        self.map_stmt(stmt)
     }
 
     #[inline(always)]
