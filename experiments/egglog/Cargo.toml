@@ -1,0 +1,9 @@
+[workspace]
+
+[package]
+name = "egglog-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+egglog = { git = "https://github.com/egraphs-good/egglog" }

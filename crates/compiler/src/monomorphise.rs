@@ -5,7 +5,6 @@ use std::rc::Rc;
 
 use ena::unify::InPlaceUnificationTable;
 
-use crate::apply::Instantiate;
 use crate::ast::Trait;
 use crate::ast::Expr;
 use crate::ast::Map;
@@ -19,6 +18,7 @@ use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::Type;
 use crate::ast::TypeVar;
+use crate::infer::instantiate::Instantiate;
 use crate::infer::type_var::TypeVarKind;
 use crate::infer::type_var::TypeVarValue;
 use crate::traversal::mapper::Mapper;
@@ -214,9 +214,6 @@ impl Context {
         }
     }
 
-    // This function assumes there are no "Known" type variables in either t0 or t1. Any known
-    // type variables should be applied before calling this function.
-    // Problem: Unification of type variables of different types does not work well
     pub fn try_unify(&mut self, t0: &Type, t1: &Type) -> Result<(), (Type, Type)> {
         match (t0, t1) {
             (Type::Var(x0), t) | (t, Type::Var(x0)) => {
@@ -273,7 +270,7 @@ impl Context {
             (Type::Err, _) | (_, Type::Err) => unreachable!(),
             (Type::Never, _) | (_, Type::Never) => Ok(()),
             (Type::Unknown, Type::Unknown) => unreachable!(),
-            _ => unreachable!(),
+            _ => unreachable!("{} {}", t0, t1),
         }
     }
 }

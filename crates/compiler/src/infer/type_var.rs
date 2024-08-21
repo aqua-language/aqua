@@ -53,8 +53,8 @@ impl TypeVarKind {
             || matches!(
                 t,
                 Type::Cons(x, _)
-                if self.is_int() && ints().any(|y| *x == y)
-                || self.is_float() && floats().any(|y| *x == y)
+                if self.is_int_var() && ints().any(|y| *x == y)
+                || self.is_float_var() && floats().any(|y| *x == y)
             )
     }
 }
@@ -78,14 +78,14 @@ impl TypeVarKind {
         }
     }
 
-    pub fn is_int(self) -> bool {
+    pub fn is_int_var(self) -> bool {
         match self {
             TypeVarKind::Int => true,
             _ => false,
         }
     }
 
-    pub fn is_float(self) -> bool {
+    pub fn is_float_var(self) -> bool {
         match self {
             TypeVarKind::Float => true,
             _ => false,

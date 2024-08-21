@@ -3,7 +3,6 @@ mod common;
 
 use compiler::builtins::Value;
 
-#[ignore]
 #[test]
 fn test_interpret_arithmetic0() {
     let a = interpret_program!("1 + 2 + 3;").unwrap();

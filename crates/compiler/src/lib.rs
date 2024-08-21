@@ -9,7 +9,6 @@ use diag::Sources;
 use lexer::Lexer;
 use parser::Parser;
 
-pub mod apply;
 pub mod ast;
 pub mod codegen;
 pub mod diag;
@@ -34,6 +33,7 @@ pub mod traversal {
 }
 pub mod collections {
     pub mod map;
+    pub mod set;
     pub mod ordmap;
 }
 pub mod monomorphise;

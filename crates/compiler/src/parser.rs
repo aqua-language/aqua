@@ -1235,9 +1235,14 @@ where
                 let s = lhs.s + rhs.s;
                 let e = if let Token::Eq = op.v {
                     let place = if lhs.v.is_place() {
-                        Expr::Err(lhs.s, Type::Unknown)
-                    } else {
                         lhs.v
+                    } else {
+                        self.report.err(
+                            lhs.s,
+                            "Invalid left-hand side of assignment",
+                            "Expected a variable, index, or field expression.",
+                        );
+                        Expr::Err(lhs.s, Type::Unknown)
                     };
                     Expr::Assign(s, Type::Unknown, Rc::new(place), Rc::new(rhs.v))
                 } else {

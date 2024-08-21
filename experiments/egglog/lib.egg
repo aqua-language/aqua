@@ -1,0 +1,110 @@
+(datatype Value
+  (I64 i64)
+  (F64 f64))
+(declare True Value)
+(declare False Value)
+
+(datatype Expr
+  (Val Value)
+  (Op String Expr Expr)
+  ;; Functions
+  (Var String)
+  (Let String Expr Expr)
+  (Fun String Expr)
+  (App Expr Expr)
+  ;; Control-Flow
+  (If Expr Expr Expr)
+  ;; Dataflow
+  (Fold Expr Expr)
+  (FoldMap Expr Expr Expr Expr)
+  (Map Expr Expr)
+  (Filter Expr Expr)
+  (Merge Expr Expr)
+  (Fork Expr)
+  (Window Expr Expr)
+)
+
+;; (let expr1 ("*" (Val (I64 2)) ("+" (Var "x") (Val (I64 3)))))
+;; (let expr2 ("+" (Val (I64 6)) ("*" (Val (I64 2)) (Var "x"))))
+
+;; I64
+(rewrite (Op "+" (Val (I64 a)) (Val (I64 b))) (Val (I64 (+ a b))))
+(rewrite (Op "*" (Val (I64 a)) (Val (I64 b))) (Val (I64 (* a b))))
+(rewrite (Op "/" (Val (I64 a)) (Val (I64 b))) (Val (I64 (/ a b))))
+(rewrite (Op "-" (Val (I64 a)) (Val (I64 b))) (Val (I64 (- a b))))
+
+;; F64
+(rewrite (Op ".+" (Val (F64 a)) (Val (F64 b))) (Val (F64 (+ a b))))
+(rewrite (Op ".*" (Val (F64 a)) (Val (F64 b))) (Val (F64 (* a b))))
+(rewrite (Op "./" (Val (F64 a)) (Val (F64 b))) (Val (F64 (- a b))))
+(rewrite (Op ".-" (Val (F64 a)) (Val (F64 b))) (Val (F64 (/ a b))))
+
+;; Addition
+(rewrite (Op "+" a b) ;; Commutativity
+         (Op "+" b a))
+(rewrite (Op "+" (Op "+" a b) c) ;; Associativity
+         (Op "+" a (Op "+" b c)))
+(rewrite (Op "+" a (Val (I64 0))) a) ;; Identity
+(rewrite (Op "+" a (Val (F64 0.0))) a) ;; Identity
+
+;; Subtraction
+(rewrite (Op "-" a (Val (I64 0))) a) ;; Identity
+(rewrite (Op "-" a (Val (F64 0.0))) a) ;; Identity
+
+;; Multiplication
+(rewrite (Op "*" a b) (Op "*" b a)) ;; Commutativity
+(rewrite (Op "*" (Op "*" a b) c) (Op "*" a (Op "*" b c))) ;; Associativity
+(rewrite (Op "*" a (Op "+" b c)) (Op "+" (Op "*" a b) (Op "*" a c))) ;; Distributivity
+
+;; Op-Fun
+(rewrite (Op "*" a b) (App (App (Var "*") a) b))
+
+;; If-Else
+(rewrite (If (Val True) then else) then) ;; True
+(rewrite (If (Val False) then else) else) ;; False
+
+(sort StringSet (Set String))
+(function fv (Expr) StringSet :merge (set-intersect old new))
+(rule ((= e (Val v)))
+      ((set (fv e) (set-empty))))
+(rule ((= e (Op op e1 e2))
+       (= (fv e1) fv1)
+       (= (fv e2) fv2))
+      ((set (fv e) (set-union fv1 fv2))))
+(rule ((= e (Let x e1 e2))
+       (= (fv e1) fv1)
+       (= (fv e2) fv2))
+      ((set (fv e) (set-union fv1 (set-remove fv2 x)))))
+(rule ((= e (Fun x e1))
+       (= (fv e1) fv1))
+      ((set (fv e) (set-remove fv1 x))))
+(rule ((= e (App e1 e2))
+       (= (fv e1) fv1)
+       (= (fv e2) fv2))
+      ((set (fv e) (set-union fv1 fv2))))
+(rule ((= e (Var x)))
+      ((set (fv e) (set-insert (set-empty) x))))
+(rule ((= e (If e1 e2 e3))
+       (= (fv e1) fv1)
+       (= (fv e2) fv2)
+       (= (fv e3) fv3))
+      ((set (fv e) (set-union fv1 (set-union fv2 fv3)))))
+
+;; Eval
+(function eval (Expr) Value)
+(rule ((= e (Val v)))
+      ((union (eval e) v)))
+(rule ((= e (Op "+" e1 e2))
+       (= (I64 v1) (eval a))
+       (= (I64 v2) (eval b)))
+      ((union (eval e) (I64 (+ v1 v2)))))
+(rule ((= e (Op "-" e1 e2))
+       (= (I64 v1) (eval a))
+       (= (I64 v2) (eval b)))
+      ((union (eval e) (I64 (- v1 v2)))))
+
+(let e3 (Let "x" (Val (I64 0))
+          (Let "y" (Val (I64 1))
+          (Op "+" (Var "x") (Var "y")))))
+(run 10)
+(check (= e3 (Val (I64 1))))

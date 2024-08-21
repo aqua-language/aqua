@@ -1,11 +1,11 @@
 #[macro_use]
 mod common;
 
-use crate::common::expr_int;
-use crate::common::expr_unit;
-use crate::common::program;
-use crate::common::stmt_expr;
-use crate::common::unresolved::ty;
+use crate::common::dsl::expr_int;
+use crate::common::dsl::expr_unit;
+use crate::common::dsl::program;
+use crate::common::dsl::stmt_expr;
+use crate::common::dsl::unresolved::ty;
 
 #[test]
 fn test_desugar_expr_binop_add0() {

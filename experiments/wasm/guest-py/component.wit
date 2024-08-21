@@ -1,0 +1,5 @@
+package pkg:component;
+world component {
+    export print: func(input: string);
+    export hello: func() -> string;
+}

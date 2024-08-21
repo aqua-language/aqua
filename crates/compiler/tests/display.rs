@@ -1,19 +1,19 @@
 mod common;
 
-use common::expr_bool;
-use common::expr_int;
-use common::expr_string;
-use common::expr_tuple;
-use common::stmt_struct;
-use common::ty;
-use common::ty_fun;
-use common::ty_tuple;
-use common::desugared::expr_add;
-use common::desugared::expr_div;
-use common::desugared::expr_eq;
-use common::desugared::expr_mul;
-use common::desugared::expr_ne;
-use common::desugared::expr_sub;
+use common::dsl::expr_bool;
+use common::dsl::expr_int;
+use common::dsl::expr_string;
+use common::dsl::expr_tuple;
+use common::dsl::stmt_struct;
+use common::dsl::ty;
+use common::dsl::ty_fun;
+use common::dsl::ty_tuple;
+use common::dsl::desugared::expr_add;
+use common::dsl::desugared::expr_div;
+use common::dsl::desugared::expr_eq;
+use common::dsl::desugared::expr_mul;
+use common::dsl::desugared::expr_ne;
+use common::dsl::desugared::expr_sub;
 
 #[test]
 fn test_display_int0() {

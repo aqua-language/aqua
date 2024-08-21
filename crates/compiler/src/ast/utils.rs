@@ -13,7 +13,7 @@ impl Expr {
     pub fn is_braced(&self) -> bool {
         matches!(
             self,
-            Expr::Block(..) | Expr::Match(..) | Expr::While(..) | Expr::For(..)
+            Expr::Block(..) | Expr::Match(..) | Expr::While(..) | Expr::For(..) | Expr::IfElse(..)
         )
     }
 

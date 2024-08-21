@@ -1,19 +1,18 @@
+pub mod annotate;
+pub mod apply;
+pub mod canonicalize;
+pub mod defaults;
+pub mod expand;
+pub mod gather_goals;
+pub mod instantiate;
+pub mod local;
 pub mod type_var;
 pub mod unify;
 
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::rc::Rc;
 
 use ena::unify::InPlaceUnificationTable;
 
-use crate::apply::Annotate;
-use crate::apply::Apply;
-use crate::apply::Canonicalize;
-use crate::apply::Defaults;
-use crate::apply::Expand;
-use crate::apply::GatherGoals;
-use crate::apply::Instantiate;
 use crate::ast::Candidate;
 use crate::ast::Expr;
 use crate::ast::Name;
@@ -25,18 +24,25 @@ use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
-use crate::ast::StmtTraitDef;
 use crate::ast::StmtType;
 use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeVar;
 use crate::collections::map::Map;
+use crate::collections::set::Set;
 use crate::diag::Report;
 use crate::lexer::Span;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 
+use self::annotate::Annotate;
+use self::apply::Apply;
+use self::canonicalize::Canonicalize;
+use self::defaults::Defaults;
+use self::expand::Expand;
+use self::gather_goals::GatherGoals;
+use self::instantiate::Instantiate;
 use self::type_var::TypeVarKind;
 use self::type_var::TypeVarValue;
 
@@ -48,15 +54,15 @@ impl Default for Context {
 
 #[derive(Debug)]
 pub struct Context {
-    stack: Vec<ValueScope>,
-    type_stack: Vec<TypeScope>,
+    stack: Vec<Scope>,
+    type_stack: Vec<InferContext>,
     pub type_impls: Vec<StmtImpl>,
-    pub trait_impls: HashMap<Name, Vec<Rc<StmtImpl>>>,
-    defs: HashMap<Name, Rc<StmtDef>>,
-    structs: HashMap<Name, Rc<StmtStruct>>,
-    enums: HashMap<Name, Rc<StmtEnum>>,
-    traits: HashMap<Name, Rc<StmtTrait>>,
-    types: HashMap<Name, Rc<StmtType>>,
+    pub trait_impls: Map<Name, Vec<Rc<StmtImpl>>>,
+    defs: Map<Name, Rc<StmtDef>>,
+    structs: Map<Name, Rc<StmtStruct>>,
+    enums: Map<Name, Rc<StmtEnum>>,
+    traits: Map<Name, Rc<StmtTrait>>,
+    types: Map<Name, Rc<StmtType>>,
     pub report: Report,
 }
 
@@ -105,14 +111,12 @@ pub fn float_default() -> Type {
 }
 
 #[derive(Default, Debug)]
-pub struct ValueScope {
-    binds: Map<Name, Binding>,
-}
+pub struct Scope(Map<Name, Binding>);
 
 #[derive(Debug)]
-pub struct TypeScope {
+pub struct InferContext {
     pub table: InPlaceUnificationTable<TypeVar>,
-    pub goals: Vec<Goal>,
+    goals: Set<Goal>,
     pub where_clause: Vec<Trait>,
 }
 
@@ -128,19 +132,19 @@ impl Goal {
     }
 }
 
-impl TypeScope {
-    pub fn new(where_clause: Vec<Trait>) -> TypeScope {
-        TypeScope {
+impl InferContext {
+    pub fn new(where_clause: Vec<Trait>) -> InferContext {
+        InferContext {
             table: InPlaceUnificationTable::new(),
-            goals: vec![],
+            goals: vec![].into(),
             where_clause,
         }
     }
 }
 
-impl ValueScope {
-    pub fn new() -> ValueScope {
-        ValueScope::default()
+impl Scope {
+    pub fn new() -> Scope {
+        Scope::default()
     }
 }
 
@@ -153,17 +157,46 @@ pub enum Binding {
 impl Context {
     pub fn new() -> Context {
         Context {
-            stack: vec![ValueScope::new()],
+            stack: vec![Scope::new()],
             type_stack: vec![],
             report: Report::new(),
-            trait_impls: HashMap::new(),
+            trait_impls: Map::new(),
             type_impls: vec![],
-            defs: HashMap::new(),
-            structs: HashMap::new(),
-            enums: HashMap::new(),
-            traits: HashMap::new(),
-            types: HashMap::new(),
+            defs: Map::new(),
+            structs: Map::new(),
+            enums: Map::new(),
+            traits: Map::new(),
+            types: Map::new(),
         }
+    }
+
+    pub fn add_goal(&mut self, goal: Goal) {
+        println!("Adding goal: {}", goal.tr);
+        self.type_scope().goals.insert(goal);
+    }
+
+    pub fn add_goals(&mut self, goals: Vec<Goal>) {
+        for goal in goals {
+            self.add_goal(goal);
+        }
+    }
+
+    pub fn take_goals(&mut self) -> Set<Goal> {
+        std::mem::replace(&mut self.type_scope().goals, Set::new())
+            .into_iter()
+            .map(|g| {
+                let tr = Apply::new(self).map_trait(&g.tr);
+                let tr = Canonicalize::new(self).map_trait(&tr);
+                Goal::new(g.s, tr)
+            })
+            .collect::<Set<_>>()
+    }
+
+    pub fn assumptions(&self) -> Vec<Trait> {
+        self.type_stack
+            .iter()
+            .flat_map(|s| s.where_clause.clone())
+            .collect()
     }
 
     pub fn infer(&mut self, p: &Program) -> Program {
@@ -174,7 +207,7 @@ impl Context {
         Apply::new(self).map_type(t)
     }
 
-    pub fn type_scope(&mut self) -> &mut TypeScope {
+    pub fn type_scope(&mut self) -> &mut InferContext {
         self.type_stack.last_mut().unwrap()
     }
 
@@ -307,63 +340,69 @@ impl Context {
         self.stack
             .iter()
             .rev()
-            .find_map(|s| {
-                s.binds
-                    .iter()
-                    .rev()
-                    .find(|(x0, _)| x0 == x1)
-                    .map(|(_, b)| b)
-            })
+            .find_map(|s| s.0.iter().rev().find(|(x0, _)| x0 == x1).map(|(_, b)| b))
             .unwrap_or_else(|| panic!("Unknown variable {x1}"))
     }
 
     pub fn bind(&mut self, x: Name, b: Binding) {
-        self.stack.last_mut().unwrap().binds.insert(x, b);
+        self.stack.last_mut().unwrap().0.insert(x, b);
     }
 
     fn solve_goals(&mut self) {
-        let goals = std::mem::take(&mut self.type_scope().goals);
-        let assumptions = self
-            .type_stack
-            .iter()
-            .rev()
-            .flat_map(|s| s.where_clause.clone())
-            .collect::<Vec<_>>();
-        let goals = goals
-            .into_iter()
-            .map(|g| {
-                let tr = Apply::new(self).map_bound(&g.tr);
-                let tr = Canonicalize::new(self).map_bound(&tr);
-                Goal::new(g.s, tr)
-            })
-            .collect::<HashSet<_>>();
+        let goals = self.take_goals();
+        let assumptions = self.assumptions();
+        for goal in goals.iter() {
+            println!("Unique goal: {}", goal.tr);
+        }
         for goal in goals {
-            let tr = Apply::new(self).map_bound(&goal.tr);
+            self.debug("solve_goals");
+            println!("Solving goal (initial): {}", goal.tr);
+            let tr = goal.tr.apply(self);
+            println!("Solving goal (apply): {}", tr);
+            let tr = tr.expand();
+            println!("Solving goal (expand): {}", tr);
             match self.solve::<false>(&tr, &assumptions) {
-                Ok(_) => {
-                    self.solve::<true>(&tr, &assumptions)
-                        .expect("Goals should be solved");
+                Err(_) => {
+                    println!("Unsolved goal: {}", tr);
+                    Defaults::new(self).visit_bound(&tr);
+                    let tr = Apply::new(self).map_trait(&tr);
+                    let tr = Expand::new().map_trait(&tr);
+                    println!("Solving goal again: {}", tr);
+                    match self.solve::<false>(&tr, &assumptions) {
+                        Ok(c) => {
+                            println!("Found solution: {}", c);
+                        }
+                        Err(TraitSolverError::Unsolved) => {
+                            println!("Found no solution: {}", tr);
+                            self.report.err(
+                                goal.s,
+                                "Trait is not implemented",
+                                format!("Found no implementation for trait {}", tr.verbose()),
+                            );
+                            return;
+                        }
+                        Err(TraitSolverError::Ambiguous(cs)) => {
+                            println!("Ambiguous goal: {}", tr);
+                            let s = cs
+                                .iter()
+                                .map(|c| c.to_string())
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            self.report.err(
+                                goal.s,
+                                "Ambiguous trait implementation",
+                                format!("Found multiple implementations for trait {tr}:\n{s}"),
+                            );
+                            return;
+                        }
+                    }
                 }
-                Err(TraitSolverError::Unsolved) => {
-                    self.report.err(
-                        goal.s,
-                        "Trait is not implemented",
-                        format!("Found no implementation for trait {}", tr.verbose()),
-                    );
-                }
-                Err(TraitSolverError::Ambiguous(cs)) => {
-                    let s = cs
-                        .iter()
-                        .map(|c| c.to_string())
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    self.report.err(
-                        goal.s,
-                        "Ambiguous trait implementation",
-                        format!("Found multiple implementations for trait:\n{s}"),
-                    );
+                Ok(c) => {
+                    println!("Found solution: {}", c);
                 }
             }
+            self.solve::<true>(&tr, &assumptions)
+                .expect("Goals should be solved");
         }
     }
 
@@ -460,7 +499,7 @@ impl Context {
             }
         }
         println!("* Goals:");
-        for goal in &self.type_scope().goals {
+        for goal in self.type_scope().goals.iter() {
             println!("    {}", goal.tr.verbose());
         }
         println!("* Assumptions:");
@@ -527,7 +566,7 @@ impl Visitor for Context {
 
 impl Mapper for Context {
     fn enter_scope(&mut self) {
-        self.stack.push(ValueScope::new());
+        self.stack.push(Scope::new());
     }
 
     fn exit_scope(&mut self) {
@@ -535,8 +574,9 @@ impl Mapper for Context {
     }
 
     fn map_program(&mut self, p: &Program) -> Program {
-        self.type_stack.push(TypeScope::new(vec![]));
+        self.type_stack.push(InferContext::new(vec![]));
         let program = Annotate::new(self).map_program(p);
+        println!("Annotated program: {}", program.verbose());
         self.visit_program(&program);
         let stmts = self.map_stmts(&program.stmts);
         let program = Program::new(p.span, stmts);
@@ -567,7 +607,8 @@ impl Mapper for Context {
     }
 
     fn map_stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
-        self.type_stack.push(TypeScope::new(s.where_clause.clone()));
+        self.type_stack
+            .push(InferContext::new(s.where_clause.clone()));
         let generics = s.generics.clone();
         let head = s.head.clone();
         let defs = s
@@ -581,38 +622,11 @@ impl Mapper for Context {
         StmtImpl::new(s.span, generics, head, where_clause, defs, types)
     }
 
-    fn map_stmt_trait(&mut self, s: &StmtTrait) -> StmtTrait {
-        self.type_stack.push(TypeScope::new(s.where_clause.clone()));
-        let generics = self.map_generics(&s.generics);
-        let where_clause = self.map_bounds(&s.where_clause);
-        let types = self.map_trait_types(&s.types);
-        self.type_scope().where_clause.extend(where_clause.clone());
-        self.type_scope().where_clause.push(s.bound());
-        let defs = self.map_trait_defs(&s.defs);
-        self.type_stack.pop();
-        StmtTrait::new(s.span, s.name, generics, where_clause, defs, types)
-    }
-
-    fn map_stmt_trait_def(&mut self, s: &StmtTraitDef) -> StmtTraitDef {
-        self.type_scope()
-            .where_clause
-            .extend(s.where_clause.clone());
-        GatherGoals::new(self, s.span).visit_stmt_trait_def(&s);
-        self.solve_goals();
-        StmtTraitDef::new(
-            s.span,
-            s.name,
-            s.generics.clone(),
-            s.params.clone(),
-            s.ty.clone(),
-            s.where_clause.clone(),
-        )
-    }
-
     fn map_stmt_def(&mut self, s: &StmtDef) -> StmtDef {
         match &s.body {
             StmtDefBody::UserDefined(e) => {
-                self.type_stack.push(TypeScope::new(s.where_clause.clone()));
+                self.type_stack
+                    .push(InferContext::new(s.where_clause.clone()));
                 for (x, t) in &s.params {
                     self.bind(*x, Binding::Var(x.span, t.clone()));
                 }
@@ -735,7 +749,7 @@ impl Mapper for Context {
                     .iter()
                     .map(|p| Goal::new(*s, p.instantiate(&gsub)))
                     .collect::<Vec<_>>();
-                self.type_scope().goals.extend(preds);
+                self.add_goals(preds);
                 let t2 = Type::Fun(
                     stmt.params.values().cloned().collect::<Vec<_>>(),
                     Rc::new(stmt.ty.clone()),
@@ -745,8 +759,8 @@ impl Mapper for Context {
                 Expr::Def(*s, t0.clone(), *x, ts0.clone())
             }
             Expr::Call(s, t0, e, es) => {
-                let e = self.map_expr(e);
                 let es = self.map_exprs(es);
+                let e = self.map_expr(e);
                 let ts = es.iter().map(|e| e.type_of().clone()).collect::<Vec<_>>();
                 let t2 = Type::Fun(ts, Rc::new(t0.clone()));
                 self.unify(*s, e.span_of(), e.type_of(), &t2);
@@ -889,11 +903,12 @@ impl Mapper for Context {
                         .collect::<Map<_, _>>();
                     let t1 = Type::Fun(
                         stmt1.params.values().cloned().collect::<Vec<_>>(),
-                        stmt1.ty.clone().into(),
+                        Rc::new(stmt1.ty.clone()),
                     )
                     .annotate(self)
                     .instantiate(&gsub);
-                    self.type_scope().goals.push(Goal::new(*s, b.clone()));
+                    println!("Trait method: {}", t1);
+                    // self.add_goal(Goal::new(*s, b.clone()));
                     self.unify(*s, *s, t0, &t1);
                     Expr::TraitMethod(*s, t0.clone(), b.clone(), *x1, ts1.clone())
                 }

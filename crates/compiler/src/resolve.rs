@@ -502,7 +502,7 @@ impl Mapper for Context {
 
     // impl ... where Foo[T] { ... }
     #[allow(clippy::type_complexity)]
-    fn map_bound(&mut self, bound: &Trait) -> Trait {
+    fn map_trait(&mut self, bound: &Trait) -> Trait {
         match bound {
             Trait::Path(_span, path) => self.resolve_bound_path(path),
             Trait::Cons(..) => unreachable!(),

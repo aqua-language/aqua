@@ -168,10 +168,10 @@ pub(crate) trait Mapper {
     }
     #[inline(always)]
     fn _map_bounds(&mut self, bs: &[Trait]) -> Vec<Trait> {
-        self.map_iter(bs, Self::map_bound)
+        self.map_iter(bs, Self::map_trait)
     }
 
-    fn map_bound(&mut self, b: &Trait) -> Trait {
+    fn map_trait(&mut self, b: &Trait) -> Trait {
         self._map_bound(b)
     }
     #[inline(always)]
@@ -287,7 +287,7 @@ pub(crate) trait Mapper {
         let span = self.map_span(&s.span);
         let generics = self.map_generics(&s.generics);
         let where_clause = self.map_bounds(&s.where_clause);
-        let head = self.map_bound(&s.head);
+        let head = self.map_trait(&s.head);
         let defs = self.map_rc_iter(&s.defs, Self::map_stmt_def);
         let types = self.map_rc_iter(&s.types, Self::map_stmt_type);
         self.exit_scope();
@@ -457,7 +457,7 @@ pub(crate) trait Mapper {
                 Expr::Block(s, t, b)
             }
             Expr::TraitMethod(_, _, b, x, ts) => {
-                let b = self.map_bound(b);
+                let b = self.map_trait(b);
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
                 Expr::TraitMethod(s, t, b, x, ts)
@@ -764,7 +764,7 @@ pub(crate) trait Mapper {
                 Type::Alias(x, ts)
             }
             Type::Assoc(b, x, ts) => {
-                let b = self.map_bound(b);
+                let b = self.map_trait(b);
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
                 Type::Assoc(b, x, ts)

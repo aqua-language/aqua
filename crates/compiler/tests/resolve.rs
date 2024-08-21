@@ -1,40 +1,40 @@
 #[macro_use]
 mod common;
 
-use common::bound_err;
-use common::expr_assoc;
-use common::expr_block;
-use common::expr_call;
-use common::expr_def;
-use common::expr_enum;
-use common::expr_err;
-use common::expr_int;
-use common::expr_struct;
-use common::expr_tuple;
-use common::expr_unit;
-use common::expr_var;
-use common::program;
-use common::stmt_def;
-use common::stmt_enum;
-use common::stmt_expr;
-use common::stmt_impl;
-use common::stmt_struct;
-use common::stmt_trait;
-use common::stmt_type;
-use common::stmt_var;
-use common::tr_def;
-use common::tr_type;
-use common::trait_bound;
-use common::ty;
-use common::ty_alias;
-use common::ty_assoc;
-use common::ty_con;
-use common::ty_gen;
-use common::ty_tuple;
-use compiler::ast::Type;
+use common::dsl::bound_err;
+use common::dsl::expr_assoc;
+use common::dsl::expr_block;
+use common::dsl::expr_call;
+use common::dsl::expr_def;
+use common::dsl::expr_enum;
+use common::dsl::expr_err;
+use common::dsl::expr_int;
+use common::dsl::expr_struct;
+use common::dsl::expr_tuple;
+use common::dsl::expr_unit;
+use common::dsl::expr_unresolved;
+use common::dsl::expr_var;
+use common::dsl::program;
+use common::dsl::stmt_def;
+use common::dsl::stmt_enum;
+use common::dsl::stmt_expr;
+use common::dsl::stmt_impl;
+use common::dsl::stmt_struct;
+use common::dsl::stmt_trait;
+use common::dsl::stmt_type;
+use common::dsl::stmt_var;
+use common::dsl::tr_def;
+use common::dsl::tr_type;
+use common::dsl::trait_bound;
+use common::dsl::ty;
+use common::dsl::ty_alias;
+use common::dsl::ty_assoc;
+use common::dsl::ty_con;
+use common::dsl::ty_gen;
+use common::dsl::ty_tuple;
+use common::dsl::type_bound;
 
-use crate::common::expr_unresolved;
-use crate::common::type_bound;
+use compiler::ast::Type;
 
 #[test]
 fn test_resolve_var0() {
@@ -595,7 +595,11 @@ fn test_resolve_type_assoc0() {
     .unwrap();
     let b = program([
         stmt_trait("Trait", [], [], [], [tr_type("A", [])]),
-        stmt_type("B", [], ty_assoc("Trait", [], [("A", Type::Unknown)], "A", [])),
+        stmt_type(
+            "B",
+            [],
+            ty_assoc("Trait", [], [("A", Type::Unknown)], "A", []),
+        ),
     ]);
     check!(a, b);
 }
@@ -634,7 +638,13 @@ fn test_resolve_type_assoc2() {
         stmt_type(
             "B",
             [],
-            ty_assoc("Trait", [ty("i32")], [("A", Type::Unknown)], "A", [ty("i32")]),
+            ty_assoc(
+                "Trait",
+                [ty("i32")],
+                [("A", Type::Unknown)],
+                "A",
+                [ty("i32")],
+            ),
         ),
     ]);
     check!(a, b);

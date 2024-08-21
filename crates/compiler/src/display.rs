@@ -391,15 +391,11 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.space()?;
         self.ty(&s.ty)?;
         self.where_clause(&s.where_clause)?;
-        self.space()?;
-        self.punct("=")?;
-        self.space()?;
-        self.body(&s.body)
-    }
-
-    fn body(&mut self, e: &StmtDefBody) -> std::fmt::Result {
-        match e {
+        match &s.body {
             StmtDefBody::UserDefined(e) => {
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
                 self.expr(e)?;
                 if !e.is_braced() {
                     self.punct(";")
@@ -407,10 +403,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
                     Ok(())
                 }
             }
-            StmtDefBody::Builtin(_) => {
-                self.punct("...")?;
-                self.punct(";")
-            }
+            StmtDefBody::Builtin(_) => self.punct(";"),
         }
     }
 
@@ -422,12 +415,19 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.where_clause(&s.where_clause)?;
         self.space()?;
         self.brace(|this| {
-            if !s.defs.is_empty() || !s.types.is_empty() {
+            if !s.types.is_empty() {
                 this.indented(|this| {
                     this.newline()?;
-                    this.newline_sep(&s.types, |this, s| this.stmt_type(s))?;
+                    this.newline_sep(&s.types, |this, s| this.stmt_type(s))
+                })?;
+            }
+            if !s.defs.is_empty() {
+                this.indented(|this| {
+                    this.newline()?;
                     this.newline_sep(&s.defs, |this, s| this.stmt_def(s))
                 })?;
+            }
+            if !s.defs.is_empty() || !s.types.is_empty() {
                 this.newline()?;
             }
             Ok(())
@@ -506,15 +506,19 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.where_clause(&s.where_clause)?;
         self.space()?;
         self.brace(|this| {
-            if !s.defs.is_empty() || !s.types.is_empty() {
+            if !s.types.is_empty() {
                 this.indented(|this| {
                     this.newline()?;
-                    this.newline_sep(&s.defs, |this, s| this.stmt_def_decl(s))?;
-                    if !s.types.is_empty() {
-                        this.newline_sep(&s.types, |this, s| this.stmt_type_decl(s))?;
-                    }
-                    Ok(())
+                    this.newline_sep(&s.types, |this, s| this.stmt_type_decl(s))
                 })?;
+            }
+            if !s.defs.is_empty() {
+                this.indented(|this| {
+                    this.newline()?;
+                    this.newline_sep(&s.defs, |this, s| this.stmt_def_decl(s))
+                })?;
+            }
+            if !s.defs.is_empty() || !s.types.is_empty() {
                 this.newline()?;
             }
             Ok(())

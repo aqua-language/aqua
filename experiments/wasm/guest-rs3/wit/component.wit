@@ -1,0 +1,15 @@
+package pkg:component;
+
+interface intf {
+    resource image;
+    print: func(input: string);
+    hello: func() -> string;
+    load-image: func(bytes: list<u8>) -> image;
+    resize-image: func(self: borrow<image>, width:u32, height:u32) -> image;
+    image-to-bytes: func(self: borrow<image>) -> list<u8>;
+    extract-emails: func(input: string) -> list<string>;
+}
+
+world component {
+    export intf;
+}

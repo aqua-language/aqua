@@ -9,9 +9,43 @@ impl<K, V> Default for Map<K, V> {
     }
 }
 
+pub enum Entry<'a, K, V> {
+    Occupied(&'a mut V),
+    Vacant(&'a mut Map<K, V>, K),
+}
+
+impl<'a, K, V> Entry<'a, K, V>
+where
+    K: PartialEq + Clone,
+{
+    pub fn or_insert_with<F>(self, f: F) -> &'a mut V
+    where
+        F: FnOnce() -> V,
+    {
+        match self {
+            Entry::Occupied(v1) => v1,
+            Entry::Vacant(map, k) => {
+                map.insert(k.clone(), f());
+                map.get_mut(&k).unwrap()
+            }
+        }
+    }
+}
+
 impl<K, V> Map<K, V> {
     pub fn new() -> Self {
         Self(Vec::new())
+    }
+
+    pub fn entry<'a>(&'a mut self, k: K) -> Entry<'a, K, V>
+    where
+        K: PartialEq,
+    {
+        let idx = self.0.iter().position(|(k1, _)| k1 == &k);
+        match idx {
+            Some(idx) => Entry::Occupied(&mut self.0[idx].1),
+            None => Entry::Vacant(self, k),
+        }
     }
 
     pub fn singleton(k: K, v: V) -> Self {

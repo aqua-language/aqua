@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use egglog::EGraph;
 
 use crate::symbol::Symbol;

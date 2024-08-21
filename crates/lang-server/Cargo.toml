@@ -1,5 +1,5 @@
 [package]
-name = "aqua-ls"
+name = "lang-server"
 version.workspace = true
 edition.workspace = true
 

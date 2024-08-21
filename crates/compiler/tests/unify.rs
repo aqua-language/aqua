@@ -1,8 +1,9 @@
 mod common;
 
-use common::ty;
-use common::ty_con;
-use common::ty_tuple;
+use common::dsl::ty;
+use common::dsl::ty_con;
+use common::dsl::ty_tuple;
+
 use compiler::infer::type_var::TypeVarKind;
 use compiler::infer::Context;
 

@@ -1,13 +1,12 @@
 #[macro_use]
 mod common;
 
-use common::expr_int;
-use common::program;
-use common::stmt_def;
-
-use crate::common::expr_block;
-use crate::common::expr_call_direct;
-use crate::common::types::ty_i32;
+use common::dsl::expr_block;
+use common::dsl::expr_call_direct;
+use common::dsl::expr_int;
+use common::dsl::program;
+use common::dsl::stmt_def;
+use common::dsl::types::ty_i32;
 
 #[test]
 fn test_lift0() {

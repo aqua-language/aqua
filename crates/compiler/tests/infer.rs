@@ -3,15 +3,15 @@ mod common;
 
 use compiler::ast::Type;
 
-use crate::common::expr_field;
-use crate::common::expr_float;
-use crate::common::expr_int;
-use crate::common::expr_record;
-use crate::common::program;
-use crate::common::resolve_program;
-use crate::common::stmt_expr;
-use crate::common::ty;
-use crate::common::ty_record;
+use crate::common::dsl::expr_field;
+use crate::common::dsl::expr_float;
+use crate::common::dsl::expr_int;
+use crate::common::dsl::expr_record;
+use crate::common::dsl::program;
+use crate::common::dsl::stmt_expr;
+use crate::common::dsl::ty;
+use crate::common::dsl::ty_record;
+use crate::common::passes::resolve_program;
 
 #[test]
 fn test_infer_literal_bool0() {
@@ -772,6 +772,39 @@ fn test_infer_i32_postfix() {
     )
     .unwrap();
     check!(a, b);
+}
+
+#[test]
+fn test_infer_i32_add() {
+    let a = infer_program!("1 + 2;").unwrap();
+    let b = infer_program!("Add[i32,i32]::add(1:i32, 2:i32):i32;").unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_i32_add_add() {
+    let a = infer_program!("1 + 2 + 3;").unwrap_err();
+    // let _ = infer_program!(
+    //     "Add[i32,i32]::add(
+    //         Add[i32,i32]::add(
+    //             1:i32,
+    //             2:i32
+    //         ):i32,
+    //         3:i32
+    //     ):i32;"
+    // )
+    // .unwrap();
+    println!("{}", a.val.verbose());
+    // check!(a, b);
+    // (
+    //   (Add['13, i32, Output='4]::add:fun('13, i32): '14)
+    //   (
+    //     (
+    //       (Add[i32, i32, Output=i32]::add:fun(i32, i32): '13)((1:i32), (2:i32)):'13
+    //     ),
+    //     (3:i32)
+    //   ):'14
+    // );
 }
 
 #[test]

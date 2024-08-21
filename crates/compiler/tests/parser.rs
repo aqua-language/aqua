@@ -1,104 +1,100 @@
 #[macro_use]
 mod common;
-use common::query_join_on;
+use common::dsl::query_join_on;
 use compiler::ast::Type;
 
-use common::block;
-use common::expr_array;
-use common::expr_assign;
-use common::expr_block;
-use common::expr_bool;
-use common::expr_break;
-use common::expr_call;
-use common::expr_char;
-use common::expr_continue;
-use common::expr_err;
-use common::expr_field;
-use common::expr_float;
-use common::expr_fun;
-use common::expr_fun_typed;
-use common::expr_if;
-use common::expr_if_else;
-use common::expr_index;
-use common::expr_int;
-use common::expr_match;
-use common::expr_query;
-use common::expr_return;
-use common::expr_string;
-use common::expr_tuple;
-use common::expr_unit;
-use common::expr_while;
-use common::index;
-use common::pat_bool;
-use common::pat_char;
-use common::pat_int;
-use common::pat_record;
-use common::pat_string;
-use common::pat_tuple;
-use common::pat_wild;
-use common::program;
-use common::query_from;
-use common::query_select;
-use common::query_var;
-use common::query_where;
-use common::stmt_def;
-use common::stmt_enum;
-use common::stmt_err;
-use common::stmt_expr;
-use common::stmt_impl;
-use common::stmt_struct;
-use common::stmt_trait;
-use common::stmt_type;
-use common::stmt_var;
-use common::sugared::expr_add;
-use common::sugared::expr_and;
-use common::sugared::expr_div;
-use common::sugared::expr_eq;
-use common::sugared::expr_ge;
-use common::sugared::expr_gt;
-use common::sugared::expr_le;
-use common::sugared::expr_lt;
-use common::sugared::expr_mul;
-use common::sugared::expr_ne;
-use common::sugared::expr_neg;
-use common::sugared::expr_not;
-use common::sugared::expr_or;
-use common::sugared::expr_sub;
-use common::tr_def;
-use common::tr_type;
-use common::ty_fun;
-use common::ty_tuple;
-use common::unresolved::bound;
-use common::unresolved::expr_assoc;
-use common::unresolved::expr_call_direct;
-use common::unresolved::expr_def;
-use common::unresolved::expr_struct;
-use common::unresolved::expr_unit_variant;
-use common::unresolved::expr_var;
-use common::unresolved::expr_variant;
-use common::unresolved::head;
-use common::unresolved::pat_enum;
-use common::unresolved::pat_struct;
-use common::unresolved::pat_unit_struct;
-use common::unresolved::pat_var;
-use common::unresolved::ty;
-use common::unresolved::ty_assoc;
-use common::unresolved::ty_con;
-
-use crate::common::aggr;
-use crate::common::expr_annotate;
-use crate::common::expr_query_into;
-use crate::common::expr_record;
-use crate::common::parse_pat;
-use crate::common::parse_stmt;
-use crate::common::parse_type;
-use crate::common::pat_annotate;
-use crate::common::query_group_over_compute;
-use crate::common::query_join_over_on;
-use crate::common::query_over_compute;
-use crate::common::sugared::expr_paren;
-use crate::common::ty_record;
-use crate::common::unresolved::expr_call_method;
+use common::dsl::aggr;
+use common::dsl::block;
+use common::dsl::expr_annotate;
+use common::dsl::expr_array;
+use common::dsl::expr_assign;
+use common::dsl::expr_block;
+use common::dsl::expr_bool;
+use common::dsl::expr_break;
+use common::dsl::expr_call;
+use common::dsl::expr_char;
+use common::dsl::expr_continue;
+use common::dsl::expr_err;
+use common::dsl::expr_field;
+use common::dsl::expr_float;
+use common::dsl::expr_fun;
+use common::dsl::expr_fun_typed;
+use common::dsl::expr_if;
+use common::dsl::expr_if_else;
+use common::dsl::expr_index;
+use common::dsl::expr_int;
+use common::dsl::expr_match;
+use common::dsl::expr_query;
+use common::dsl::expr_query_into;
+use common::dsl::expr_record;
+use common::dsl::expr_return;
+use common::dsl::expr_string;
+use common::dsl::expr_tuple;
+use common::dsl::expr_unit;
+use common::dsl::expr_while;
+use common::dsl::index;
+use common::dsl::pat_annotate;
+use common::dsl::pat_bool;
+use common::dsl::pat_char;
+use common::dsl::pat_int;
+use common::dsl::pat_record;
+use common::dsl::pat_string;
+use common::dsl::pat_tuple;
+use common::dsl::pat_wild;
+use common::dsl::program;
+use common::dsl::query_from;
+use common::dsl::query_group_over_compute;
+use common::dsl::query_join_over_on;
+use common::dsl::query_over_compute;
+use common::dsl::query_select;
+use common::dsl::query_var;
+use common::dsl::query_where;
+use common::dsl::stmt_def;
+use common::dsl::stmt_enum;
+use common::dsl::stmt_err;
+use common::dsl::stmt_expr;
+use common::dsl::stmt_impl;
+use common::dsl::stmt_struct;
+use common::dsl::stmt_trait;
+use common::dsl::stmt_type;
+use common::dsl::stmt_var;
+use common::dsl::sugared::expr_add;
+use common::dsl::sugared::expr_and;
+use common::dsl::sugared::expr_div;
+use common::dsl::sugared::expr_eq;
+use common::dsl::sugared::expr_ge;
+use common::dsl::sugared::expr_gt;
+use common::dsl::sugared::expr_le;
+use common::dsl::sugared::expr_lt;
+use common::dsl::sugared::expr_mul;
+use common::dsl::sugared::expr_ne;
+use common::dsl::sugared::expr_neg;
+use common::dsl::sugared::expr_not;
+use common::dsl::sugared::expr_or;
+use common::dsl::sugared::expr_paren;
+use common::dsl::sugared::expr_sub;
+use common::dsl::tr_def;
+use common::dsl::tr_type;
+use common::dsl::ty_fun;
+use common::dsl::ty_record;
+use common::dsl::ty_tuple;
+use common::dsl::unresolved::bound;
+use common::dsl::unresolved::expr_assoc;
+use common::dsl::unresolved::expr_call_direct;
+use common::dsl::unresolved::expr_call_method;
+use common::dsl::unresolved::expr_def;
+use common::dsl::unresolved::expr_struct;
+use common::dsl::unresolved::expr_unit_variant;
+use common::dsl::unresolved::expr_var;
+use common::dsl::unresolved::expr_variant;
+use common::dsl::unresolved::head;
+use common::dsl::unresolved::pat_enum;
+use common::dsl::unresolved::pat_struct;
+use common::dsl::unresolved::pat_unit_struct;
+use common::dsl::unresolved::pat_var;
+use common::dsl::unresolved::ty;
+use common::dsl::unresolved::ty_assoc;
+use common::dsl::unresolved::ty_con;
 
 #[test]
 fn test_parser_expr_int0() {
@@ -333,112 +329,112 @@ fn test_parser_expr_var1() {
 
 #[test]
 fn test_parser_pat_int0() {
-    let a = parse_pat("1").unwrap();
+    let a = parse_pat!("1").unwrap();
     let b = pat_int("1");
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_string0() {
-    let a = parse_pat("\"foo\"").unwrap();
+    let a = parse_pat!("\"foo\"").unwrap();
     let b = pat_string("foo");
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_char0() {
-    let a = parse_pat("'a'").unwrap();
+    let a = parse_pat!("'a'").unwrap();
     let b = pat_char('a');
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_bool0() {
-    let a = parse_pat("true").unwrap();
+    let a = parse_pat!("true").unwrap();
     let b = pat_bool(true);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_bool1() {
-    let a = parse_pat("false").unwrap();
+    let a = parse_pat!("false").unwrap();
     let b = pat_bool(false);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_var0() {
-    let a = parse_pat("x").unwrap();
+    let a = parse_pat!("x").unwrap();
     let b = pat_var("x");
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_enum0() {
-    let a = parse_pat("S::V(x)").unwrap();
+    let a = parse_pat!("S::V(x)").unwrap();
     let b = pat_enum("S", [], "V", pat_var("x"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_enum1() {
-    let a = parse_pat("S[i32]::V(x)").unwrap();
+    let a = parse_pat!("S[i32]::V(x)").unwrap();
     let b = pat_enum("S", [ty("i32")], "V", pat_var("x"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_struct0() {
-    let a = parse_pat("S(x=1,y=2)").unwrap();
+    let a = parse_pat!("S(x=1,y=2)").unwrap();
     let b = pat_struct("S", [], [("x", pat_int("1")), ("y", pat_int("2"))]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_struct1() {
-    let a = parse_pat("S[i32](x=1,y=2)").unwrap();
+    let a = parse_pat!("S[i32](x=1,y=2)").unwrap();
     let b = pat_struct("S", [ty("i32")], [("x", pat_int("1")), ("y", pat_int("2"))]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_struct2() {
-    let a = parse_pat("S[i32]").unwrap();
+    let a = parse_pat!("S[i32]").unwrap();
     let b = pat_unit_struct("S", [ty("i32")]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_struct3() {
-    let a = parse_pat("S[]").unwrap();
+    let a = parse_pat!("S[]").unwrap();
     let b = pat_unit_struct("S", []);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_record0() {
-    let a = parse_pat("record()").unwrap();
+    let a = parse_pat!("record()").unwrap();
     let b = pat_record([]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_record1() {
-    let a = parse_pat("record(x=1)").unwrap();
+    let a = parse_pat!("record(x=1)").unwrap();
     let b = pat_record([("x", pat_int("1"))]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_record2() {
-    let a = parse_pat("record(x=1,y=2)").unwrap();
+    let a = parse_pat!("record(x=1,y=2)").unwrap();
     let b = pat_record([("x", pat_int("1")), ("y", pat_int("2"))]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_tuple0() {
-    let a = parse_pat("()").unwrap();
+    let a = parse_pat!("()").unwrap();
     let b = pat_tuple([]);
     check!(a, b);
 }
@@ -446,21 +442,21 @@ fn test_parser_pat_tuple0() {
 #[test]
 #[ignore]
 fn test_parser_pat_tuple1() {
-    let a = parse_pat("(1,)").unwrap();
+    let a = parse_pat!("(1,)").unwrap();
     let b = pat_tuple([pat_int("1")]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_tuple2() {
-    let a = parse_pat("(1, 2)").unwrap();
+    let a = parse_pat!("(1, 2)").unwrap();
     let b = pat_tuple([pat_int("1"), pat_int("2")]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_pat_annotate0() {
-    let a = parse_pat("1:i32").unwrap();
+    let a = parse_pat!("1:i32").unwrap();
     let b = pat_annotate(pat_int("1"), ty("i32"));
     check!(a, b);
 }
@@ -592,14 +588,14 @@ fn test_parser_expr_method_call4() {
 
 #[test]
 fn test_parser_stmt_def0() {
-    let a = parse_stmt("def id(x: i32): i32 = x;").unwrap();
+    let a = parse_stmt!("def id(x: i32): i32 = x;").unwrap();
     let b = stmt_def("id", [], [("x", ty("i32"))], ty("i32"), [], expr_var("x"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_def1() {
-    let a = parse_stmt("def id(x: i32): i32 = { x }").unwrap();
+    let a = parse_stmt!("def id(x: i32): i32 = { x }").unwrap();
     let b = stmt_def(
         "id",
         [],
@@ -613,7 +609,7 @@ fn test_parser_stmt_def1() {
 
 #[test]
 fn test_parser_stmt_def2() {
-    let a = parse_stmt("def id(x: i32, y: i32): i32 = x;").unwrap();
+    let a = parse_stmt!("def id(x: i32, y: i32): i32 = x;").unwrap();
     let b = stmt_def(
         "id",
         [],
@@ -627,7 +623,7 @@ fn test_parser_stmt_def2() {
 
 #[test]
 fn test_parser_stmt_def3() {
-    let a = parse_stmt("def id(x: i32, y: i32): i32 = x + y;").unwrap();
+    let a = parse_stmt!("def id(x: i32, y: i32): i32 = x + y;").unwrap();
     let b = stmt_def(
         "id",
         [],
@@ -641,7 +637,7 @@ fn test_parser_stmt_def3() {
 
 #[test]
 fn test_parser_stmt_def4() {
-    let a = parse_stmt("def id(x: i32, y: i32): i32 = x + y * 2;").unwrap();
+    let a = parse_stmt!("def id(x: i32, y: i32): i32 = x + y * 2;").unwrap();
     let b = stmt_def(
         "id",
         [],
@@ -655,7 +651,7 @@ fn test_parser_stmt_def4() {
 
 #[test]
 fn test_parser_stmt_def5() {
-    let a = parse_stmt("def debug(x: i32): i32 = { print(x); x }").unwrap();
+    let a = parse_stmt!("def debug(x: i32): i32 = { print(x); x }").unwrap();
     let b = stmt_def(
         "debug",
         [],
@@ -672,21 +668,21 @@ fn test_parser_stmt_def5() {
 
 #[test]
 fn test_parser_stmt_def6() {
-    let a = parse_stmt("def f(x: i32): i32 = x;").unwrap();
+    let a = parse_stmt!("def f(x: i32): i32 = x;").unwrap();
     let b = stmt_def("f", [], [("x", ty("i32"))], ty("i32"), [], expr_var("x"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_def7() {
-    let a = parse_stmt("def f(x: i32,): i32 = x;").unwrap();
+    let a = parse_stmt!("def f(x: i32,): i32 = x;").unwrap();
     let b = stmt_def("f", [], [("x", ty("i32"))], ty("i32"), [], expr_var("x"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_def8() {
-    let a = parse_stmt("def f(x: i32, y: i32): i32 = x;").unwrap();
+    let a = parse_stmt!("def f(x: i32, y: i32): i32 = x;").unwrap();
     let b = stmt_def(
         "f",
         [],
@@ -700,42 +696,42 @@ fn test_parser_stmt_def8() {
 
 #[test]
 fn test_parser_stmt_def_generics0() {
-    let a = parse_stmt("def f[](): i32 = 1;").unwrap();
+    let a = parse_stmt!("def f[](): i32 = 1;").unwrap();
     let b = stmt_def("f", [], [], ty("i32"), [], expr_int("1"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_def_generics1() {
-    let a = parse_stmt("def f[T](): i32 = 1;").unwrap();
+    let a = parse_stmt!("def f[T](): i32 = 1;").unwrap();
     let b = stmt_def("f", ["T"], [], ty("i32"), [], expr_int("1"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_def_generics2() {
-    let a = parse_stmt("def f[T,](): i32 = 1;").unwrap();
+    let a = parse_stmt!("def f[T,](): i32 = 1;").unwrap();
     let b = stmt_def("f", ["T"], [], ty("i32"), [], expr_int("1"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_def_generics3() {
-    let a = parse_stmt("def f[T, U](): i32 = 1;").unwrap();
+    let a = parse_stmt!("def f[T, U](): i32 = 1;").unwrap();
     let b = stmt_def("f", ["T", "U"], [], ty("i32"), [], expr_int("1"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_def_where0() {
-    let a = parse_stmt("def x(): i32 where = 1;").unwrap();
+    let a = parse_stmt!("def x(): i32 where = 1;").unwrap();
     let b = stmt_def("x", [], [], ty("i32"), [], expr_int("1"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_def_where1() {
-    let a = parse_stmt("def x(): i32 where Clone[i32] = 1;").unwrap();
+    let a = parse_stmt!("def x(): i32 where Clone[i32] = 1;").unwrap();
     let b = stmt_def(
         "x",
         [],
@@ -749,7 +745,7 @@ fn test_parser_stmt_def_where1() {
 
 #[test]
 fn test_parser_stmt_def_where2() {
-    let a = parse_stmt("def x(): i32 where Clone[i32], Copy[i32] = 1;").unwrap();
+    let a = parse_stmt!("def x(): i32 where Clone[i32], Copy[i32] = 1;").unwrap();
     let b = stmt_def(
         "x",
         [],
@@ -766,7 +762,7 @@ fn test_parser_stmt_def_where2() {
 
 #[test]
 fn test_parser_stmt_def_where3() {
-    let a = parse_stmt("def x(): i32 where Clone[i32], Copy[i32], = 1;").unwrap();
+    let a = parse_stmt!("def x(): i32 where Clone[i32], Copy[i32], = 1;").unwrap();
     let b = stmt_def(
         "x",
         [],
@@ -783,7 +779,7 @@ fn test_parser_stmt_def_where3() {
 
 #[test]
 fn test_parser_stmt_def_where4() {
-    let a = parse_stmt("def x(): i32 where = { 1 }").unwrap();
+    let a = parse_stmt!("def x(): i32 where = { 1 }").unwrap();
     let b = stmt_def("x", [], [], ty("i32"), [], expr_block([], expr_int("1")));
     check!(a, b);
 }
@@ -811,24 +807,24 @@ fn test_parser_program0() {
 
 #[test]
 fn test_parser_stmt_trait0() {
-    let a = parse_stmt("trait Eq[T] {}").unwrap();
+    let a = parse_stmt!("trait Eq[T] {}").unwrap();
     let b = stmt_trait("Eq", ["T"], [], [], []);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_trait1() {
-    let a = parse_stmt("trait Eq[T] where Clone[T] {}").unwrap();
+    let a = parse_stmt!("trait Eq[T] where Clone[T] {}").unwrap();
     let b = stmt_trait("Eq", ["T"], [bound("Clone", [ty("T")], [])], [], []);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_trait2() {
-    let a = parse_stmt(
+    let a = parse_stmt!(
         "trait Eq[T] {
              def eq(a:T, b:T): bool;
-         }",
+         }"
     )
     .unwrap();
     let b = stmt_trait(
@@ -849,10 +845,10 @@ fn test_parser_stmt_trait2() {
 
 #[test]
 fn test_parser_stmt_trait3() {
-    let a = parse_stmt(
+    let a = parse_stmt!(
         "trait Eq {
              type T[U];
-         }",
+         }"
     )
     .unwrap();
     let b = stmt_trait("Eq", [], [], [], [tr_type("T", ["U"])]);
@@ -861,10 +857,10 @@ fn test_parser_stmt_trait3() {
 
 #[test]
 fn test_parser_stmt_impl0() {
-    let a = parse_stmt(
+    let a = parse_stmt!(
         "impl Eq[bool] {
              def eq(x: bool, y: bool): bool = true;
-         }",
+         }"
     )
     .unwrap();
     let b = stmt_impl(
@@ -886,17 +882,17 @@ fn test_parser_stmt_impl0() {
 
 #[test]
 fn test_parser_stmt_impl1() {
-    parse_stmt(
+    parse_stmt!(
         "impl[T, R] Add[Vec[T], R] where Add[T, R] {
              type Output = Vec[Add[T, R]::Output];
-         }",
+         }"
     )
     .unwrap();
 }
 
 #[test]
 fn test_parser_stmt_impl2() {
-    let a = parse_stmt("impl Copy[i32] where Clone[i32] {}").unwrap();
+    let a = parse_stmt!("impl Copy[i32] where Clone[i32] {}").unwrap();
     let b = stmt_impl(
         [],
         head("Copy", [ty("i32")]),
@@ -909,7 +905,7 @@ fn test_parser_stmt_impl2() {
 
 #[test]
 fn test_parser_stmt_impl3() {
-    let a = parse_stmt("impl Foo[i32] where Bar[i32, f32, T = f32] {}").unwrap();
+    let a = parse_stmt!("impl Foo[i32] where Bar[i32, f32, T = f32] {}").unwrap();
     let b = stmt_impl(
         [],
         head("Foo", [ty("i32")]),
@@ -922,14 +918,14 @@ fn test_parser_stmt_impl3() {
 
 #[test]
 fn test_parser_stmt_var0() {
-    let a = parse_stmt("var x = 1;").unwrap();
+    let a = parse_stmt!("var x = 1;").unwrap();
     let b = stmt_var("x", Type::Unknown, expr_int("1"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_var1() {
-    let a = parse_stmt("var x: i32 = 1;").unwrap();
+    let a = parse_stmt!("var x: i32 = 1;").unwrap();
     let b = stmt_var("x", ty("i32"), expr_int("1"));
     check!(a, b);
 }
@@ -953,56 +949,56 @@ fn test_parser_expr_assign0() {
 
 #[test]
 fn test_parser_stmt_type0() {
-    let a = parse_stmt("type T = i32;").unwrap();
+    let a = parse_stmt!("type T = i32;").unwrap();
     let b = stmt_type("T", [], ty("i32"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_type1() {
-    let a = parse_stmt("type T[U] = U;").unwrap();
+    let a = parse_stmt!("type T[U] = U;").unwrap();
     let b = stmt_type("T", ["U"], ty("U"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_type2() {
-    let a = parse_stmt("type T[U] = (U, U);").unwrap();
+    let a = parse_stmt!("type T[U] = (U, U);").unwrap();
     let b = stmt_type("T", ["U"], ty_tuple([ty("U"), ty("U")]));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_struct0() {
-    let a = parse_stmt("struct S;").unwrap();
+    let a = parse_stmt!("struct S;").unwrap();
     let b = stmt_struct("S", [], []);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_struct1() {
-    let a = parse_stmt("struct S();").unwrap();
+    let a = parse_stmt!("struct S();").unwrap();
     let b = stmt_struct("S", [], []);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_struct2() {
-    let a = parse_stmt("struct S(x:i32);").unwrap();
+    let a = parse_stmt!("struct S(x:i32);").unwrap();
     let b = stmt_struct("S", [], [("x", ty("i32"))]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_struct3() {
-    let a = parse_stmt("struct S(x:i32);").unwrap();
+    let a = parse_stmt!("struct S(x:i32);").unwrap();
     let b = stmt_struct("S", [], [("x", ty("i32"))]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_struct4() {
-    let a = parse_stmt("struct S[T](x:T);").unwrap();
+    let a = parse_stmt!("struct S[T](x:T);").unwrap();
     let b = stmt_struct("S", ["T"], [("x", ty("T"))]);
     check!(a, b);
 }
@@ -1045,21 +1041,21 @@ fn test_parser_expr_struct5() {
 
 #[test]
 fn test_parser_stmt_enum0() {
-    let a = parse_stmt("enum E { }").unwrap();
+    let a = parse_stmt!("enum E { }").unwrap();
     let b = stmt_enum("E", [], []);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_enum1() {
-    let a = parse_stmt("enum E { A(i32) }").unwrap();
+    let a = parse_stmt!("enum E { A(i32) }").unwrap();
     let b = stmt_enum("E", [], [("A", ty("i32"))]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_stmt_enum2() {
-    let a = parse_stmt("enum E { A(i32), B(i32) }").unwrap();
+    let a = parse_stmt!("enum E { A(i32), B(i32) }").unwrap();
     let b = stmt_enum("E", [], [("A", ty("i32")), ("B", ty("i32"))]);
     check!(a, b);
 }
@@ -1243,7 +1239,7 @@ fn test_parser_expr_assoc0() {
 
 #[test]
 fn test_parser_type_assoc0() {
-    let a = parse_type("Iterator[Vec[i32]]::Item").unwrap();
+    let a = parse_type!("Iterator[Vec[i32]]::Item").unwrap();
     let b = ty_assoc("Iterator", [ty_con("Vec", [ty("i32")])], [], "Item");
     check!(a, b);
 }
@@ -1488,14 +1484,14 @@ fn test_parser_expr_query12() {
 
 #[test]
 fn test_parser_stmt_query() {
-    let a = parse_stmt(
+    let a = parse_stmt!(
         "from x in [1, 2, 3]
          from y in [1, 2, 3]
          select x, y, z=3
          var x = f(x)
          var y = g(x)
          where x > 1
-         into sink();",
+         into sink();"
     )
     .unwrap();
     let b = stmt_expr(expr_query_into(
@@ -1524,9 +1520,9 @@ fn test_parser_stmt_query() {
 
 #[test]
 fn test_parser_stmt_query_join_on() {
-    let a = parse_stmt(
+    let a = parse_stmt!(
         "from x in [1, 2, 3]
-         join y in [1, 2, 3] on x == y;",
+         join y in [1, 2, 3] on x == y;"
     )
     .unwrap();
     let b = stmt_expr(expr_query(
@@ -1543,9 +1539,9 @@ fn test_parser_stmt_query_join_on() {
 
 #[test]
 fn test_parser_stmt_query_join_over_on() {
-    let a = parse_stmt(
+    let a = parse_stmt!(
         "from x in [1, 2, 3]
-         join y in [1, 2, 3] over w on x == y;",
+         join y in [1, 2, 3] over w on x == y;"
     )
     .unwrap();
     let b = stmt_expr(expr_query(
@@ -1563,9 +1559,9 @@ fn test_parser_stmt_query_join_over_on() {
 
 #[test]
 fn test_parser_stmt_query_from_into() {
-    let a = parse_stmt(
+    let a = parse_stmt!(
         "from x in [1, 2, 3]
-         into sink().run();",
+         into sink().run();"
     )
     .unwrap();
     let b = stmt_expr(expr_call_method(
@@ -1607,63 +1603,63 @@ fn test_parser_expr_fun2() {
 
 #[test]
 fn test_parser_type_fun0() {
-    let a = parse_type("fun(i32, i32): i32").unwrap();
+    let a = parse_type!("fun(i32, i32): i32").unwrap();
     let b = ty_fun([ty("i32"), ty("i32")], ty("i32"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_type_fun1() {
-    let a = parse_type("fun(i32): fun(i32): i32").unwrap();
+    let a = parse_type!("fun(i32): fun(i32): i32").unwrap();
     let b = ty_fun([ty("i32")], ty_fun([ty("i32")], ty("i32")));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_type_hole() {
-    let a = parse_type("_").unwrap();
+    let a = parse_type!("_").unwrap();
     let b = Type::Unknown;
     check!(a, b);
 }
 
 #[test]
 fn test_parser_type_never() {
-    let a = parse_type("!").unwrap();
+    let a = parse_type!("!").unwrap();
     let b = Type::Never;
     check!(a, b);
 }
 
 #[test]
 fn test_parser_type_unit() {
-    let a = parse_type("()").unwrap();
+    let a = parse_type!("()").unwrap();
     let b = Type::Tuple(vec![]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_type_record0() {
-    let a = parse_type("record()").unwrap();
+    let a = parse_type!("record()").unwrap();
     let b = ty_record([]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_type_record1() {
-    let a = parse_type("record(x:i32)").unwrap();
+    let a = parse_type!("record(x:i32)").unwrap();
     let b = ty_record([("x", ty("i32"))]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_type_record2() {
-    let a = parse_type("record(x:i32, y:i32)").unwrap();
+    let a = parse_type!("record(x:i32, y:i32)").unwrap();
     let b = ty_record([("x", ty("i32")), ("y", ty("i32"))]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_type_tuple0() {
-    let a = parse_type("()").unwrap();
+    let a = parse_type!("()").unwrap();
     let b = ty_tuple([]);
     check!(a, b);
 }
@@ -1671,14 +1667,14 @@ fn test_parser_type_tuple0() {
 #[test]
 #[ignore]
 fn test_parser_type_tuple1() {
-    let a = parse_type("(i32,)").unwrap();
+    let a = parse_type!("(i32,)").unwrap();
     let b = Type::Tuple(vec![ty("i32")]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_type_tuple2() {
-    let a = parse_type("(i32, i32)").unwrap();
+    let a = parse_type!("(i32, i32)").unwrap();
     let b = Type::Tuple(vec![ty("i32"), ty("i32")]);
     check!(a, b);
 }
@@ -1734,7 +1730,7 @@ fn test_parser_expr_break0() {
 
 #[test]
 fn test_parser_recover0() {
-    let a = parse_stmt("def f(x: i32): i32 = 1").unwrap_err();
+    let a = parse_stmt!("def f(x: i32): i32 = 1").unwrap_err();
     let b = stmt_err();
     check!(
         a,
@@ -1751,7 +1747,7 @@ fn test_parser_recover0() {
 
 #[test]
 fn test_parser_recover1() {
-    let a = parse_stmt("def f(x: i32): i32 = 1 2;").unwrap_err();
+    let a = parse_stmt!("def f(x: i32): i32 = 1 2;").unwrap_err();
     let b = stmt_def("f", [], [("x", ty("i32"))], ty("i32"), [], expr_int("1"));
     check!(
         a,
@@ -1768,7 +1764,7 @@ fn test_parser_recover1() {
 
 #[test]
 fn test_parser_recover2() {
-    let a = parse_stmt("def f(x: i32): i32 = +;").unwrap_err();
+    let a = parse_stmt!("def f(x: i32): i32 = +;").unwrap_err();
     let b = stmt_def(
         "f",
         [],
@@ -1800,7 +1796,7 @@ fn test_parser_recover2() {
 
 #[test]
 fn test_parser_recover3() {
-    let a = parse_stmt("def f(x: +): i32 = 1;").unwrap_err();
+    let a = parse_stmt!("def f(x: +): i32 = 1;").unwrap_err();
     let b = stmt_def("f", [], [("x", Type::Err)], ty("i32"), [], expr_int("1"));
     check!(
         a,
@@ -1817,7 +1813,7 @@ fn test_parser_recover3() {
 
 #[test]
 fn test_parser_recover4() {
-    let a = parse_stmt("struct S").unwrap_err();
+    let a = parse_stmt!("struct S").unwrap_err();
     let b = stmt_err();
     check!(
         a,

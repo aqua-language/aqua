@@ -176,14 +176,14 @@ impl Mapper for Context {
 
     fn map_stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
         let generics = self.map_generics(&s.generics);
-        let head = self.map_bound(&s.head);
+        let head = self.map_trait(&s.head);
         let where_clause = self.map_bounds(&s.where_clause);
         let defs = self.map_rc_iter(&s.defs, Self::_map_stmt_def).into();
         let types = self.map_rc_iter(&s.types, Self::_map_stmt_type).into();
         StmtImpl::new(s.span, generics, head, where_clause, defs, types)
     }
 
-    fn map_bound(&mut self, b: &Trait) -> Trait {
+    fn map_trait(&mut self, b: &Trait) -> Trait {
         match b {
             Trait::Path(..) => unreachable!(),
             Trait::Cons(x, ts, xts) => {
