@@ -1,8 +1,11 @@
 use std::rc::Rc;
 
+use crate::ast::Program;
 use crate::ast::Stmt;
+use crate::ast::StmtDef;
 use crate::ast::Trait;
 use crate::ast::Type;
+use crate::traversal::mapper::AcceptMapper;
 use crate::traversal::mapper::Mapper;
 
 use super::type_var::TypeVarValue;
@@ -16,10 +19,10 @@ impl Apply<'_> {
     }
 }
 
-impl<'a> Mapper for Apply<'a> {
+impl Mapper for Apply<'_> {
     fn map_type(&mut self, t: &Type) -> Type {
         match t {
-            Type::Var(x) => match self.0.get_type(*x) {
+            Type::Var(x) => match self.0.get_value(*x) {
                 TypeVarValue::Unknown(_) => t.clone(),
                 TypeVarValue::Known(t) => self.map_type(&t),
             },
@@ -38,6 +41,24 @@ impl<'a> Mapper for Apply<'a> {
 
 impl Trait {
     pub fn apply(&self, ctx: &mut Context) -> Trait {
-        Apply::new(ctx).map_trait(self)
+        self.map(Apply::new(ctx))
+    }
+}
+
+impl Program {
+    pub fn apply(&self, ctx: &mut Context) -> Program {
+        self.map(Apply::new(ctx))
+    }
+}
+
+impl Type {
+    pub fn apply(&self, ctx: &mut Context) -> Type {
+        self.map(Apply::new(ctx))
+    }
+}
+
+impl StmtDef {
+    pub fn apply(&self, ctx: &mut Context) -> StmtDef {
+        self.map(Apply::new(ctx))
     }
 }

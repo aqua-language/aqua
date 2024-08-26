@@ -67,7 +67,7 @@ impl Compiler {
         self.declare_f64();
         // self.declare_file();
         // self.declare_function();
-        // self.declare_i128();
+        self.declare_i128();
         // self.declare_i16();
         self.declare_i32();
         self.declare_i64();
@@ -87,7 +87,7 @@ impl Compiler {
         // self.declare_socket();
         // self.declare_stream();
         self.declare_string();
-        // self.declare_time();
+        self.declare_time();
         // self.declare_time_source();
         self.declare_traits();
         // self.declare_tuple();

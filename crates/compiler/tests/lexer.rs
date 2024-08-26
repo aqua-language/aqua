@@ -1,6 +1,6 @@
-use compiler::diag::Sources;
 use compiler::lexer::Lexer;
 use compiler::lexer::Token;
+use compiler::sources::Sources;
 
 fn next<'a>(lexer: &mut Lexer<'a>) -> Option<(std::ops::Range<u32>, Token, &'a str)> {
     lexer

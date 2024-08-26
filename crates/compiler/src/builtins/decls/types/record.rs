@@ -1,15 +1,16 @@
 use serde::ser::SerializeMap;
 use serde::Serialize;
 
+use crate::ast::Map;
 use crate::ast::Name;
 use crate::builtins::Value;
 use crate::Compiler;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct Record(pub Vec<(Name, Value)>);
+pub struct Record(pub Map<Name, Value>);
 
 impl Record {
-    pub fn new(fields: Vec<(Name, Value)>) -> Record {
+    pub fn new(fields: Map<Name, Value>) -> Record {
         Record(fields)
     }
 }

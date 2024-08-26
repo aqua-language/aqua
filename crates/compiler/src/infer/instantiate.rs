@@ -1,5 +1,6 @@
 use crate::ast::Map;
 use crate::ast::Name;
+use crate::ast::StmtImpl;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::traversal::mapper::Mapper;
@@ -36,5 +37,11 @@ impl Type {
 impl Trait {
     pub fn instantiate(&self, sub: &Map<Name, Type>) -> Trait {
         Instantiate::new(sub).map_trait(self)
+    }
+}
+
+impl StmtImpl {
+    pub fn instantiate(&self, sub: &Map<Name, Type>) -> StmtImpl {
+        Instantiate::new(sub).map_stmt_impl(self)
     }
 }

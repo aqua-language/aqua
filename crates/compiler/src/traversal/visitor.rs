@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::rc::Rc;
 
 use crate::ast::Aggr;
@@ -24,9 +26,8 @@ use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
-use crate::lexer::Span;
+use crate::span::Span;
 
-#[allow(unused)]
 pub(crate) trait Visitor {
     fn visit_program(&mut self, program: &Program) {
         self._visit_program(program);
@@ -824,5 +825,33 @@ pub(crate) trait Visitor {
                 self.visit_pattern(p);
             }
         }
+    }
+}
+
+pub(crate) trait AcceptVisitor {
+    fn visit(&self, visitor: impl Visitor);
+}
+
+impl AcceptVisitor for Program {
+    fn visit(&self, mut visitor: impl Visitor) {
+        visitor.visit_program(self);
+    }
+}
+
+impl AcceptVisitor for Stmt {
+    fn visit(&self, mut visitor: impl Visitor) {
+        visitor.visit_stmt(self);
+    }
+}
+
+impl AcceptVisitor for Expr {
+    fn visit(&self, mut visitor: impl Visitor) {
+        visitor.visit_expr(self);
+    }
+}
+
+impl AcceptVisitor for Type {
+    fn visit(&self, mut visitor: impl Visitor) {
+        visitor.visit_type(self);
     }
 }

@@ -12,8 +12,8 @@ use std::rc::Rc;
 
 use crate::builtins::Value;
 use crate::interpret::Context;
-use crate::lexer::Span;
 use crate::lexer::Token;
+use crate::span::Span;
 use crate::symbol::Symbol;
 
 pub use crate::collections::map::Map;
@@ -32,7 +32,7 @@ pub struct IR {
     pub impls: Map<Name, StmtImpl>,
     pub structs: Map<Name, StmtStruct>,
     pub enums: Map<Name, StmtEnum>,
-    pub stmts: Vec<Stmt>
+    pub stmts: Vec<Stmt>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]

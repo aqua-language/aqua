@@ -48,7 +48,7 @@ impl std::fmt::Display for TypeVarKind {
 }
 
 impl TypeVarKind {
-    pub fn is_unifiable(self, t: &Type) -> bool {
+    pub fn is_unifiable_with(self, t: &Type) -> bool {
         self.is_general()
             || matches!(
                 t,
@@ -60,7 +60,7 @@ impl TypeVarKind {
 }
 
 impl TypeVarKind {
-    pub fn is_mergeable(self, other: TypeVarKind) -> bool {
+    pub fn is_compatible(self, other: TypeVarKind) -> bool {
         match (self, other) {
             (TypeVarKind::General, _) | (_, TypeVarKind::General) => true,
             (TypeVarKind::Int, TypeVarKind::Int) => true,

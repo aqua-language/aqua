@@ -51,6 +51,14 @@ impl Stack {
         self.locals.last_mut().unwrap().0.insert(name, val);
     }
 
+    fn update_val(&mut self, name: Name, val: Value) {
+        self.locals
+            .iter_mut()
+            .rev()
+            .find_map(|scope| scope.0.get_mut(&name))
+            .map(|v| *v = val);
+    }
+
     fn get_def(&self, name: &Name) -> &StmtDef {
         self.defs.get(name).unwrap()
     }
@@ -123,7 +131,7 @@ impl Context {
     }
 
     fn stmt_var(&mut self, s: &StmtVar) {
-        let value = self.expr(&s.expr);
+        let value = self.eval_expr(&s.expr);
         self.stack.bind_val(s.name, value);
     }
 
@@ -131,18 +139,19 @@ impl Context {
         self.stack.bind_def(s.name, s.clone());
     }
 
-    fn stmt_expr(&mut self, _: &Expr) {
-        todo!()
+    /// Todo: Remove this once we can compile to SSA.
+    fn stmt_expr(&mut self, e: &Expr) {
+        self.eval_expr(e);
     }
 
-    fn block(&mut self, b: &Block) -> Value {
+    fn eval_block(&mut self, b: &Block) -> Value {
         self.scoped(|this| {
             b.stmts.iter().for_each(|s| this.stmt(s));
-            this.expr(&b.expr)
+            this.eval_expr(&b.expr)
         })
     }
 
-    pub fn expr(&mut self, e: &Expr) -> Value {
+    pub fn eval_expr(&mut self, e: &Expr) -> Value {
         match e {
             Expr::Path(_, _, _) => unreachable!(),
             Expr::Int(_, t, v) => {
@@ -175,49 +184,57 @@ impl Context {
             Expr::Char(_, _, v) => Value::Char(*v),
             Expr::String(_, _, v) => Value::from(runtime::prelude::String::from(v.as_str())),
             Expr::Struct(_, _, _, _, xes) => {
-                let xvs = xes.iter().map(|(n, e)| (*n, self.expr(e))).collect();
+                let xvs = xes.iter().map(|(n, e)| (*n, self.eval_expr(e))).collect();
                 Value::from(Record::new(xvs))
             }
             Expr::Tuple(_, _, es) => {
-                let vs = es.iter().map(|e| self.expr(e)).collect();
+                let vs = es.iter().map(|e| self.eval_expr(e)).collect();
                 Value::from(Tuple::new(vs))
             }
             Expr::Record(_, _, xes) => {
-                let xvs = xes.iter().map(|(n, e)| (*n, self.expr(e))).collect();
+                let xvs = xes.iter().map(|(n, e)| (*n, self.eval_expr(e))).collect();
                 Value::from(Record::new(xvs))
             }
-            Expr::Enum(_, _, _, _, x1, e) => Variant::new(*x1, self.expr(e)).into(),
-            Expr::Field(_, _, e, x) => self.expr(e).as_record()[x].clone(),
-            Expr::Index(_, _, e, i) => self.expr(e).as_tuple()[i].clone(),
+            Expr::Enum(_, _, _, _, x1, e) => Variant::new(*x1, self.eval_expr(e)).into(),
+            Expr::Field(_, _, e, x) => self.eval_expr(e).as_record()[x].clone(),
+            Expr::Index(_, _, e, i) => self.eval_expr(e).as_tuple()[i].clone(),
             Expr::Var(_, _, x) => self.stack.get_val(x).clone(),
             Expr::Def(_, _, x, ts) => Value::from(Fun::new(*x, ts.clone())),
             Expr::TraitMethod(_, _, _, _, _) => unreachable!(),
             Expr::Call(_, _, e, es) => {
-                let f = self.expr(e).as_function();
-                let vs = es.iter().map(|e| self.expr(e)).collect::<Vec<_>>();
+                let f = self.eval_expr(e).as_function();
+                let vs = es.iter().map(|e| self.eval_expr(e)).collect::<Vec<_>>();
                 let s = self.stack.get_def(&f.x).clone();
                 match s.body {
                     StmtDefBody::UserDefined(e) => self.scoped(|ctx| {
                         for (x, v) in s.params.keys().zip(vs) {
                             ctx.stack.bind_val(*x, v)
                         }
-                        ctx.expr(&e)
+                        ctx.eval_expr(&e)
                     }),
                     StmtDefBody::Builtin(b) => (b.fun)(self, &f.ts, &vs),
                 }
             }
-            Expr::Block(_, _, b) => self.block(b),
+            Expr::Block(_, _, b) => self.eval_block(b),
+            // TODO: Make unreachable once we can compile to SSA.
             Expr::Query(..) => unreachable!(),
-            Expr::QueryInto(..) => todo!(),
+            Expr::QueryInto(..) => unreachable!(),
             Expr::Match(_, _, _, _) => unreachable!(),
             Expr::Array(_, _, _) => unreachable!(),
-            Expr::Assign(_, _, _, _) => unreachable!(),
+            Expr::Assign(_, _, e0, e1) => match e0.as_ref() {
+                Expr::Var(_, _, x) => {
+                    let v = self.eval_expr(e1);
+                    self.stack.update_val(*x, v.clone());
+                    v
+                }
+                _ => unreachable!(),
+            },
             Expr::Return(_, _, _) => unreachable!(),
             Expr::Continue(_, _) => unreachable!(),
             Expr::Break(_, _) => unreachable!(),
             Expr::While(_, _, e0, b) => {
-                while self.expr(e0).as_bool() {
-                    self.block(b);
+                while self.eval_expr(e0).as_bool() {
+                    self.eval_block(b);
                 }
                 Value::from(Tuple::new(vec![]))
             }
@@ -232,7 +249,13 @@ impl Context {
             Expr::Annotate(_, _, _) => unreachable!(),
             Expr::Paren(_, _, _) => unreachable!(),
             Expr::Dot(_, _, _, _, _, _) => unreachable!(),
-            Expr::IfElse(_, _, _, _, _) => unreachable!(),
+            Expr::IfElse(_, _, e0, b0, b1) => {
+                if self.eval_expr(e0).as_bool() {
+                    self.eval_block(b0)
+                } else {
+                    self.eval_block(b1)
+                }
+            }
             Expr::IntSuffix(_, _, _, _) => unreachable!(),
             Expr::FloatSuffix(_, _, _, _) => unreachable!(),
             Expr::LetIn(_, _, _, _, _, _) => todo!(),

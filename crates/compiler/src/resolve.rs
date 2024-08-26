@@ -105,11 +105,7 @@ impl Mapper for Context {
         self._map_param(xt)
     }
 
-    fn map_stmt_trait(&mut self, stmt: &StmtTrait) -> StmtTrait {
-        self._map_stmt_trait(stmt)
-    }
-    #[inline(always)]
-    fn _map_stmt_trait(&mut self, s: &StmtTrait) -> StmtTrait {
+    fn map_stmt_trait(&mut self, s: &StmtTrait) -> StmtTrait {
         self.enter_scope();
         let span = self.map_span(&s.span);
         let name = self.map_name(&s.name);
@@ -304,12 +300,23 @@ impl Mapper for Context {
                 let es = self.map_exprs(es);
                 Expr::Call(*s, t, Rc::new(e), es)
             }
-
+            // x = e;
+            // x.y = e;
+            // x[i] = e;
             Expr::Assign(s, t, e0, e1) => {
                 let t = self.map_type(t);
                 let e0 = self.map_expr(e0);
+                let e0 = if e0.is_place() {
+                    e0
+                } else {
+                    self.report.err(
+                        e.span_of(),
+                        "Invalid left-hand side of assignment",
+                        "Expected a variable, index, or field expression.",
+                    );
+                    Expr::Err(e.span_of(), e.type_of().clone())
+                };
                 let e1 = self.map_expr(e1);
-                let e1 = self.lvalue(&e1);
                 Expr::Assign(*s, t, Rc::new(e0), Rc::new(e1))
             }
             _ => self._map_expr(e),
@@ -833,6 +840,32 @@ impl Context {
                 }
                 Trait::Type(Rc::new(t))
             }
+            Some(Binding::Struct(stmt)) => {
+                if !seg0.has_optional_arity(stmt.generics.len()) {
+                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                    return Trait::Err;
+                }
+                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
+                let t = Type::Cons(seg0.name, ts0.clone());
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
+                    return Trait::Err;
+                }
+                Trait::Type(Rc::new(t))
+            }
+            Some(Binding::Enum(stmt)) => {
+                if !seg0.has_optional_arity(stmt.generics.len()) {
+                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                    return Trait::Err;
+                }
+                let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
+                let t = Type::Cons(seg0.name, ts0.clone());
+                if let Some(seg1) = iter.next() {
+                    self.unexpected_assoc("Enum", "item", &seg0.name, &seg1.name);
+                    return Trait::Err;
+                }
+                Trait::Type(Rc::new(t))
+            }
             Some(b) => {
                 self.unexpected(&seg0.name, b.name(), "trait");
                 Trait::Err
@@ -871,31 +904,6 @@ impl Context {
             None => {
                 self.not_found(&seg0.name, "trait");
                 Trait::Err
-            }
-        }
-    }
-
-    // x = e;
-    // x.y = e;
-    // x[i] = e;
-    fn lvalue(&mut self, e: &Expr) -> Expr {
-        match e {
-            Expr::Var(s, t, x) => Expr::Var(*s, t.clone(), *x),
-            Expr::Field(s, t, e, x) => {
-                let e = self.lvalue(e.as_ref());
-                Expr::Field(*s, t.clone(), Rc::new(e), *x)
-            }
-            Expr::Index(s, t, e, i) => {
-                let e = self.lvalue(e.as_ref());
-                Expr::Index(*s, t.clone(), Rc::new(e), *i)
-            }
-            _ => {
-                self.report.err(
-                    e.span_of(),
-                    "Expression is not an lvalue.",
-                    "Only variables, field access, and tuple access are allow on the left-hand of an assignment.",
-                );
-                Expr::Err(e.span_of(), e.type_of().clone())
             }
         }
     }

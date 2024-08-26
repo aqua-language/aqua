@@ -77,6 +77,7 @@ impl Mapper for Context {
                     _ => unreachable!(),
                 }
             }
+            // a.b(c) => b(a, c)
             Expr::Dot(s, _, e, x, ts, es) => {
                 let e = self.map_expr(e);
                 let es = self.map_exprs(es);
@@ -85,6 +86,7 @@ impl Mapper for Context {
                 let e = Expr::Path(*s, Type::Unknown, path);
                 Expr::Call(*s, t.clone(), Rc::new(e), es)
             }
+            // -a => Neg(a)
             Expr::PrefixUnaryOp(s, _, op, e) => {
                 let e = self.map_expr(e);
                 match *op {
@@ -93,18 +95,21 @@ impl Mapper for Context {
                     _ => unreachable!(),
                 }
             }
+            // 1s => postfix_s(1)
             Expr::IntSuffix(s, _, l, r) => {
                 let e0 = Expr::Int(*s, Type::Unknown, *l);
                 let path = Path::new_name(Name::new(*s, format_smolstr!("postfix_{r}")));
                 let e1 = Expr::Path(*s, Type::Unknown, path);
                 Expr::Call(*s, Type::Unknown, Rc::new(e1), vec![e0])
             }
+            // 1.0s => postfix_s(1.0)
             Expr::FloatSuffix(s, _, l, r) => {
                 let e0 = Expr::Float(*s, Type::Unknown, *l);
                 let path = Path::new_name(Name::new(*s, format_smolstr!("postfix_{r}")));
                 let e1 = Expr::Path(*s, Type::Unknown, path);
                 Expr::Call(*s, Type::Unknown, Rc::new(e1), vec![e0])
             }
+            // (a) => a
             Expr::Paren(_, _, e) => self.map_expr(e),
             Expr::Annotate(_, _, e) => {
                 let e = self.map_expr(e);
@@ -142,7 +147,7 @@ mod util {
     use crate::ast::Path;
     use crate::ast::Segment;
     use crate::ast::Type;
-    use crate::lexer::Span;
+    use crate::span::Span;
 
     pub(super) fn unop(s: Span, t: Type, x0: &'static str, x1: &'static str, e: Expr) -> Expr {
         let s0 = Segment::new_name(Name::new(s, x0));

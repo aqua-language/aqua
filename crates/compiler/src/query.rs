@@ -9,7 +9,7 @@ use crate::ast::Program;
 use crate::ast::Query;
 use crate::ast::Segment;
 use crate::ast::Type;
-use crate::lexer::Span;
+use crate::span::Span;
 use crate::traversal::mapper::Mapper;
 
 use self::util::call;
@@ -36,14 +36,6 @@ impl Context {
 
     pub fn querycomp(&mut self, program: &Program) -> Program {
         self.map_program(program)
-    }
-
-    fn enter_scope(&mut self) {
-        self.stack.push(Scope(vec![]));
-    }
-
-    fn exit_scope(&mut self) {
-        self.stack.pop();
     }
 
     fn bind_relational_var(&mut self, x: Name) {
@@ -266,6 +258,14 @@ impl Context {
 }
 
 impl Mapper for Context {
+    fn enter_scope(&mut self) {
+        self.stack.push(Scope(vec![]));
+    }
+
+    fn exit_scope(&mut self) {
+        self.stack.pop();
+    }
+
     fn map_expr(&mut self, e: &Expr) -> Expr {
         match e {
             Expr::Query(s, _, x, e, qs) => {
@@ -311,7 +311,7 @@ mod util {
     use crate::ast::Name;
     use crate::ast::Path;
     use crate::ast::Type;
-    use crate::lexer::Span;
+    use crate::span::Span;
 
     pub(super) fn relation(s: Span) -> Name {
         Name::new(s, "r")

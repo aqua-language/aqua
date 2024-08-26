@@ -32,17 +32,10 @@ use crate::ast::TypeVar;
 use crate::collections::map::Map;
 use crate::collections::set::Set;
 use crate::diag::Report;
-use crate::lexer::Span;
+use crate::span::Span;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 
-use self::annotate::Annotate;
-use self::apply::Apply;
-use self::canonicalize::Canonicalize;
-use self::defaults::Defaults;
-use self::expand::Expand;
-use self::gather_goals::GatherGoals;
-use self::instantiate::Instantiate;
 use self::type_var::TypeVarKind;
 use self::type_var::TypeVarValue;
 
@@ -98,15 +91,19 @@ fn char() -> Type {
     Type::Cons("char".into(), vec![])
 }
 
+fn unit() -> Type {
+    Type::Tuple(vec![])
+}
+
 fn string() -> Type {
     Type::Cons("String".into(), vec![])
 }
 
-pub fn int_default() -> Type {
+pub fn default_int() -> Type {
     Type::Cons("i32".into(), vec![])
 }
 
-pub fn float_default() -> Type {
+pub fn default_float() -> Type {
     Type::Cons("f64".into(), vec![])
 }
 
@@ -171,7 +168,6 @@ impl Context {
     }
 
     pub fn add_goal(&mut self, goal: Goal) {
-        println!("Adding goal: {}", goal.tr);
         self.type_scope().goals.insert(goal);
     }
 
@@ -185,8 +181,8 @@ impl Context {
         std::mem::replace(&mut self.type_scope().goals, Set::new())
             .into_iter()
             .map(|g| {
-                let tr = Apply::new(self).map_trait(&g.tr);
-                let tr = Canonicalize::new(self).map_trait(&tr);
+                let tr = g.tr.apply(self);
+                let tr = tr.canonicalize(self);
                 Goal::new(g.s, tr)
             })
             .collect::<Set<_>>()
@@ -203,15 +199,11 @@ impl Context {
         self.map_program(p)
     }
 
-    pub fn apply(&mut self, t: &Type) -> Type {
-        Apply::new(self).map_type(t)
-    }
-
     pub fn type_scope(&mut self) -> &mut InferContext {
         self.type_stack.last_mut().unwrap()
     }
 
-    pub fn get_type(&mut self, a: TypeVar) -> TypeVarValue {
+    pub fn get_value(&mut self, a: TypeVar) -> TypeVarValue {
         self.type_scope().table.probe_value(a)
     }
 
@@ -229,38 +221,45 @@ impl Context {
         Type::Var(self.type_scope().table.new_key(TypeVarValue::Unknown(kind)))
     }
 
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn unify(&mut self, s0: Span, s1: Span, t0: &Type, t1: &Type) {
         let snapshot = self.type_scope().table.snapshot();
-        match self.try_unify(&t0, &t1) {
-            Ok(()) => self.type_scope().table.commit(snapshot),
-            Err(()) => {
-                self.type_scope().table.rollback_to(snapshot);
-                let t0 = self.apply(t0);
-                let t1 = self.apply(t1);
-                self.report.err2(
-                    s0,
-                    s1,
-                    "Type mismatch",
-                    format!("Expected {t0}"),
-                    format!("Found {t1}"),
-                );
-            }
+        if self.try_unify(&t0, &t1).is_ok() {
+            self.type_scope().table.commit(snapshot)
+        } else {
+            self.type_scope().table.rollback_to(snapshot);
+            let t0 = t0.apply(self);
+            let t1 = t1.apply(self);
+            self.report.err2(
+                s0,
+                s1,
+                "Type mismatch",
+                format!("Expected {t0}"),
+                format!("Found {t1}"),
+            );
         }
     }
 
     pub fn try_unify(&mut self, t0: &Type, t1: &Type) -> Result<(), ()> {
+        // TODO: This might be a bit inefficient.
+        let t0 = &t0.expand();
+        let t1 = &t1.expand();
         match (t0, t1) {
-            (Type::Var(x0), Type::Var(x1)) => match (self.get_type(*x0), self.get_type(*x1)) {
+            (Type::Var(x0), Type::Var(x1)) => match (self.get_value(*x0), self.get_value(*x1)) {
                 (TypeVarValue::Known(t3), TypeVarValue::Known(t4)) => self.try_unify(&t3, &t4),
-                (TypeVarValue::Known(t3), TypeVarValue::Unknown(k1)) if k1.is_unifiable(&t3) => {
+                (TypeVarValue::Known(t3), TypeVarValue::Unknown(k1))
+                    if k1.is_unifiable_with(&t3) =>
+                {
                     self.union_value(*x1, t3);
                     Ok(())
                 }
-                (TypeVarValue::Unknown(k0), TypeVarValue::Known(t4)) if k0.is_unifiable(&t4) => {
+                (TypeVarValue::Unknown(k0), TypeVarValue::Known(t4))
+                    if k0.is_unifiable_with(&t4) =>
+                {
                     self.union_value(*x0, t4);
                     Ok(())
                 }
-                (TypeVarValue::Unknown(k0), TypeVarValue::Unknown(k1)) if k0.is_mergeable(k1) => {
+                (TypeVarValue::Unknown(k0), TypeVarValue::Unknown(k1)) if k0.is_compatible(k1) => {
                     if x0 != x1 {
                         self.union(*x0, *x1);
                     }
@@ -268,9 +267,9 @@ impl Context {
                 }
                 _ => Err(()),
             },
-            (Type::Var(x1), t3) | (t3, Type::Var(x1)) => match self.get_type(*x1) {
+            (Type::Var(x1), t3) | (t3, Type::Var(x1)) => match self.get_value(*x1) {
                 TypeVarValue::Known(t4) => self.try_unify(t3, &t4),
-                TypeVarValue::Unknown(k1) if k1.is_unifiable(t3) => {
+                TypeVarValue::Unknown(k1) if k1.is_unifiable_with(t3) => {
                     self.union_value(*x1, t3.clone());
                     Ok(())
                 }
@@ -305,8 +304,6 @@ impl Context {
                 if x0 == x1 && ts0.len() == ts1.len() =>
             {
                 match (b0, b1) {
-                    (Trait::Err, _) | (_, Trait::Err) => Ok(()),
-                    (Trait::Path(..), _) | (_, Trait::Path(..)) => unreachable!(),
                     (Trait::Type(t0), Trait::Type(t1)) => ts0
                         .iter()
                         .chain([t0.as_ref()])
@@ -319,6 +316,8 @@ impl Context {
                             .zip(ts1.iter())
                             .try_for_each(|(t0, t1)| self.try_unify(t0, t1))
                     }
+                    (Trait::Err, _) | (_, Trait::Err) => Ok(()),
+                    (Trait::Path(..), _) | (_, Trait::Path(..)) => unreachable!(),
                     _ => Err(()),
                 }
             }
@@ -351,29 +350,17 @@ impl Context {
     fn solve_goals(&mut self) {
         let goals = self.take_goals();
         let assumptions = self.assumptions();
-        for goal in goals.iter() {
-            println!("Unique goal: {}", goal.tr);
-        }
         for goal in goals {
-            self.debug("solve_goals");
-            println!("Solving goal (initial): {}", goal.tr);
             let tr = goal.tr.apply(self);
-            println!("Solving goal (apply): {}", tr);
             let tr = tr.expand();
-            println!("Solving goal (expand): {}", tr);
-            match self.solve::<false>(&tr, &assumptions) {
+            match self.solve(&tr, &assumptions, false) {
                 Err(_) => {
-                    println!("Unsolved goal: {}", tr);
-                    Defaults::new(self).visit_bound(&tr);
-                    let tr = Apply::new(self).map_trait(&tr);
-                    let tr = Expand::new().map_trait(&tr);
-                    println!("Solving goal again: {}", tr);
-                    match self.solve::<false>(&tr, &assumptions) {
-                        Ok(c) => {
-                            println!("Found solution: {}", c);
-                        }
+                    tr.defaults(self);
+                    let tr = tr.apply(self);
+                    let tr = tr.expand();
+                    match self.solve(&tr, &assumptions, false) {
+                        Ok(_) => {}
                         Err(TraitSolverError::Unsolved) => {
-                            println!("Found no solution: {}", tr);
                             self.report.err(
                                 goal.s,
                                 "Trait is not implemented",
@@ -382,7 +369,6 @@ impl Context {
                             return;
                         }
                         Err(TraitSolverError::Ambiguous(cs)) => {
-                            println!("Ambiguous goal: {}", tr);
                             let s = cs
                                 .iter()
                                 .map(|c| c.to_string())
@@ -397,26 +383,25 @@ impl Context {
                         }
                     }
                 }
-                Ok(c) => {
-                    println!("Found solution: {}", c);
-                }
+                Ok(_) => {}
             }
-            self.solve::<true>(&tr, &assumptions)
+            self.solve(&tr, &assumptions, true)
                 .expect("Goals should be solved");
         }
     }
 
-    fn solve<const KEEP: bool>(
+    fn solve(
         &mut self,
         goal: &Trait,
         assumptions: &[Trait],
+        commit: bool,
     ) -> Result<Candidate, TraitSolverError> {
         let Trait::Cons(x, _, _) = goal else {
             todo!();
         };
         let mut solutions = vec![];
         for b in assumptions {
-            if self.matches::<{ KEEP }>(goal, b) {
+            if self.matches(goal, b, commit) {
                 solutions.push(Candidate::Bound(b.clone()));
             }
         }
@@ -427,13 +412,13 @@ impl Context {
                     .iter()
                     .map(|x| (*x, self.fresh(TypeVarKind::General)))
                     .collect::<Map<_, _>>();
-                let stmt = Instantiate::new(&gsub).map_stmt_impl(stmt.as_ref());
-                let stmt = Annotate::new(self).map_stmt_impl(&stmt);
-                if self.matches::<{ KEEP }>(goal, &stmt.head)
+                let stmt = stmt.instantiate(&gsub);
+                let stmt = stmt.annotate(self);
+                if self.matches(goal, &stmt.head, commit)
                     && stmt
                         .where_clause
                         .iter()
-                        .all(|subgoal| self.solve::<{ KEEP }>(subgoal, assumptions).is_ok())
+                        .all(|subgoal| self.solve(subgoal, assumptions, commit).is_ok())
                 {
                     solutions.push(Candidate::Impl(stmt));
                 }
@@ -447,7 +432,7 @@ impl Context {
     }
 
     // Checks if i0 and i1 match
-    fn matches<const KEEP: bool>(&mut self, b0: &Trait, b1: &Trait) -> bool {
+    fn matches(&mut self, b0: &Trait, b1: &Trait, commit: bool) -> bool {
         let snapshot = self.type_scope().table.snapshot();
         let b = match (b0, b1) {
             (Trait::Cons(x0, ts0, xts0), Trait::Cons(x1, ts1, xts1)) => {
@@ -469,7 +454,7 @@ impl Context {
             (Trait::Cons(..), Trait::Type(..)) | (Trait::Type(..), Trait::Cons(..)) => false,
             (Trait::Var(..), _) | (_, Trait::Var(..)) => todo!(),
         };
-        if KEEP {
+        if commit {
             self.type_scope().table.commit(snapshot);
         } else {
             self.type_scope().table.rollback_to(snapshot);
@@ -509,24 +494,6 @@ impl Context {
     }
 }
 
-// pub fn instantiate_def(s: &StmtDef, ctx: &mut Context) -> StmtDef {
-//     let sub = s
-//         .generics
-//         .iter()
-//         .map(|q| (q.clone(), ctx.new_tyvar()))
-//         .collect::<Vec<_>>();
-//
-//     let body = s
-//         .where_clause
-//         .iter()
-//         .map(|p| p.apply(&sub))
-//         .collect::<Vec<_>>();
-//     let params = s.params.iter().map(|p| p.apply(&sub)).collect::<Vec<_>>();
-//     let ty = s.ty.apply(&sub);
-//     let expr = s.expr.apply(&sub);
-//
-//     StmtDef::new(s.span, s.name.clone(), vec![], body, params, ty, expr)
-// }
 impl Visitor for Context {
     fn visit_stmt(&mut self, s: &Stmt) {
         match s {
@@ -573,19 +540,18 @@ impl Mapper for Context {
         self.stack.pop();
     }
 
-    fn map_program(&mut self, p: &Program) -> Program {
+    fn map_program(&mut self, program: &Program) -> Program {
         self.type_stack.push(InferContext::new(vec![]));
-        let program = Annotate::new(self).map_program(p);
-        println!("Annotated program: {}", program.verbose());
+        let program = program.annotate(self);
         self.visit_program(&program);
+        program.gather_goals(self);
         let stmts = self.map_stmts(&program.stmts);
-        let program = Program::new(p.span, stmts);
-        let program = Apply::new(self).map_program(&program);
-        GatherGoals::new(self, program.span).visit_program(&program);
+        let program = Program::new(program.span, stmts);
+        let program = program.apply(self);
         self.solve_goals();
-        Defaults::new(self).visit_program(&program);
-        let program = Expand::new().map_program(&program);
-        let program = Apply::new(self).map_program(&program);
+        program.defaults(self);
+        let program = program.expand();
+        let program = program.apply(self);
         self.type_stack.pop();
         program
     }
@@ -630,7 +596,7 @@ impl Mapper for Context {
                 for (x, t) in &s.params {
                     self.bind(*x, Binding::Var(x.span, t.clone()));
                 }
-                let e = Annotate::new(self).map_expr(e);
+                let e = e.annotate(self);
                 let e = self.map_expr(&e);
                 self.unify(s.span, e.span_of(), &s.ty, e.type_of());
                 self.solve_goals();
@@ -643,8 +609,8 @@ impl Mapper for Context {
                     s.where_clause.clone(),
                     StmtDefBody::UserDefined(e),
                 );
-                Defaults::new(self).visit_stmt_def(&stmt);
-                let s = Apply::new(self).map_stmt_def(&stmt);
+                stmt.defaults(self);
+                let s = stmt.apply(self);
                 self.type_stack.pop();
                 s
             }
@@ -773,7 +739,7 @@ impl Mapper for Context {
             }
             Expr::Field(s, t0, e, x) => {
                 let e = self.map_expr(e);
-                let t = self.apply(&e.type_of());
+                let t = e.type_of().apply(self);
                 match t {
                     Type::Cons(x0, ts) => {
                         let stmt = self.structs.get(&x0).unwrap().clone();
@@ -806,7 +772,7 @@ impl Mapper for Context {
                             self.unify(*s, e.span_of(), t0, t1);
                             Expr::Field(*s, t0.clone(), e.into(), *x)
                         } else {
-                            let t = self.apply(&e.type_of());
+                            let t = e.type_of().apply(self);
                             self.report.err(
                                 *s,
                                 "Unknown field",
@@ -816,7 +782,7 @@ impl Mapper for Context {
                         }
                     }
                     _ => {
-                        let t = self.apply(&e.type_of());
+                        let t = e.type_of().apply(self);
                         self.report.err(
                             *s,
                             "Unknown type",
@@ -828,7 +794,7 @@ impl Mapper for Context {
             }
             Expr::Index(s, t0, e, i) => {
                 let e = self.map_expr(e);
-                let t = self.apply(e.type_of());
+                let t = e.type_of().apply(self);
                 let Type::Tuple(ts) = &t else {
                     self.report.err(
                         *s,
@@ -865,7 +831,7 @@ impl Mapper for Context {
                 let e0 = self.map_expr(e0);
                 let e1 = self.map_expr(e1);
                 self.unify(*s, e0.span_of(), e0.type_of(), e1.type_of());
-                self.unify(*s, e0.span_of(), t0, &Type::Tuple(vec![]));
+                self.unify(*s, *s, t0, &unit());
                 Expr::Assign(*s, t0.clone(), Rc::new(e0), Rc::new(e1))
             }
             Expr::Return(_, _, _) => todo!(),
@@ -873,7 +839,14 @@ impl Mapper for Context {
             Expr::Break(_, _) => todo!(),
             Expr::Fun(_, _, _, _, _) => todo!(),
             Expr::Match(_, _, _, _) => todo!(),
-            Expr::While(_, _, _, _) => todo!(),
+            Expr::While(s, t0, e0, b) => {
+                let e0 = self.map_expr(e0);
+                let b = self.map_block(b);
+                self.unify(*s, e0.span_of(), e0.type_of(), &bool());
+                self.unify(*s, *s, t0, &unit());
+                self.unify(*s, b.expr.span_of(), t0, b.expr.type_of());
+                Expr::While(*s, t0.clone(), Rc::new(e0), b)
+            }
             Expr::Record(s, t0, xes) => {
                 let xes = xes
                     .iter()
@@ -907,7 +880,6 @@ impl Mapper for Context {
                     )
                     .annotate(self)
                     .instantiate(&gsub);
-                    println!("Trait method: {}", t1);
                     // self.add_goal(Goal::new(*s, b.clone()));
                     self.unify(*s, *s, t0, &t1);
                     Expr::TraitMethod(*s, t0.clone(), b.clone(), *x1, ts1.clone())
@@ -916,8 +888,9 @@ impl Mapper for Context {
                 Trait::Err => todo!(),
                 Trait::Var(_) => todo!(),
             },
-            Expr::Unresolved(_, _t, _x, _ts) => todo!(),
+            Expr::Unresolved(_, _t, x, _ts) => todo!("{x}"),
             Expr::Update(_, _, _, _, _) => todo!(),
+            // These should ideally be unreachable, but covering all would require more passes
             Expr::Query(..) => unreachable!(),
             Expr::QueryInto(..) => unreachable!(),
             Expr::InfixBinaryOp(..) => unreachable!(),
@@ -926,7 +899,15 @@ impl Mapper for Context {
             Expr::Annotate(..) => unreachable!(),
             Expr::Paren(..) => unreachable!(),
             Expr::Dot(..) => unreachable!(),
-            Expr::IfElse(..) => unreachable!(),
+            Expr::IfElse(s, t, e0, b0, b1) => {
+                let e0 = self.map_expr(e0);
+                let b0 = self.map_block(b0);
+                let b1 = self.map_block(b1);
+                self.unify(*s, *s, e0.type_of(), &bool());
+                self.unify(*s, b0.expr.span_of(), t, b0.expr.type_of());
+                self.unify(*s, b1.expr.span_of(), t, b1.expr.type_of());
+                Expr::IfElse(*s, t.clone(), Rc::new(e0.clone()), b0, b1)
+            }
             Expr::IntSuffix(..) => unreachable!(),
             Expr::FloatSuffix(..) => unreachable!(),
             Expr::LetIn(..) => unreachable!(),

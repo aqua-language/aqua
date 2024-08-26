@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::lexer::Span;
+use crate::span::Span;
 use crate::symbol::Symbol;
 
 use super::Expr;

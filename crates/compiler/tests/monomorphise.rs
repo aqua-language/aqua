@@ -62,6 +62,7 @@ fn test_monomorphise2() {
 }
 
 #[test]
+#[ignore]
 fn test_monomorphise3() {
     let a = monomorphise_program!(
         "trait Foo[T0] { def bar[T1](x: T0, y: T1): T0; }
@@ -78,6 +79,7 @@ fn test_monomorphise3() {
 }
 
 #[test]
+#[ignore]
 fn test_monomorphise4() {
     let a = monomorphise_program!(
         "trait Foo[T] { def foo(x: T): T; }

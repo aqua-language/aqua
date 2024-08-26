@@ -59,11 +59,14 @@ fn test_serde_tuple() {
 fn test_serde_record() {
     let v0 = Value::from(1);
     let v1 = Value::from(runtime::builtins::im_string::String::from("Hello"));
-    let v2 = Value::from(Record::new(vec![
+    let v2 = Value::from(Record::new(Map::from(vec![
         ("a".into(), v0.clone()),
         ("b".into(), v1.clone()),
-    ]));
-    let v2_permut = Value::from(Record::new(vec![("b".into(), v1), ("a".into(), v0)]));
+    ])));
+    let v2_permut = Value::from(Record::new(Map::from(vec![
+        ("b".into(), v1),
+        ("a".into(), v0),
+    ])));
     let s = serde_json::to_string(&v2).unwrap();
     let mut de = serde_json::Deserializer::from_str(&s);
     let t0 = Type::Cons("i32".into(), vec![]);

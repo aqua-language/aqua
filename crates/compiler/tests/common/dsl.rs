@@ -27,7 +27,7 @@ use compiler::ast::Trait;
 use compiler::ast::Type;
 
 use compiler::ast::TypeVar;
-use compiler::lexer::Span;
+use compiler::span::Span;
 
 pub fn program<const N: usize>(ss: [Stmt; N]) -> Program {
     Program::new(span(), vec(ss))

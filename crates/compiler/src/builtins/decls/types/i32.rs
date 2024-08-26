@@ -132,7 +132,7 @@ impl Compiler {
         );
 
         self.declare_impl(
-            "impl Ord {
+            "impl Ord[i32] {
                  def cmp(a:i32, b:i32): Ordering;
                  def min(a:i32, b:i32): i32;
                  def max(a:i32, b:i32): i32;
@@ -160,6 +160,61 @@ impl Compiler {
                         let v0 = v[0].as_i32();
                         let v1 = v[1].as_i32();
                         v0.max(v1).into()
+                    },
+                },
+            ],
+        );
+
+        self.declare_impl(
+            "impl PartialOrd[i32, i32] {
+                def partial_cmp(a: i32, b: i32): Option[Ordering];
+                def lt(a: i32, b: i32): bool;
+                def le(a: i32, b: i32): bool;
+                def gt(a: i32, b: i32): bool;
+                def ge(a: i32, b: i32): bool;
+            }",
+            [
+                BuiltinDef {
+                    rust: "(|a,b| a.partial_cmp(&b))",
+                    fun: |_ctx, _t, v| {
+                        let v0 = v[0].as_i32();
+                        let v1 = v[1].as_i32();
+                        crate::builtins::Value::Option(runtime::builtins::option::Option(
+                            v0.partial_cmp(&v1)
+                                .map(|o| std::rc::Rc::new(crate::builtins::Value::Ordering(o))),
+                        ))
+                    },
+                },
+                BuiltinDef {
+                    rust: "(|a,b| a < b)",
+                    fun: |_ctx, _t, v| {
+                        let v0 = v[0].as_i32();
+                        let v1 = v[1].as_i32();
+                        (v0 < v1).into()
+                    },
+                },
+                BuiltinDef {
+                    rust: "(|a,b| a <= b)",
+                    fun: |_ctx, _t, v| {
+                        let v0 = v[0].as_i32();
+                        let v1 = v[1].as_i32();
+                        (v0 <= v1).into()
+                    },
+                },
+                BuiltinDef {
+                    rust: "(|a,b| a > b)",
+                    fun: |_ctx, _t, v| {
+                        let v0 = v[0].as_i32();
+                        let v1 = v[1].as_i32();
+                        (v0 > v1).into()
+                    },
+                },
+                BuiltinDef {
+                    rust: "(|a,b| a >= b)",
+                    fun: |_ctx, _t, v| {
+                        let v0 = v[0].as_i32();
+                        let v1 = v[1].as_i32();
+                        (v0 >= v1).into()
                     },
                 },
             ],

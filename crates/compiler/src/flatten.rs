@@ -11,7 +11,7 @@ use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtDefBody;
 use crate::ast::StmtVar;
-use crate::lexer::Span;
+use crate::span::Span;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 
@@ -24,14 +24,14 @@ pub struct Context {
 #[derive(Debug)]
 pub struct Scope {
     stmts: Vec<Stmt>,
-    alias: Map<Name, Name>,
+    aliases: Map<Name, Name>,
 }
 
 impl Scope {
     pub fn new() -> Self {
         Scope {
             stmts: vec![],
-            alias: Map::new(),
+            aliases: Map::new(),
         }
     }
 }
@@ -49,24 +49,29 @@ impl Context {
     }
 
     pub fn rebind(&mut self, old: Name, new: Name) {
-        self.stack.last_mut().unwrap().alias.insert(old, new);
+        self.stack.last_mut().unwrap().aliases.insert(old, new);
     }
 
-    pub fn newest(&self, old: Name) -> Name {
-        let mut new = old;
+    // Dealias the name `alias` to the most recent name it was bound to.
+    // For example, if we have: var x = 1; var y = x; { var z = y; z + 1 },
+    // then, dealias(z) gives x.
+    pub fn dealias(&self, alias: Name) -> Name {
+        let mut x = alias;
         let mut n = self.stack.len();
+        // This loop searches for aliases by unwinding the stack of scopes.
+        // If `x` is an alias, then we dealias it and keep searching from the current scope.
         while let Some((i, newer)) = self
             .stack
             .iter()
             .take(n)
             .enumerate()
             .rev()
-            .find_map(|(i, s)| s.alias.get(&old).map(|new| (i, new)))
+            .find_map(|(i, s)| s.aliases.get(&x).map(|newer| (i, newer)))
         {
             n = i;
-            new = *newer;
+            x = *newer;
         }
-        new
+        x
     }
 
     fn fresh_name(&mut self, s: Span) -> Name {
@@ -99,6 +104,7 @@ impl Visitor for Context {
         }
     }
 
+    // `var x = 1; var y = x;` => `var x0 = 1;
     fn visit_stmt_var(&mut self, s: &StmtVar) {
         let Expr::Var(_, _, name) = self.map_expr(&s.expr) else {
             unreachable!();
@@ -141,15 +147,17 @@ impl Mapper for Context {
 
     fn map_expr(&mut self, e: &Expr) -> Expr {
         match e {
+            // { 1 } => 1
             Expr::Block(_, _, b) => {
                 let b = self.map_block(b);
                 self.stack.last_mut().unwrap().stmts.extend(b.stmts);
                 b.expr.as_ref().clone()
             }
             Expr::Var(_, _, x) => {
-                let x = self.newest(*x);
+                let x = self.dealias(*x);
                 Expr::Var(e.span_of(), e.type_of().clone(), x)
             }
+            Expr::Tuple(_, _, es) if es.len() == 0 => e.clone(),
             _ => {
                 let e = self._map_expr(e);
                 let s = e.span_of();

@@ -1,3 +1,4 @@
+use crate::ast::Trait;
 use crate::ast::Type;
 use crate::traversal::mapper::Mapper;
 
@@ -18,5 +19,12 @@ impl<'a> Mapper for Canonicalize<'a> {
         } else {
             self._map_type(t)
         }
+    }
+}
+
+impl Trait {
+    /// Canonicalize all type variables in a trait.
+    pub fn canonicalize(&self, ctx: &mut Context) -> Trait {
+        Canonicalize::new(ctx).map_trait(self)
     }
 }

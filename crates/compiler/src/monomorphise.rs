@@ -221,7 +221,7 @@ impl Context {
                 match t {
                     Type::Var(x1) => {
                         let k1 = self.table.probe_value(*x1).unknown().unwrap();
-                        if k0.is_mergeable(k1) {
+                        if k0.is_compatible(k1) {
                             self.table.union(*x0, *x1);
                             Ok(())
                         } else {
@@ -270,7 +270,7 @@ impl Context {
             (Type::Err, _) | (_, Type::Err) => unreachable!(),
             (Type::Never, _) | (_, Type::Never) => Ok(()),
             (Type::Unknown, Type::Unknown) => unreachable!(),
-            _ => unreachable!("{} {}", t0, t1),
+            _ => Err((t0.clone(), t1.clone())),
         }
     }
 }

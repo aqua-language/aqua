@@ -6,18 +6,18 @@ use rustyline::validate::Validator;
 use rustyline::Result;
 
 #[derive(Default)]
-pub struct StatementValidator;
+pub struct StmtValidator;
 
-impl StatementValidator {
+impl StmtValidator {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Validator for StatementValidator {
+impl Validator for StmtValidator {
     fn validate(&self, ctx: &mut ValidationContext) -> Result<ValidationResult> {
         let input = ctx.input();
-        let stmts = StatementIterator::new(input);
+        let stmts = StmtIterator::new(input);
         if (stmts.count() > 0 && input.ends_with(';')) || input.ends_with('\n') {
             Ok(ValidationResult::Valid(None))
         } else if input.is_empty() {
@@ -30,11 +30,11 @@ impl Validator for StatementValidator {
     }
 }
 
-pub struct StatementIterator<'a> {
+pub struct StmtIterator<'a> {
     input: &'a str,
 }
 
-impl<'a> StatementIterator<'a> {
+impl<'a> StmtIterator<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
             input: input.trim(),
@@ -42,7 +42,7 @@ impl<'a> StatementIterator<'a> {
     }
 }
 
-impl<'a> Iterator for StatementIterator<'a> {
+impl<'a> Iterator for StmtIterator<'a> {
     type Item = &'a str;
 
     fn next(&mut self) -> Option<Self::Item> {

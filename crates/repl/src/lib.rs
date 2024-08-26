@@ -2,7 +2,7 @@
 
 use compiler::ast::Program;
 use compiler::Compiler;
-use helper::validator::StatementIterator;
+use helper::validator::StmtIterator;
 
 use std::io;
 use std::io::LineWriter;
@@ -103,7 +103,7 @@ impl Repl {
 
     pub fn run(&mut self, initial: Option<String>) -> Result<()> {
         self.color(Color::Green);
-        let mut stmts = Some(initial.iter().flat_map(|s| StatementIterator::new(s)));
+        let mut stmts = Some(initial.iter().flat_map(|s| StmtIterator::new(s)));
         loop {
             let input = stmts
                 .as_mut()

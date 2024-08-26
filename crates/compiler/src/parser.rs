@@ -58,18 +58,18 @@ use crate::ast::Trait;
 use crate::ast::Type;
 use crate::collections::map::Map;
 use crate::diag::Report;
-use crate::lexer::Span;
 use crate::lexer::Spanned;
 use crate::lexer::Token;
+use crate::span::Span;
 
 pub struct Parser<'a, I>
 where
     I: Iterator<Item = Spanned<Token>>,
 {
     input: &'a str,
-    lexer: std::iter::Peekable<I>,
-    pub report: Report,
+    iter: std::iter::Peekable<I>,
     delims: Vec<Spanned<Token>>,
+    pub report: Report,
 }
 
 impl Token {
@@ -110,15 +110,11 @@ impl<'a, I> Parser<'a, I>
 where
     I: Iterator<Item = Spanned<Token>>,
 {
-    const FUEL: usize = 1000;
-
-    pub fn new(input: &'a str, lexer: I) -> Self {
-        let lexer = lexer.peekable();
-        let report = Report::new();
+    pub fn new(input: &'a str, iter: I) -> Self {
         Self {
             input,
-            lexer,
-            report,
+            iter: iter.peekable(),
+            report: Report::new(),
             delims: Vec::new(),
         }
     }
@@ -127,17 +123,17 @@ where
 
     /// Peek at the next token
     fn peek(&mut self) -> Spanned<Token> {
-        self.lexer.peek().cloned().unwrap()
+        self.iter.peek().cloned().unwrap()
     }
 
     /// Get the next token
     fn next(&mut self) -> Spanned<Token> {
-        self.lexer.next().unwrap()
+        self.iter.next().unwrap()
     }
 
     /// Skip the next token
     fn skip(&mut self) {
-        self.lexer.next();
+        self.iter.next();
     }
 
     /// Get the text of a token
@@ -145,44 +141,42 @@ where
         t.text(self.input)
     }
 
-    /// Error recovery. Discards tokens until the first token is found,
-    /// or the end of the file is reached. Takes closing/opening braces into account:
-    /// 1. (+ [)]) => Recover at the second ) and report an error: Unexpected token +
-    /// 2. <Open>  => Recover at the end of the file and report an error: Unmatched <Open>
-    fn recover<const PEEK: bool>(
-        &mut self,
-        first: Token,
-        follow: Token,
-    ) -> Result<Spanned<Token>, Span> {
-        let mut fuel = Self::FUEL;
+    fn report_unmatched(&mut self) {
+        for t in self.delims.drain(..) {
+            match t.v {
+                Token::LParen => {
+                    self.report.err(t.s, "Unmatched `(`", "expected `)`");
+                }
+                Token::LBrace => {
+                    self.report.err(t.s, "Unmatched `{`", "expected `}`");
+                }
+                Token::LBrack => {
+                    self.report.err(t.s, "Unmatched `[`", "expected `]`");
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    /// Error recovery. Discards tokens until `first` or `follow` is found.
+    /// Takes closing/opening braces into account:
+    /// 1. (+ [)]) <eof> => Recover at the second ) and report an error: Unexpected token +
+    /// 2. [ <eof>  => Recover at the end of the file and report an error: Unmatched [
+    fn recover(&mut self, first: Token, follow: Token) -> Result<Spanned<Token>, Span> {
+        let mut fuel = 1000; // Stop recovering after having skipped 1000 consecutive tokens.
         loop {
             let t = self.peek();
             match t.v {
-                _ if fuel == 0 => {
-                    self.report.err(t.s, "Too many errors", "stopping here");
-                    return Err(t.s);
-                }
                 _ if first.contains(t.v) && self.delims.is_empty() => {
-                    return if PEEK { Ok(t) } else { Ok(self.next()) }
+                    return Ok(t);
                 }
                 // TODO: Handle what happens when the follow set contains a closing token
                 _ if follow.contains(t.v) && self.delims.is_empty() => {
                     return Err(t.s);
                 }
-                _ if t.v == Token::Eof => {
+                _ if fuel == 0 || t.v == Token::Eof => {
                     if !self.delims.is_empty() {
-                        self.delims.drain(..).for_each(|t| match t.v {
-                            Token::LParen => {
-                                self.report.err(t.s, "Unmatched `(`", "expected `)`");
-                            }
-                            Token::LBrace => {
-                                self.report.err(t.s, "Unmatched `{`", "expected `}`");
-                            }
-                            Token::LBrack => {
-                                self.report.err(t.s, "Unmatched `[`", "expected `]`");
-                            }
-                            _ => unreachable!(),
-                        });
+                        self.report_unmatched();
                     }
                     return Err(t.s);
                 }
@@ -209,14 +203,8 @@ where
     }
 
     fn expect(&mut self, first: Token, follow: Token) -> Result<Spanned<Token>, Span> {
-        let t = self.peek();
-        if first.contains(t.v) {
-            Ok(self.next())
-        } else {
-            self.report
-                .err(t.s, format!("Unexpected token `{}`", t.v), first.expected());
-            self.recover::<false>(first, follow)
-        }
+        self.start(first, follow)?;
+        Ok(self.next())
     }
 
     fn start(&mut self, first: Token, follow: Token) -> Result<Spanned<Token>, Span> {
@@ -226,7 +214,7 @@ where
         } else {
             self.report
                 .err(t.s, format!("Unexpected token `{}`", t.v), first.expected());
-            self.recover::<true>(first, follow)
+            self.recover(first, follow)
         }
     }
 
@@ -1118,7 +1106,7 @@ where
     /// * { } - An empty block
     /// * { e } - A block with a single expression
     /// * { s; ... } - A block with multiple statements
-    /// * { s ... } - Where s is an expression that ends
+    /// * { s ... } - Where s is a block expression
     fn block(&mut self, follow: Token) -> Result<Spanned<Block>, Span> {
         let t0 = self.expect(Token::LBrace, follow)?;
         let mut stmts = Vec::new();
@@ -1233,18 +1221,8 @@ where
                 self.skip();
                 let rhs = self.expr_fallible(follow, rbp)?;
                 let s = lhs.s + rhs.s;
-                let e = if let Token::Eq = op.v {
-                    let place = if lhs.v.is_place() {
-                        lhs.v
-                    } else {
-                        self.report.err(
-                            lhs.s,
-                            "Invalid left-hand side of assignment",
-                            "Expected a variable, index, or field expression.",
-                        );
-                        Expr::Err(lhs.s, Type::Unknown)
-                    };
-                    Expr::Assign(s, Type::Unknown, Rc::new(place), Rc::new(rhs.v))
+                let e = if Token::Eq == op.v {
+                    Expr::Assign(s, Type::Unknown, Rc::new(lhs.v), Rc::new(rhs.v))
                 } else {
                     Expr::InfixBinaryOp(s, Type::Unknown, op.v, Rc::new(lhs.v), Rc::new(rhs.v))
                 };

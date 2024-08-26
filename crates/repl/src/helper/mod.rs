@@ -34,11 +34,11 @@ use rustyline::Result;
 
 use completer::KeywordCompleter;
 use highlighter::SyntaxHighlighter;
-use validator::StatementValidator;
+use validator::StmtValidator;
 
 pub(crate) struct Helper {
     validator1: MatchingBracketValidator,
-    validator2: StatementValidator,
+    validator2: StmtValidator,
     completer1: FilenameCompleter,
     // completer2: KeywordCompleter,
     highlighter1: SyntaxHighlighter,
@@ -53,7 +53,7 @@ impl Default for Helper {
     fn default() -> Self {
         Self {
             validator1: MatchingBracketValidator::new(),
-            validator2: StatementValidator::new(),
+            validator2: StmtValidator::new(),
             completer1: FilenameCompleter::new(),
             // completer2: KeywordCompleter::new(),
             highlighter1: SyntaxHighlighter::new(),

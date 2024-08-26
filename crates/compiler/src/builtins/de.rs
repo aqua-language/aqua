@@ -12,7 +12,7 @@ use crate::ast::Name;
 use crate::ast::Type;
 use crate::builtins::Array;
 use crate::builtins::Record;
-use crate::lexer::Span;
+use crate::span::Span;
 use crate::symbol::Symbol;
 
 use super::Tuple;

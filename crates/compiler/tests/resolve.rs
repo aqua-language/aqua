@@ -36,6 +36,9 @@ use common::dsl::type_bound;
 
 use compiler::ast::Type;
 
+use crate::common::dsl::expr_assign;
+use crate::common::dsl::expr_field;
+
 #[test]
 fn test_resolve_var0() {
     let a = resolve_program!("var x = 0; x;").unwrap();
@@ -54,6 +57,43 @@ fn test_resolve_var_err0() {
         stmt_expr(expr_unresolved("y", [])),
     ]);
     check!(a, b);
+}
+
+#[test]
+fn test_resolve_assign0() {
+    let a = resolve_program!("var x = 0; x = 1;").unwrap();
+    let b = program([
+        stmt_var("x", Type::Unknown, expr_int("0")),
+        stmt_expr(expr_assign(expr_var("x"), expr_int("1"))),
+    ]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_assign1() {
+    let a = resolve_program!(
+        "struct X(a:i32);
+         var x = X(a=1);
+         x.a = 1;"
+    )
+    .unwrap();
+    let b = program([
+        stmt_struct("X", [], [("a", ty("i32"))]),
+        stmt_var(
+            "x",
+            Type::Unknown,
+            expr_struct("X", [], [("a", expr_int("1"))]),
+        ),
+        stmt_expr(expr_assign(expr_field(expr_var("x"), "a"), expr_int("1"))),
+    ]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_assign_err0() {
+    let a = resolve_program!("1 = 2;").unwrap_err();
+    let b = program([stmt_expr(expr_assign(expr_err(), expr_int("2")))]);
+    check!(a.val, b);
 }
 
 #[test]
@@ -720,5 +760,35 @@ fn test_resolve_vec_new2() {
         expr_assoc(type_bound(ty_con("Vec", [ty("i32")])), "new", []),
         [],
     ))]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_impl_generic() {
+    let a = resolve_program!(
+        "struct X[T](y:T);
+         impl[T] X[T] {
+             def new(y:T): X[T] = X[T](y=y);
+         }
+        "
+    )
+    .unwrap();
+    let b = program([
+        stmt_struct("X", ["T"], [("y", ty_gen("T"))]),
+        stmt_impl(
+            ["T"],
+            type_bound(ty_con("X", [ty_gen("T")])),
+            [],
+            [stmt_def(
+                "new",
+                [],
+                [("y", ty_gen("T"))],
+                ty_con("X", [ty_gen("T")]),
+                [],
+                expr_struct("X", [ty_gen("T")], [("y", expr_var("y"))]),
+            )],
+            [],
+        ),
+    ]);
     check!(a, b);
 }

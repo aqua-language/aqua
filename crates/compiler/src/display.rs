@@ -813,8 +813,10 @@ impl<'a, 'b> Pretty<'a, 'b> {
     fn block(&mut self, b: &Block) -> std::fmt::Result {
         self.brace(|this| {
             this.indented(|this| {
-                this.newline()?;
-                this.newline_sep(&b.stmts, |this, s| this.stmt(s))?;
+                if !b.stmts.is_empty() {
+                    this.newline()?;
+                    this.newline_sep(&b.stmts, |this, s| this.stmt(s))?;
+                }
                 if this.verbose || !b.expr.is_unit() {
                     this.newline()?;
                     this.expr(&b.expr)?;

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::rc::Rc;
 
 use crate::ast::Block;
@@ -23,9 +25,8 @@ use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
-use crate::lexer::Span;
+use crate::span::Span;
 
-#[allow(unused)]
 pub(crate) trait Mapper {
     #[inline(always)]
     fn enter_scope(&mut self) {}
@@ -917,5 +918,87 @@ pub(crate) trait Mapper {
         f: impl Fn(&mut Self, &T) -> T,
     ) -> Vec<T> {
         iter.into_iter().map(|x| f(self, x)).collect()
+    }
+}
+
+pub(crate) trait AcceptMapper {
+    fn map(&self, mapper: impl Mapper) -> Self;
+}
+
+impl AcceptMapper for Program {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_program(self)
+    }
+}
+
+impl AcceptMapper for Stmt {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_stmt(self)
+    }
+}
+
+impl AcceptMapper for Expr {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_expr(self)
+    }
+}
+
+impl AcceptMapper for Path {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_path(self)
+    }
+}
+
+impl AcceptMapper for Segment {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_segment(self)
+    }
+}
+
+impl AcceptMapper for Name {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_name(self)
+    }
+}
+
+impl AcceptMapper for Type {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_type(self)
+    }
+}
+
+impl AcceptMapper for Pat {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_pattern(self)
+    }
+}
+
+impl AcceptMapper for Query {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_query_stmt(self)
+    }
+}
+
+impl AcceptMapper for StmtDef {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_stmt_def(self)
+    }
+}
+
+impl AcceptMapper for StmtDefBody {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_stmt_def_body(self)
+    }
+}
+
+impl AcceptMapper for Trait {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_trait(self)
+    }
+}
+
+impl AcceptMapper for Vec<Stmt> {
+    fn map(&self, mut mapper: impl Mapper) -> Self {
+        mapper.map_stmts(self)
     }
 }

@@ -11,7 +11,6 @@ use crate::ast::StmtImpl;
 use crate::ast::StmtType;
 use crate::ast::StmtTypeBody;
 use crate::ast::Type;
-use crate::lexer::Span;
 use crate::Compiler;
 use std::rc::Rc;
 

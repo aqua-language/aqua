@@ -5,15 +5,16 @@ use ast::Stmt;
 use builtins::Value;
 use config::Config;
 use diag::Report;
-use diag::Sources;
 use lexer::Lexer;
 use parser::Parser;
+use sources::Sources;
+use span::Span;
 
 pub mod ast;
 pub mod codegen;
 pub mod diag;
 pub mod display;
-pub mod ssa;
+pub mod flatten;
 // pub mod ffi;
 pub mod builtins;
 pub mod controlflow;
@@ -27,14 +28,16 @@ pub mod parser;
 pub mod print;
 pub mod query;
 pub mod resolve;
+pub mod sources;
+pub mod span;
 pub mod traversal {
     pub mod mapper;
     pub mod visitor;
 }
 pub mod collections {
     pub mod map;
-    pub mod set;
     pub mod ordmap;
+    pub mod set;
 }
 pub mod monomorphise;
 #[cfg(feature = "optimiser")]
@@ -48,7 +51,8 @@ pub struct Compiler {
     pub desugar: desugar::Context,
     pub query: query::Context,
     pub resolve: resolve::Context,
-    pub flatten: ssa::Context,
+    #[allow(unused)]
+    pub flatten: flatten::Context,
     #[allow(unused)]
     pub lift: lift::Context,
     pub infer: infer::Context,
@@ -80,9 +84,9 @@ impl Compiler {
             desugar: desugar::Context::new(),
             query: query::Context::new(),
             resolve: resolve::Context::new(),
-            flatten: ssa::Context::new(),
-            lift: lift::Context::new(),
             infer: infer::Context::new(),
+            flatten: flatten::Context::new(),
+            lift: lift::Context::new(),
             monomorphise: monomorphise::Context::new(),
             interpret: interpret::Context::new(),
             report: Report::new(),
@@ -93,15 +97,14 @@ impl Compiler {
     pub fn init(&mut self) -> &mut Self {
         self.declare();
         let stmts: Vec<Stmt> = self.declarations.drain(..).collect();
-        let s = stmts.first().unwrap().span_of() + stmts.last().unwrap().span_of();
-        let program = Program::new(s, stmts);
-        let program = self.desugar.desugar(&program);
-        let program = self.query.querycomp(&program);
+        let program = Program::new(Span::default(), stmts);
+        // let program = self.desugar.desugar(&program);
+        // let program = self.query.querycomp(&program);
         let program = self.resolve.resolve(&program);
-        let program = self.flatten.flatten(&program);
         self.report.merge(&mut self.resolve.report);
-        let program = self.lift.lift(&program);
-        self.report.merge(&mut self.lift.report);
+        // let program = self.flatten.flatten(&program);
+        // let program = self.lift.lift(&program);
+        // self.report.merge(&mut self.lift.report);
         let program = self.infer.infer(&program);
         self.report.merge(&mut self.infer.report);
         let _program = self.monomorphise.monomorphise(&program);
@@ -177,10 +180,10 @@ impl Compiler {
 
     pub fn interpret(&mut self, name: &str, input: &str) -> Result<Value, Recovered<Value>> {
         let mut result = self.monomorphise(name, input).unwrap();
-        let stmt = result.stmts.pop().unwrap();
-        let expr = stmt.as_expr().unwrap();
+        let last_stmt = result.stmts.pop().unwrap();
+        let last_expr = last_stmt.as_expr().unwrap();
         self.interpret.interpret(&result);
-        let value = self.interpret.expr(expr);
+        let value = self.interpret.eval_expr(last_expr);
         self.report.merge(&mut self.interpret.report);
         self.recover(value)
     }

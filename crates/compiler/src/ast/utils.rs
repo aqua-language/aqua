@@ -23,11 +23,7 @@ impl Expr {
 
     pub fn is_place(&self) -> bool {
         match self {
-            Expr::Path(_, _, path) => {
-                path.segments.len() == 1
-                    && path.segments[0].ts.is_empty()
-                    && path.segments[0].xts.is_empty()
-            }
+            Expr::Var(_, _, _) => true,
             Expr::Field(_, _, e, _) => e.is_place(),
             Expr::Index(_, _, e, _) => e.is_place(),
             _ => false,

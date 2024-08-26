@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct Map<K, V>(Vec<(K, V)>);
 
 impl<K, V> Default for Map<K, V> {

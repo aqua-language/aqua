@@ -135,7 +135,7 @@ pub fn interpret(comp: &mut Compiler, name: &str, input: &str) -> Result<Value, 
     let stmt = result.stmts.pop().unwrap();
     let expr = stmt.as_expr().unwrap();
     comp.interpret.interpret(&result);
-    let value = comp.interpret.expr(expr);
+    let value = comp.interpret.eval_expr(expr);
     comp.report.merge(&mut comp.interpret.report);
     comp.recover(value)
 }

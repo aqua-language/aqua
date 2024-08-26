@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::Trait;
 use crate::ast::Type;
@@ -36,7 +37,22 @@ impl Mapper for Expand {
 }
 
 impl Trait {
+    /// Expand all associated types in a trait.
     pub fn expand(&self) -> Trait {
         Expand::new().map_trait(self)
+    }
+}
+
+impl Program {
+    /// Expand all associated types in a program.
+    pub fn expand(&self) -> Program {
+        Expand::new().map_program(self)
+    }
+}
+
+impl Type {
+    /// Expand all associated types in a type.
+    pub fn expand(&self) -> Type {
+        Expand::new().map_type(self)
     }
 }
