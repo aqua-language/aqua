@@ -47,6 +47,7 @@ impl Expr {
             Expr::FloatSuffix(_, t, ..) => t,
             Expr::LetIn(_, t, ..) => t,
             Expr::Update(_, t, ..) => t,
+            Expr::Anonymous(_, t) => t,
         }
     }
 }

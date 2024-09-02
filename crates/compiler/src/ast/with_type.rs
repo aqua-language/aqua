@@ -14,9 +14,9 @@ impl Expr {
             Expr::Def(s, _, x, ts) => Expr::Def(s, t, x, ts),
             Expr::Call(s, _, e, es) => Expr::Call(s, t, e, es),
             Expr::Block(s, _, b) => Expr::Block(s, t, b),
-            Expr::Query(s, _, x, e, qs) => Expr::Query(s, t, x, e, qs),
-            Expr::QueryInto(s, _, x0, e, qs, x1, ts, es) => {
-                Expr::QueryInto(s, t, x0, e, qs, x1, ts, es)
+            Expr::Query(s, _, x0, t0, e, qs) => Expr::Query(s, t, x0, t0, e, qs),
+            Expr::QueryInto(s, _, x0, t0, e, qs, x1, ts, es) => {
+                Expr::QueryInto(s, t, x0, t0, e, qs, x1, ts, es)
             }
             Expr::Struct(s, _, x, ts, xes) => Expr::Struct(s, t, x, ts, xes),
             Expr::Enum(s, _, x0, ts, x1, e) => Expr::Enum(s, t, x0, ts, x1, e),
@@ -50,6 +50,7 @@ impl Expr {
             Expr::FloatSuffix(s, _, v, x) => Expr::FloatSuffix(s, t, v, x),
             Expr::LetIn(s, _, x, t1, e0, e1) => Expr::LetIn(s, t, x, t1, e0, e1),
             Expr::Update(s, _, x, e0, e1) => Expr::Update(s, t, x, e0, e1),
+            Expr::Anonymous(s, _) => Expr::Anonymous(s, t),
         }
     }
 }

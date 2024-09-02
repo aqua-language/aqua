@@ -8,9 +8,24 @@ fn history() -> std::ffi::OsString {
         .into_os_string()
 }
 
-#[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "clap", derive(clap::Parser))]
 pub struct Config {
+    #[cfg_attr(feature = "clap", clap(flatten))]
+    pub repl: ReplConfig,
+    #[cfg_attr(feature = "clap", clap(flatten))]
+    pub compiler: CompilerConfig,
+}
+
+#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
+pub struct ReplConfig {
+    #[cfg_attr(feature = "clap", clap(long, default_value = history()))]
+    pub history: PathBuf,
+}
+
+#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
+pub struct CompilerConfig {
     /// Read source from file
     pub file: Option<PathBuf>,
     /// Loads file statement-by-statement into the REPL.
@@ -19,8 +34,6 @@ pub struct Config {
     /// Print version
     #[cfg_attr(feature = "clap", clap(long))]
     pub version: bool,
-    #[cfg_attr(feature = "clap", clap(long, default_value = history()))]
-    pub history: PathBuf,
     #[cfg_attr(feature = "clap", clap(subcommand))]
     pub command: Option<Command>,
 }

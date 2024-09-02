@@ -6,13 +6,13 @@ use super::Pat;
 use super::Path;
 use super::Stmt;
 use super::StmtDef;
-use super::StmtDefBody;
+use super::ExprBody;
 use super::StmtEnum;
 use super::StmtImpl;
 use super::StmtStruct;
 use super::StmtTrait;
 use super::StmtType;
-use super::StmtTypeBody;
+use super::TypeBody;
 use super::StmtVar;
 use super::Trait;
 use super::Type;
@@ -76,15 +76,15 @@ impl Stmt {
     }
 }
 
-impl StmtDefBody {
+impl ExprBody {
     pub fn as_expr(&self) -> &Expr {
-        let StmtDefBody::UserDefined(e) = self else {
+        let ExprBody::UserDefined(e) = self else {
             unreachable!()
         };
         e
     }
     pub fn as_builtin(&self) -> &BuiltinDef {
-        let StmtDefBody::Builtin(b) = self else {
+        let ExprBody::Builtin(b) = self else {
             unreachable!()
         };
         b
@@ -144,17 +144,17 @@ impl Expr {
     }
 }
 
-impl StmtTypeBody {
+impl TypeBody {
     pub fn as_udt(&self) -> Option<&Type> {
         match self {
-            StmtTypeBody::UserDefined(t) => Some(t),
-            StmtTypeBody::Builtin(_) => unreachable!(),
+            TypeBody::UserDefined(t) => Some(t),
+            TypeBody::Builtin(_) => unreachable!(),
         }
     }
     pub fn as_bit(&self) -> Option<&BuiltinType> {
         match self {
-            StmtTypeBody::UserDefined(_) => unreachable!(),
-            StmtTypeBody::Builtin(b) => Some(b),
+            TypeBody::UserDefined(_) => unreachable!(),
+            TypeBody::Builtin(b) => Some(b),
         }
     }
 }

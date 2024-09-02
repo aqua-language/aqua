@@ -1,7 +1,7 @@
-#![allow(unused)]
 use crate::ast::Aggr;
 use crate::ast::Block;
 use crate::ast::Expr;
+use crate::ast::ExprBody;
 use crate::ast::Index;
 use crate::ast::Name;
 use crate::ast::Pat;
@@ -12,7 +12,6 @@ use crate::ast::Query;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::StmtDefBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
@@ -20,171 +19,12 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
+use crate::ast::TypeBody;
 use crate::ast::TypeVar;
-use crate::builtins::Value;
 use crate::print::Print;
-
-pub trait IntoVerbose {
-    fn verbose(&self) -> Verbose<&Self>;
-}
-
-impl IntoVerbose for Vec<Stmt> {
-    fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl IntoVerbose for Vec<Expr> {
-    fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl IntoVerbose for Vec<Type> {
-    fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl<'a> std::fmt::Display for Verbose<&'a Vec<Stmt>> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Pretty::new(f).verbose().stmts(self.0)
-    }
-}
-
-impl<'a> std::fmt::Display for Verbose<&'a Vec<Expr>> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Pretty::new(f).verbose().expr_args(self.0)
-    }
-}
-
-impl<'a> std::fmt::Display for Verbose<&'a Vec<Type>> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Pretty::new(f).verbose().type_args(self.0)
-    }
-}
-
-pub struct Verbose<T>(T);
-
-impl Program {
-    pub fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl Expr {
-    pub fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl Pat {
-    pub fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl Stmt {
-    pub fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl Type {
-    pub fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl Path {
-    pub fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl StmtTraitDef {
-    pub fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl StmtTrait {
-    pub fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl StmtImpl {
-    pub fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl Trait {
-    pub fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl<'a> std::fmt::Display for Verbose<&'a Program> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().program(self.0)
-    }
-}
-
-impl std::fmt::Display for Verbose<&StmtImpl> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().stmt_impl(self.0)
-    }
-}
-
-impl std::fmt::Display for Verbose<&Expr> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().expr(self.0)
-    }
-}
-
-impl std::fmt::Display for Verbose<&Pat> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().pat(self.0)
-    }
-}
-
-impl std::fmt::Display for Verbose<&Stmt> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().stmt(self.0)
-    }
-}
-
-impl std::fmt::Display for Verbose<&Type> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut p = Pretty::new(f);
-        p.verbose = true;
-        p.ty(self.0)
-    }
-}
-
-impl std::fmt::Display for Verbose<&Path> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().path(self.0)
-    }
-}
-
-impl std::fmt::Display for Verbose<&StmtTraitDef> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().stmt_def_decl(self.0)
-    }
-}
-
-impl std::fmt::Display for Verbose<&Trait> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().bound(self.0)
-    }
-}
 
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -192,9 +32,9 @@ impl std::fmt::Display for Expr {
     }
 }
 
-impl std::fmt::Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+impl std::fmt::Display for ExprBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Pretty::new(f).expr_body(self)
     }
 }
 
@@ -392,7 +232,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.ty(&s.ty)?;
         self.where_clause(&s.where_clause)?;
         match &s.body {
-            StmtDefBody::UserDefined(e) => {
+            ExprBody::UserDefined(e) => {
                 self.space()?;
                 self.punct("=")?;
                 self.space()?;
@@ -403,7 +243,14 @@ impl<'a, 'b> Pretty<'a, 'b> {
                     Ok(())
                 }
             }
-            StmtDefBody::Builtin(_) => self.punct(";"),
+            ExprBody::Builtin(_) => self.punct(";"),
+        }
+    }
+
+    fn expr_body(&mut self, e: &ExprBody) -> std::fmt::Result {
+        match e {
+            ExprBody::UserDefined(e) => self.expr(e),
+            ExprBody::Builtin(_) => self.kw("<builtin>"),
         }
     }
 
@@ -491,10 +338,10 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.punct(";")
     }
 
-    fn ty_body(&mut self, t: &StmtTypeBody) -> std::fmt::Result {
+    fn ty_body(&mut self, t: &TypeBody) -> std::fmt::Result {
         match t {
-            StmtTypeBody::UserDefined(t) => self.ty(t),
-            StmtTypeBody::Builtin(_) => self.kw("<builtin>"),
+            TypeBody::UserDefined(t) => self.ty(t),
+            TypeBody::Builtin(_) => self.kw("<builtin>"),
         }
     }
 
@@ -612,10 +459,12 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Expr::Block(_, _, b) => {
                 self.block(b)?;
             }
-            Expr::Query(_, _, x, e, qs) => {
+            Expr::Query(_, _, x, t, e, qs) => {
                 self.kw("from")?;
                 self.space()?;
                 self.name(x)?;
+                self.punct(":")?;
+                self.ty(t)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
@@ -625,10 +474,12 @@ impl<'a, 'b> Pretty<'a, 'b> {
                     self.newline_sep(qs, Self::query_clause)?;
                 }
             }
-            Expr::QueryInto(_, _, x0, e, qs, x1, ts, es) => {
+            Expr::QueryInto(_, _, x0, t0, e, qs, x1, ts, es) => {
                 self.kw("from")?;
                 self.space()?;
                 self.name(x0)?;
+                self.punct(":")?;
+                self.ty(t0)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
@@ -806,6 +657,9 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.space()?;
                 self.expr(e1)?;
             }
+            Expr::Anonymous(_, _) => {
+                self.punct("_")?;
+            }
         }
         Ok(())
     }
@@ -846,12 +700,6 @@ impl<'a, 'b> Pretty<'a, 'b> {
             self._expr(expr)?;
         }
         Ok(())
-    }
-
-    fn scan(&mut self, (x, e): &(Name, Expr)) -> std::fmt::Result {
-        self.name(x)?;
-        self.punct(" in ")?;
-        self.expr(e)
     }
 
     fn assign(&mut self, (x, e): &(Name, Expr)) -> std::fmt::Result {
@@ -988,10 +836,10 @@ impl<'a, 'b> Pretty<'a, 'b> {
                     self.brack(|this| {
                         this.if_nonempty(ts, |this, ts| this.comma_sep(ts, Self::ty))?;
                         this.if_nonempty(xts, |this, xts| {
-                            this.if_nonempty(ts, |this, ts| {
+                            if !ts.is_empty() {
                                 this.punct(",")?;
-                                this.space()
-                            })?;
+                                this.space()?;
+                            }
                             this.comma_sep(xts, |this, (x, t)| {
                                 this.name(x)?;
                                 this.punct("=")?;
@@ -1177,10 +1025,10 @@ impl<'a, 'b> Pretty<'a, 'b> {
             self.brack(|this| {
                 this.if_nonempty(&seg.ts, |this, ts| this.comma_sep(ts, Self::ty))?;
                 this.if_nonempty(&seg.xts, |this, xts| {
-                    this.if_nonempty(&seg.ts, |this, ts| {
+                    if !seg.ts.is_empty() {
                         this.punct(",")?;
-                        this.space()
-                    })?;
+                        this.space()?;
+                    }
                     this.comma_sep(xts, |this, (x, t)| {
                         this.name(x)?;
                         this.punct("=")?;
@@ -1201,5 +1049,163 @@ impl<'a, 'b> Pretty<'a, 'b> {
             self.paren(|this| this.comma_sep(items, |this, item| f(this, item)))?;
         }
         Ok(())
+    }
+}
+
+pub trait IntoVerbose {
+    fn verbose(&self) -> Verbose<&Self>;
+}
+
+impl IntoVerbose for Vec<Stmt> {
+    fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl IntoVerbose for Vec<Expr> {
+    fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl IntoVerbose for Vec<Type> {
+    fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl<'a> std::fmt::Display for Verbose<&'a Vec<Stmt>> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Pretty::new(f).verbose().stmts(self.0)
+    }
+}
+
+impl<'a> std::fmt::Display for Verbose<&'a Vec<Expr>> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Pretty::new(f).verbose().expr_args(self.0)
+    }
+}
+
+impl<'a> std::fmt::Display for Verbose<&'a Vec<Type>> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Pretty::new(f).verbose().type_args(self.0)
+    }
+}
+
+pub struct Verbose<T>(T);
+
+impl Program {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl Expr {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl Pat {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl Stmt {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl Type {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl Path {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl StmtTraitDef {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl StmtTrait {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl StmtImpl {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl Trait {
+    pub fn verbose(&self) -> Verbose<&Self> {
+        Verbose(self)
+    }
+}
+
+impl<'a> std::fmt::Display for Verbose<&'a Program> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).verbose().program(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&StmtImpl> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).verbose().stmt_impl(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&Expr> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).verbose().expr(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&Pat> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).verbose().pat(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&Stmt> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).verbose().stmt(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&Type> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut p = Pretty::new(f);
+        p.verbose = true;
+        p.ty(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&Path> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).verbose().path(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&StmtTraitDef> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).verbose().stmt_def_decl(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&Trait> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).verbose().bound(self.0)
     }
 }

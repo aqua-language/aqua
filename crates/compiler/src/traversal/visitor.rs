@@ -2,9 +2,15 @@
 
 use std::rc::Rc;
 
+use runtime::prelude::Aggregator;
+use runtime::prelude::Assigner;
+use runtime::prelude::Encoding;
+use runtime::prelude::Set;
+
 use crate::ast::Aggr;
 use crate::ast::Block;
 use crate::ast::Expr;
+use crate::ast::ExprBody;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
@@ -14,7 +20,6 @@ use crate::ast::Query;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::StmtDefBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
@@ -22,10 +27,17 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
+use crate::ast::TypeBody;
+use crate::builtins::value::Dataflow;
+use crate::builtins::value::Fun;
+use crate::builtins::value::Record;
+use crate::builtins::value::Stream;
+use crate::builtins::value::Tuple;
+use crate::builtins::value::Value;
+use crate::builtins::value::Variant;
 use crate::span::Span;
 
 pub(crate) trait Visitor {
@@ -146,14 +158,14 @@ pub(crate) trait Visitor {
         self.visit_name(g)
     }
 
-    fn visit_stmt_def_body(&mut self, b: &StmtDefBody) {
+    fn visit_stmt_def_body(&mut self, b: &ExprBody) {
         self._visit_stmt_def_body(b);
     }
     #[inline(always)]
-    fn _visit_stmt_def_body(&mut self, b: &StmtDefBody) {
+    fn _visit_stmt_def_body(&mut self, b: &ExprBody) {
         match b {
-            StmtDefBody::UserDefined(e) => self.visit_expr(e),
-            StmtDefBody::Builtin(_) => {}
+            ExprBody::UserDefined(e) => self.visit_expr(e),
+            ExprBody::Builtin(_) => {}
         }
     }
 
@@ -358,14 +370,14 @@ pub(crate) trait Visitor {
         self.visit_stmt_type_body(&s.body);
     }
 
-    fn visit_stmt_type_body(&mut self, b: &StmtTypeBody) {
+    fn visit_stmt_type_body(&mut self, b: &TypeBody) {
         self._visit_stmt_type_body(b);
     }
     #[inline(always)]
-    fn _visit_stmt_type_body(&mut self, b: &StmtTypeBody) {
+    fn _visit_stmt_type_body(&mut self, b: &TypeBody) {
         match b {
-            StmtTypeBody::UserDefined(t) => self.visit_type(t),
-            StmtTypeBody::Builtin(_) => {}
+            TypeBody::UserDefined(t) => self.visit_type(t),
+            TypeBody::Builtin(_) => {}
         }
     }
 
@@ -436,13 +448,15 @@ pub(crate) trait Visitor {
             Expr::Block(_, _, b) => {
                 self.visit_block(b);
             }
-            Expr::Query(_, _, x, e, qs) => {
-                self.visit_name(x);
+            Expr::Query(_, _, x0, t0, e, qs) => {
+                self.visit_name(x0);
+                self.visit_type(t0);
                 self.visit_expr(e);
                 self.visit_query_stmts(qs);
             }
-            Expr::QueryInto(_, _, x0, e, qs, x1, ts, es) => {
+            Expr::QueryInto(_, _, x0, t0, e, qs, x1, ts, es) => {
                 self.visit_name(x0);
+                self.visit_type(t0);
                 self.visit_expr(e);
                 self.visit_query_stmts(qs);
                 self.visit_name(x1);
@@ -485,7 +499,9 @@ pub(crate) trait Visitor {
                 self.visit_block(b);
             }
             Expr::Err(_, _) => {}
-            Expr::Value(_, _) => {}
+            Expr::Value(_, v) => {
+                self.visit_value(v);
+            }
             Expr::InfixBinaryOp(_, _, _op, e0, e1) => {
                 self.visit_expr(e0);
                 self.visit_expr(e1);
@@ -526,6 +542,7 @@ pub(crate) trait Visitor {
                 self.visit_name(x);
                 self.visit_expr(e1);
             }
+            Expr::Anonymous(_, _) => {}
         }
     }
 
@@ -826,32 +843,204 @@ pub(crate) trait Visitor {
             }
         }
     }
+
+    fn visit_value(&mut self, v: &Value) {
+        self._visit_value(v);
+    }
+
+    fn _visit_value(&mut self, v: &Value) {
+        match v {
+            Value::Aggregator(v) => self._visit_value_aggregator(v),
+            Value::Array(v) => self._visit_value_array(v),
+            Value::Blob(_) => {}
+            Value::Bool(_) => {}
+            Value::Char(_) => {}
+            Value::Dict(v) => self._visit_value_dict(v),
+            Value::Assigner(_) => {}
+            Value::Duration(_) => {}
+            Value::Encoding(_) => {}
+            Value::F32(_) => {}
+            Value::F64(_) => {}
+            Value::File(_) => {}
+            Value::Fun(v) => self._visit_value_fun(v),
+            Value::I128(_) => {}
+            Value::I16(_) => {}
+            Value::I32(_) => {}
+            Value::I64(_) => {}
+            Value::I8(_) => {}
+            Value::Option(v) => self._visit_value_option(v),
+            Value::Path(_) => {}
+            Value::Reader(_) => {}
+            Value::Record(v) => self._visit_value_record(v),
+            Value::Result(v) => self._visit_value_result(v),
+            Value::Set(v) => self._visit_value_set(v),
+            Value::SocketAddr(_) => {}
+            Value::Stream(v) => self._visit_value_stream(v),
+            Value::Dataflow(v) => self._visit_value_dataflow(v),
+            Value::String(_) => {}
+            Value::Time(_) => {}
+            Value::TimeSource(_) => {}
+            Value::Tuple(v) => self._visit_value_tuple(v),
+            Value::U128(_) => {}
+            Value::U16(_) => {}
+            Value::U32(_) => {}
+            Value::U64(_) => {}
+            Value::U8(_) => {}
+            Value::Usize(_) => {}
+            Value::Variant(v) => self._visit_value_variant(v),
+            Value::Vec(v) => self._visit_value_vec(v),
+            Value::Writer(_) => {}
+            Value::Instance(_) => {}
+            Value::Ordering(_) => {}
+            Value::Backend(_) => {}
+            Value::Range(v) => self._visit_value_range(v),
+        }
+    }
+
+    fn _visit_value_range(&mut self, v: &runtime::builtins::range::Range<Rc<Value>>) {
+        if let Some(v) = &v.start {
+            self.visit_value(v);
+        }
+        if let Some(v) = &v.end {
+            self.visit_value(v);
+        }
+    }
+
+    fn _visit_value_aggregator(
+        &mut self,
+        a: &Aggregator<Rc<Value>, Rc<Value>, Rc<Value>, Rc<Value>>,
+    ) {
+        match a {
+            Aggregator::Incremental {
+                lift,
+                combine,
+                lower,
+            } => {
+                self.visit_value(lift);
+                self.visit_value(combine);
+                self.visit_value(lower);
+            }
+            Aggregator::Holistic { compute } => {
+                self.visit_value(compute);
+            }
+        }
+    }
+
+    fn _visit_value_array(&mut self, a: &crate::builtins::types::array::Array) {
+        for v in &a.0 {
+            self.visit_value(v);
+        }
+    }
+
+    fn _visit_value_vec(&mut self, v: &runtime::builtins::vec::Vec<Value>) {
+        for v in v.0.iter() {
+            self.visit_value(v);
+        }
+    }
+
+    fn _visit_value_dict(&mut self, v: &runtime::builtins::dict::Dict<Value, Value>) {
+        for (k, v) in v.0.iter() {
+            self.visit_value(k);
+            self.visit_value(v);
+        }
+    }
+
+    fn _visit_value_option(&mut self, o: &runtime::builtins::option::Option<Rc<Value>>) {
+        if let Some(v) = &o.0 {
+            self.visit_value(v);
+        }
+    }
+
+    fn _visit_value_record(&mut self, v: &Record) {
+        for v in v.0.values() {
+            self.visit_value(v);
+        }
+    }
+
+    fn _visit_value_variant(&mut self, v: &Variant) {
+        self.visit_value(&v.v);
+    }
+
+    fn _visit_value_tuple(&mut self, v: &Tuple) {
+        for v in &v.0 {
+            self.visit_value(v);
+        }
+    }
+
+    fn _visit_value_result(&mut self, v: &runtime::builtins::result::Result<Rc<Value>>) {
+        if let Ok(v) = &v.0 {
+            self.visit_value(v)
+        }
+    }
+
+    fn _visit_value_set(&mut self, s: &Set<Value>) {
+        for v in s.0.iter() {
+            self.visit_value(v);
+        }
+    }
+
+    fn _visit_value_dataflow(&mut self, d: &Dataflow) {
+        match d {
+            Dataflow::Collocate(d1, d2) => {
+                self._visit_value_dataflow(d1);
+                self._visit_value_dataflow(d2);
+            }
+            Dataflow::Sink(s, _, _) => {
+                self._visit_value_stream(s);
+            }
+        }
+    }
+
+    fn _visit_value_stream(&mut self, s: &Stream) {
+        match s {
+            Stream::Source(_, _, f) => {
+                self._visit_value_fun(f);
+            }
+            Stream::Map(s, f) => {
+                self._visit_value_stream(s);
+                self._visit_value_fun(f);
+            }
+            Stream::Filter(_, _) => todo!(),
+            Stream::Flatten(_) => todo!(),
+            Stream::FlatMap(_, _) => todo!(),
+            Stream::Keyby(_, _) => todo!(),
+            Stream::Unkey(_) => todo!(),
+            Stream::Window(_, _, _) => todo!(),
+            Stream::Merge(_, _) => todo!(),
+            Stream::Sink(_, _, _) => todo!(),
+        }
+    }
+
+    fn _visit_value_fun(&mut self, f: &Fun) {
+        f.params.values().for_each(|t| self.visit_type(t));
+        self.visit_stmt_def_body(&f.body);
+    }
 }
 
 pub(crate) trait AcceptVisitor {
-    fn visit(&self, visitor: impl Visitor);
+    fn visit(&self, visitor: &mut impl Visitor);
 }
 
 impl AcceptVisitor for Program {
-    fn visit(&self, mut visitor: impl Visitor) {
+    fn visit(&self, mut visitor: &mut impl Visitor) {
         visitor.visit_program(self);
     }
 }
 
 impl AcceptVisitor for Stmt {
-    fn visit(&self, mut visitor: impl Visitor) {
+    fn visit(&self, mut visitor: &mut impl Visitor) {
         visitor.visit_stmt(self);
     }
 }
 
 impl AcceptVisitor for Expr {
-    fn visit(&self, mut visitor: impl Visitor) {
+    fn visit(&self, mut visitor: &mut impl Visitor) {
         visitor.visit_expr(self);
     }
 }
 
 impl AcceptVisitor for Type {
-    fn visit(&self, mut visitor: impl Visitor) {
+    fn visit(&self, mut visitor: &mut impl Visitor) {
         visitor.visit_type(self);
     }
 }

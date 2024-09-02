@@ -29,6 +29,7 @@ pub mod unchecked_cell;
 pub mod cell;
 pub mod im_string;
 pub mod channel;
+pub mod range;
 
 // #[cfg(feature = "model")]
 // pub mod model;

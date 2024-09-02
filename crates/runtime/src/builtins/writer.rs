@@ -5,7 +5,7 @@ use crate::builtins::path::Path;
 use crate::builtins::socket::SocketAddr;
 use crate::builtins::string::String;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[repr(C)]
 pub enum Writer {
     Stdout,
@@ -13,6 +13,18 @@ pub enum Writer {
     // Http { url: Url },
     Tcp { addr: SocketAddr },
     Kafka { addr: SocketAddr, topic: String },
+}
+
+impl std::fmt::Display for Writer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Writer::Stdout => write!(f, "stdout()"),
+            Writer::File { path } => write!(f, "file(path={path})"),
+            // Writer::Http { url } => write!(f, "http(url={url})"),
+            Writer::Tcp { addr } => write!(f, "tcp(addr={addr})"),
+            Writer::Kafka { addr, topic } => write!(f, "kafka(addr={addr}, topic={topic})"),
+        }
+    }
 }
 
 impl Writer {

@@ -5,6 +5,12 @@ use serde::Serialize;
 #[repr(C)]
 pub struct Duration(pub time::Duration);
 
+impl std::fmt::Display for Duration {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl Duration {
     pub const fn zero() -> Self {
         Self::from_seconds(0)

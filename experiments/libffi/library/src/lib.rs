@@ -10,12 +10,17 @@ pub struct Pair<L, R> {
 }
 
 #[no_mangle]
-pub extern "C" fn pair(x: i32, y: i32) -> Pair<i32, i32> {
+pub extern "C" fn pair_i32_i32(x: i32, y: i32) -> Pair<i32, i32> {
     Pair { x, y }
 }
 
 #[no_mangle]
-pub extern "C" fn pair2(x: i64, y: i32) -> Pair<i64, i32> {
+pub extern "C" fn pair_i64_i32(x: i64, y: i32) -> Pair<i64, i32> {
+    Pair { x, y }
+}
+
+#[no_mangle]
+pub extern "C" fn pair_i32_i64(x: i32, y: i64) -> Pair<i32, i64> {
     Pair { x, y }
 }
 
@@ -65,19 +70,33 @@ pub extern "C" fn unwrap(m: Maybe<i32>) -> i32 {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn len(x: StabbyString) -> usize {
-    x.len()
+// NOTE: Stabby does not work in the latest stable Rust version.
+//
+// #[no_mangle]
+// pub extern "C" fn len(x: StabbyString) -> usize {
+//     x.len()
+// }
+//
+// use stabby::string::String as StabbyString;
+//
+// #[no_mangle]
+// pub extern "C" fn stabby_string(x: i32) -> StabbyString {
+//     StabbyString::from(format!("hello {x}").as_str())
+// }
+//
+// #[no_mangle]
+// pub extern "C" fn concat(x: StabbyString, y: StabbyString) -> StabbyString {
+//     StabbyString::from(format!("{x}{y}").as_str())
+// }
+
+#[repr(C)]
+pub struct Tuple3 {
+    x: i32,
+    y: i64,
+    z: i32,
 }
 
-use stabby::string::String as StabbyString;
-
 #[no_mangle]
-pub extern "C" fn stabby_string(x: i32) -> StabbyString {
-    StabbyString::from(format!("hello {x}").as_str())
-}
-
-#[no_mangle]
-pub extern "C" fn concat(x: StabbyString, y: StabbyString) -> StabbyString {
-    StabbyString::from(format!("{x}{y}").as_str())
+pub extern "C" fn tuple_i32_i64_i32(x: i32, y: i64, z: i32) -> Tuple3 {
+    Tuple3 { x, y, z }
 }

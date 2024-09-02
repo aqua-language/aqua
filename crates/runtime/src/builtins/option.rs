@@ -8,6 +8,15 @@ use crate::traits::DeepClone;
 #[repr(C)]
 pub struct Option<T>(pub std::option::Option<T>);
 
+impl<T: std::fmt::Display> std::fmt::Display for Option<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match &self.0 {
+            Some(x) => write!(f, "Some({})", x),
+            None => write!(f, "None"),
+        }
+    }
+}
+
 impl<T> Option<T> {
     #[inline(always)]
     pub fn some(x: T) -> Self {

@@ -9,22 +9,46 @@ use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Segment;
 use crate::ast::Type;
-use crate::lexer::Token;
+use crate::token::Token;
 use crate::traversal::mapper::Mapper;
 
 use self::util::infix;
 use self::util::unop;
 
-#[derive(Debug)]
-pub struct Context;
+#[derive(Debug, Default)]
+pub struct Context {
+    anons: Stack,
+}
+
+#[derive(Debug, Default)]
+pub struct Stack {
+    pub scopes: Vec<Vec<Name>>,
+}
 
 impl Context {
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 
     pub fn desugar(&mut self, program: &Program) -> Program {
         self.map_program(program)
+    }
+
+    pub fn arg(&mut self, e: &Expr) -> Expr {
+        if let Expr::Anonymous(..) = e {
+            // Partially applied function
+            self.map_expr(e)
+        } else {
+            self.anons.scopes.push(vec![]);
+            let e = self.map_expr(e);
+            let xs = self.anons.scopes.pop().unwrap();
+            if xs.is_empty() {
+                e
+            } else {
+                let xts = xs.into_iter().map(|x| (x, Type::Unknown)).collect();
+                Expr::Fun(e.span_of(), Type::Unknown, xts, Type::Unknown, Rc::new(e))
+            }
+        }
     }
 }
 
@@ -46,6 +70,7 @@ impl Mapper for Context {
                     Token::Le => infix(*s, t, "PartialOrd", "le", e0, e1),
                     Token::EqEq => infix(*s, t, "PartialEq", "eq", e0, e1),
                     Token::NotEq => infix(*s, t, "PartialEq", "ne", e0, e1),
+                    Token::DotDot => infix(*s, t, "Range", "range", e0, e1),
                     // a and b => match a { true => b, _ => false }
                     Token::And => Expr::Match(
                         *s,
@@ -80,11 +105,28 @@ impl Mapper for Context {
             // a.b(c) => b(a, c)
             Expr::Dot(s, _, e, x, ts, es) => {
                 let e = self.map_expr(e);
-                let es = self.map_exprs(es);
+                let es = self.map_iter(es, Self::arg);
                 let es = std::iter::once(e).chain(es).collect::<Vec<_>>();
                 let path = Path::new(vec![Segment::new(*s, *x, ts.clone(), vec![].into())]);
                 let e = Expr::Path(*s, Type::Unknown, path);
                 Expr::Call(*s, t.clone(), Rc::new(e), es)
+            }
+            // e(...,_+_,...) => foo(fun(x) = x.f)
+            Expr::Call(s, _, e, es) => {
+                let e = self.map_expr(e);
+                let es = self.map_iter(es, Self::arg);
+                Expr::Call(*s, t, Rc::new(e), es)
+            }
+            Expr::Anonymous(s, t) => {
+                if let Some(xs) = self.anons.scopes.last_mut() {
+                    let n = xs.len();
+                    let x = Name::new(*s, format_smolstr!("_{}", n));
+                    xs.push(x);
+                    let path = Path::new_name(x);
+                    Expr::Path(*s, t.clone(), path)
+                } else {
+                    Expr::Err(*s, t.clone())
+                }
             }
             // -a => Neg(a)
             Expr::PrefixUnaryOp(s, _, op, e) => {

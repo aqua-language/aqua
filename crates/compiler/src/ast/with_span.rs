@@ -21,9 +21,9 @@ impl Expr {
             Expr::Def(_, t, x, ts) => Expr::Def(span, t, x, ts),
             Expr::Call(_, t, e, es) => Expr::Call(span, t, e, es),
             Expr::Block(_, t, b) => Expr::Block(span, t, b),
-            Expr::Query(_, t, x, e, qs) => Expr::Query(span, t, x, e, qs),
-            Expr::QueryInto(_, t, x0, e, qs, x1, ts, es) => {
-                Expr::QueryInto(span, t, x0, e, qs, x1, ts, es)
+            Expr::Query(_, t, x, t0, e, qs) => Expr::Query(span, t, x, t0, e, qs),
+            Expr::QueryInto(_, t, x0, t0, e, qs, x1, ts, es) => {
+                Expr::QueryInto(span, t, x0, t0, e, qs, x1, ts, es)
             }
             Expr::Field(_, t, e, x) => Expr::Field(span, t, e, x),
             Expr::TraitMethod(_, t, b, x1, ts1) => Expr::TraitMethod(span, t, b, x1, ts1),
@@ -51,6 +51,7 @@ impl Expr {
             Expr::FloatSuffix(_, t, v, x) => Expr::FloatSuffix(span, t, v, x),
             Expr::LetIn(_, t, x, t1, e0, e1) => Expr::LetIn(span, t, x, t1, e0, e1),
             Expr::Update(_, t, x, e0, e1) => Expr::Update(span, t, x, e0, e1),
+            Expr::Anonymous(_, t) => Expr::Anonymous(span, t),
         }
     }
 }

@@ -2,8 +2,8 @@ use std::rc::Rc;
 
 use ast::Program;
 use ast::Stmt;
-use builtins::Value;
-use config::Config;
+use builtins::value::Value;
+use config::CompilerConfig;
 use diag::Report;
 use lexer::Lexer;
 use parser::Parser;
@@ -18,18 +18,23 @@ pub mod flatten;
 // pub mod ffi;
 pub mod builtins;
 pub mod controlflow;
+pub mod declare;
 pub mod desugar;
 pub mod infer;
 pub mod interpret;
 pub mod lexer;
 #[allow(unused)]
 pub mod lift;
+pub mod package;
 pub mod parser;
 pub mod print;
 pub mod query;
 pub mod resolve;
 pub mod sources;
 pub mod span;
+pub mod spanned;
+pub mod token;
+pub mod reachable;
 pub mod traversal {
     pub mod mapper;
     pub mod visitor;
@@ -59,12 +64,12 @@ pub struct Compiler {
     pub interpret: interpret::Context,
     pub monomorphise: monomorphise::Context,
     pub report: Report,
-    pub config: Config,
+    pub config: CompilerConfig,
 }
 
 impl Default for Compiler {
     fn default() -> Self {
-        Self::new(Config::default())
+        Self::new(CompilerConfig::default())
     }
 }
 
@@ -77,7 +82,7 @@ impl Drop for Compiler {
 }
 
 impl Compiler {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: CompilerConfig) -> Self {
         Compiler {
             declarations: Vec::new(),
             sources: Sources::new(),
@@ -116,6 +121,29 @@ impl Compiler {
         // self.interpreter.interpret(&result);
         // assert!(self.inferrer.report.is_empty());
         // assert!(self.interpreter.report.is_empty());
+    }
+
+    pub fn compile_and_run(&mut self, name: impl ToString, input: &str) -> Result<(), ()> {
+        let input: Rc<str> = Rc::from(input);
+        let id = self.sources.add(name, input.clone());
+        let mut lexer = Lexer::new(id, input.as_ref());
+        let mut parser = Parser::new(&input, &mut lexer);
+        let program = parser.parse(Parser::program).unwrap();
+        let program = self.desugar.desugar(&program);
+        let program = self.query.querycomp(&program);
+        let program = self.resolve.resolve(&program);
+        let program = self.infer.infer(&program);
+        self.report.merge(&mut parser.report);
+        self.report.merge(&mut lexer.report);
+        self.report.merge(&mut self.resolve.report);
+        self.report.merge(&mut self.infer.report);
+        if self.report.is_empty() {
+            let program = self.monomorphise.monomorphise(&program);
+            self.interpret.interpret(&program);
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 
     pub fn parse<T>(
@@ -188,6 +216,11 @@ impl Compiler {
         self.recover(value)
     }
 
+    pub fn codegen(&mut self, name: &str, input: &str) -> String {
+        let program = self.monomorphise(name, input).unwrap();
+        program.rust().to_string()
+    }
+
     pub fn add_report(&mut self, report: &mut Report) {
         self.report.merge(report);
     }
@@ -196,12 +229,16 @@ impl Compiler {
         if self.report.is_empty() {
             Ok(result)
         } else {
-            Err(Recovered::new(result, self.report()))
+            Err(Recovered::new(result, self.report_to_string()))
         }
     }
 
-    pub fn report(&mut self) -> String {
+    pub fn report_to_string(&mut self) -> String {
         trim(&self.report.string(&mut self.sources).unwrap())
+    }
+
+    pub fn print_report(&mut self) {
+        self.report.print(&mut self.sources).unwrap();
     }
 }
 

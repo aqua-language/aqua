@@ -41,24 +41,24 @@ impl Mapper for Apply<'_> {
 
 impl Trait {
     pub fn apply(&self, ctx: &mut Context) -> Trait {
-        self.map(Apply::new(ctx))
+        self.map(&mut Apply::new(ctx))
     }
 }
 
 impl Program {
     pub fn apply(&self, ctx: &mut Context) -> Program {
-        self.map(Apply::new(ctx))
+        self.map(&mut Apply::new(ctx))
     }
 }
 
 impl Type {
     pub fn apply(&self, ctx: &mut Context) -> Type {
-        self.map(Apply::new(ctx))
+        self.map(&mut Apply::new(ctx))
     }
 }
 
 impl StmtDef {
     pub fn apply(&self, ctx: &mut Context) -> StmtDef {
-        self.map(Apply::new(ctx))
+        self.map(&mut Apply::new(ctx))
     }
 }

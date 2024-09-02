@@ -4,7 +4,9 @@ use std::rc::Rc;
 
 use compiler::ast::Aggr;
 use compiler::ast::Block;
+use compiler::ast::BuiltinDef;
 use compiler::ast::Expr;
+use compiler::ast::ExprBody;
 use compiler::ast::Index;
 use compiler::ast::Map;
 use compiler::ast::Name;
@@ -13,7 +15,6 @@ use compiler::ast::Program;
 use compiler::ast::Query;
 use compiler::ast::Stmt;
 use compiler::ast::StmtDef;
-use compiler::ast::StmtDefBody;
 use compiler::ast::StmtEnum;
 use compiler::ast::StmtImpl;
 use compiler::ast::StmtStruct;
@@ -21,10 +22,10 @@ use compiler::ast::StmtTrait;
 use compiler::ast::StmtTraitDef;
 use compiler::ast::StmtTraitType;
 use compiler::ast::StmtType;
-use compiler::ast::StmtTypeBody;
 use compiler::ast::StmtVar;
 use compiler::ast::Trait;
 use compiler::ast::Type;
+use compiler::ast::TypeBody;
 
 use compiler::ast::TypeVar;
 use compiler::span::Span;
@@ -191,7 +192,7 @@ pub mod sugared {
     use compiler::ast::Expr;
     use compiler::ast::Pat;
     use compiler::ast::Type;
-    use compiler::lexer::Token;
+    use compiler::token::Token;
 
     use super::span;
 
@@ -201,6 +202,10 @@ pub mod sugared {
 
     fn expr_unop(t: Token, e: Expr) -> Expr {
         Expr::PrefixUnaryOp(span(), Type::Unknown, t, Rc::new(e))
+    }
+
+    pub fn expr_anonymous() -> Expr {
+        Expr::Anonymous(span(), Type::Unknown)
     }
 
     pub fn expr_add(e0: Expr, e1: Expr) -> Expr {
@@ -241,6 +246,10 @@ pub mod sugared {
 
     pub fn expr_ge(e0: Expr, e1: Expr) -> Expr {
         expr_binop(Token::Ge, e0, e1)
+    }
+
+    pub fn expr_range(e0: Expr, e1: Expr) -> Expr {
+        expr_binop(Token::DotDot, e0, e1)
     }
 
     pub fn expr_and(e0: Expr, e1: Expr) -> Expr {
@@ -595,8 +604,8 @@ pub fn stmt_var(x: &'static str, t: Type, e: Expr) -> Stmt {
     StmtVar::new(span(), name(x), t, e).into()
 }
 
-pub fn type_body(t: Type) -> StmtTypeBody {
-    StmtTypeBody::UserDefined(t)
+pub fn type_body(t: Type) -> TypeBody {
+    TypeBody::UserDefined(t)
 }
 
 pub fn expr_record<const N: usize>(xes: [(&'static str, Expr); N]) -> Expr {
@@ -606,7 +615,7 @@ pub fn expr_record<const N: usize>(xes: [(&'static str, Expr); N]) -> Expr {
 pub fn stmt_type<const N: usize>(
     x: &'static str,
     generics: [&'static str; N],
-    t: impl Into<StmtTypeBody>,
+    t: impl Into<TypeBody>,
 ) -> Stmt {
     StmtType::new(span(), name(x), app(generics, name), t.into()).into()
 }
@@ -663,8 +672,8 @@ pub fn expr_enum<const N: usize>(
     )
 }
 
-pub fn expr_body(e: Expr) -> StmtDefBody {
-    StmtDefBody::UserDefined(e)
+pub fn expr_body(e: Expr) -> ExprBody {
+    ExprBody::UserDefined(Rc::new(e))
 }
 
 pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
@@ -673,7 +682,7 @@ pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
     ps: [(&'static str, Type); K],
     t: Type,
     qs: [Trait; M],
-    b: impl Into<StmtDefBody>,
+    b: impl Into<ExprBody>,
 ) -> Stmt {
     StmtDef::new(
         span(),
@@ -687,11 +696,18 @@ pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
     .into()
 }
 
+pub fn dummy_body() -> ExprBody {
+    ExprBody::Builtin(BuiltinDef {
+        fun: |_, _| todo!(),
+        rust: "dummy",
+    })
+}
+
 pub fn stmt_err() -> Stmt {
     Stmt::Err(span())
 }
 
-fn params<const N: usize>(xts: [(&'static str, Type); N]) -> Map<Name, Type> {
+pub fn params<const N: usize>(xts: [(&'static str, Type); N]) -> Map<Name, Type> {
     xts.into_iter().map(|(x, t)| (name(x), t)).collect()
 }
 
@@ -900,12 +916,13 @@ pub fn expr_break() -> Expr {
     Expr::Break(span(), Type::Unknown)
 }
 
-pub fn expr_query<const N: usize>(x: &'static str, e: Expr, qs: [Query; N]) -> Expr {
-    Expr::Query(span(), Type::Unknown, name(x), Rc::new(e), vec(qs))
+pub fn expr_query<const N: usize>(x0: &'static str, t0: Type, e: Expr, qs: [Query; N]) -> Expr {
+    Expr::Query(span(), Type::Unknown, name(x0), t0, Rc::new(e), vec(qs))
 }
 
 pub fn expr_query_into<const N: usize, const M: usize, const K: usize>(
     x0: &'static str,
+    t0: Type,
     e: Expr,
     qs: [Query; N],
     x1: &'static str,
@@ -916,6 +933,7 @@ pub fn expr_query_into<const N: usize, const M: usize, const K: usize>(
         span(),
         Type::Unknown,
         name(x0),
+        t0,
         Rc::new(e),
         vec(qs),
         name(x1),

@@ -7,18 +7,21 @@ use compiler::ast::Pat;
 use compiler::ast::Program;
 use compiler::ast::Stmt;
 use compiler::ast::Type;
-use compiler::builtins::Value;
+use compiler::builtins::value::Value;
 use compiler::lexer::Lexer;
 use compiler::parser::Parser;
 use compiler::Compiler;
 use compiler::Recovered;
 
-
 #[macro_export]
 macro_rules! check {
     ($a:expr, $msg:literal) => {{
         let msg = indoc::indoc!($msg);
-        assert!($a.msg == msg, "{}", common::passes::diff($a.msg, msg.to_string()));
+        assert!(
+            $a.msg == msg,
+            "{}",
+            common::passes::diff($a.msg, msg.to_string())
+        );
     }};
     ($a:expr, $b:expr) => {
         assert!($a == $b, "{}", {
@@ -42,8 +45,41 @@ macro_rules! check {
     ($a:expr, $b:expr, $msg:literal) => {{
         let msg = indoc::indoc!($msg);
         check!($a.val, $b);
-        assert!($a.msg == msg, "{}", common::passes::diff($a.msg, msg.to_string()));
+        assert!(
+            $a.msg == msg,
+            "{}",
+            common::passes::diff($a.msg, msg.to_string())
+        );
     }};
+    (@value, $a:expr, $b:expr) => {{
+        let a_str = format!("{:#?}", $a);
+        let b_str = format!("{:#?}", $b);
+        assert!($a == $b, "{}", common::passes::diff(a_str, b_str));
+    }};
+}
+
+#[macro_export]
+macro_rules! aqua {
+    ($($code:tt)*) => {
+        indoc::indoc!($($code)*)
+    };
+}
+
+trait TestUtils {
+    fn parse_expr(&self) -> Result<Value, Recovered<Value>>;
+    fn parse_stmt(&self) -> Result<Stmt, Recovered<Stmt>>;
+}
+
+impl TestUtils for &'static str {
+    fn parse_expr(&self) -> Result<Value, Recovered<Value>> {
+        Compiler::default().init().interpret("test", self)
+    }
+
+    fn parse_stmt(&self) -> Result<Stmt, Recovered<Stmt>> {
+        Compiler::default()
+            .init()
+            .parse("test", self, |p| p.parse(Parser::stmt).unwrap())
+    }
 }
 
 pub fn diff(a: String, b: String) -> String {
@@ -58,86 +94,6 @@ pub fn diff(a: String, b: String) -> String {
         output.push_str(&format!("{}{}", sign, change));
     }
     output
-}
-
-pub fn parse<T>(
-    comp: &mut Compiler,
-    name: impl ToString,
-    input: &str,
-    f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>) -> T,
-) -> Result<T, Recovered<T>> {
-    let input: Rc<str> = Rc::from(input);
-    let id = comp.sources.add(name, input.clone());
-    let mut lexer = Lexer::new(id, input.as_ref());
-    let mut parser = Parser::new(&input, &mut lexer);
-    let result = f(&mut parser);
-    comp.add_report(&mut parser.report);
-    comp.add_report(&mut lexer.report);
-    comp.recover(result)
-}
-
-pub fn desugar(
-    comp: &mut Compiler,
-    name: &str,
-    input: &str,
-) -> Result<Program, Recovered<Program>> {
-    let program = comp.parse(name, input, |parser| parser.parse(Parser::program).unwrap())?;
-    let result = comp.desugar.desugar(&program);
-    comp.recover(result)
-}
-
-pub fn resolve(
-    comp: &mut Compiler,
-    name: &str,
-    input: &str,
-) -> Result<Program, Recovered<Program>> {
-    let program = comp.desugar(name, input)?;
-    let result = comp.resolve.resolve(&program);
-    comp.report.merge(&mut comp.resolve.report);
-    comp.recover(result)
-}
-
-pub fn flatten(
-    comp: &mut Compiler,
-    name: &str,
-    input: &str,
-) -> Result<Program, Recovered<Program>> {
-    let program = comp.resolve(name, input)?;
-    let program = comp.flatten.flatten(&program);
-    comp.recover(program)
-}
-
-pub fn lift(comp: &mut Compiler, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
-    let program = comp.resolve(name, input)?;
-    let program = comp.lift.lift(&program);
-    comp.recover(program)
-}
-
-pub fn infer(comp: &mut Compiler, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
-    let result = comp.resolve(name, input)?;
-    let result = comp.infer.infer(&result);
-    comp.report.merge(&mut comp.infer.report);
-    comp.recover(result)
-}
-
-pub fn monomorphise(
-    comp: &mut Compiler,
-    name: &str,
-    input: &str,
-) -> Result<Program, Recovered<Program>> {
-    let result = comp.infer(name, input)?;
-    let result = comp.monomorphise.monomorphise(&result);
-    comp.recover(result)
-}
-
-pub fn interpret(comp: &mut Compiler, name: &str, input: &str) -> Result<Value, Recovered<Value>> {
-    let mut result = comp.infer(name, input).unwrap();
-    let stmt = result.stmts.pop().unwrap();
-    let expr = stmt.as_expr().unwrap();
-    comp.interpret.interpret(&result);
-    let value = comp.interpret.eval_expr(expr);
-    comp.report.merge(&mut comp.interpret.report);
-    comp.recover(value)
 }
 
 pub fn parse_expr(input: &str) -> Result<Expr, Recovered<Expr>> {
@@ -156,119 +112,42 @@ pub fn parse_pat(input: &str) -> Result<Pat, Recovered<Pat>> {
     Compiler::default().parse("test", input, |p| p.parse(Parser::pat).unwrap())
 }
 
-pub fn parse_program(input: &str) -> Result<Program, Recovered<Program>> {
+pub fn parse(input: &str) -> Result<Program, Recovered<Program>> {
     Compiler::default().parse("test", input, |p| p.parse(Parser::program).unwrap())
 }
 
-pub fn desugar_program(input: &str) -> Result<Program, Recovered<Program>> {
+pub fn desugar(input: &str) -> Result<Program, Recovered<Program>> {
     Compiler::default().desugar("test", input)
 }
 
-pub fn querycomp_program(input: &str) -> Result<Program, Recovered<Program>> {
+pub fn querycomp(input: &str) -> Result<Program, Recovered<Program>> {
     Compiler::default().init().querycomp("test", input)
 }
 
-pub fn resolve_program(input: &str) -> Result<Program, Recovered<Program>> {
-    Compiler::default().init().resolve("test", input)
+pub fn resolve(input: impl AsRef<str>) -> Result<Program, Recovered<Program>> {
+    Compiler::default().init().resolve("test", input.as_ref())
 }
 
-pub fn flatten_program(input: &str) -> Result<Program, Recovered<Program>> {
+pub fn flatten(input: &str) -> Result<Program, Recovered<Program>> {
     Compiler::default().init().flatten("test", input)
 }
 
-pub fn lift_program(input: &str) -> Result<Program, Recovered<Program>> {
+pub fn lift(input: &str) -> Result<Program, Recovered<Program>> {
     Compiler::default().init().lift("test", input)
 }
 
-pub fn infer_program(input: &str) -> Result<Program, Recovered<Program>> {
+pub fn infer(input: &str) -> Result<Program, Recovered<Program>> {
     Compiler::default().init().infer("test", input)
 }
 
-pub fn monomorphise_program(input: &str) -> Result<Program, Recovered<Program>> {
+pub fn monomorphise(input: &str) -> Result<Program, Recovered<Program>> {
     Compiler::default().init().monomorphise("test", input)
 }
 
-pub fn interpret_program(input: &str) -> Result<Value, Recovered<Value>> {
-    Compiler::default().init().interpret("test", input)
+pub fn interpret(input: impl AsRef<str>) -> Result<Value, Recovered<Value>> {
+    Compiler::default().init().interpret("test", input.as_ref())
 }
 
-macro_rules! parse_program {
-    ($code:literal) => {
-        common::passes::parse_program(indoc::indoc!($code))
-    };
-}
-
-macro_rules! parse_expr {
-    ($code:literal) => {
-        common::passes::parse_expr(indoc::indoc!($code))
-    };
-    ($code:expr) => {
-        common::passes::parse_stmt($code)
-    };
-}
-
-macro_rules! parse_type {
-    ($code:literal) => {
-        common::passes::parse_type(indoc::indoc!($code))
-    };
-}
-
-macro_rules! parse_stmt {
-    ($code:literal) => {
-        common::passes::parse_stmt(indoc::indoc!($code))
-    };
-}
-
-macro_rules! parse_pat {
-    ($code:literal) => {
-        common::passes::parse_pat(indoc::indoc!($code))
-    };
-}
-
-macro_rules! desugar_program {
-    ($code:literal) => {
-        common::passes::desugar_program(indoc::indoc!($code))
-    };
-}
-
-macro_rules! resolve_program {
-    ($code:literal) => {
-        common::passes::resolve_program(indoc::indoc!($code))
-    };
-}
-
-macro_rules! lift_program {
-    ($code:literal) => {
-        common::passes::lift_program(indoc::indoc!($code))
-    };
-}
-
-macro_rules! infer_program {
-    ($code:literal) => {
-        common::passes::infer_program(indoc::indoc!($code))
-    };
-}
-
-macro_rules! monomorphise_program {
-    ($code:literal) => {
-        common::passes::monomorphise_program(indoc::indoc!($code))
-    };
-}
-
-macro_rules! interpret_program {
-    ($code:literal) => {
-        common::passes::interpret_program(indoc::indoc!($code))
-    };
-}
-
-macro_rules! flatten_program {
-    ($code:literal) => {
-        common::passes::flatten_program(indoc::indoc!($code))
-    };
-}
-
-macro_rules! querycomp_program {
-    ($code:literal) => {
-        common::passes::querycomp_program(indoc::indoc!($code))
-    };
+pub fn codegen(input: &str) -> String {
+    Compiler::default().init().codegen("test", input)
 }

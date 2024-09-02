@@ -1,4 +1,3 @@
-
 use crate::span::Span;
 
 use super::Expr;
@@ -51,6 +50,7 @@ impl Expr {
             Expr::FloatSuffix(s, ..) => *s,
             Expr::LetIn(s, ..) => *s,
             Expr::Update(s, ..) => *s,
+            Expr::Anonymous(s, ..) => *s,
         }
     }
 }

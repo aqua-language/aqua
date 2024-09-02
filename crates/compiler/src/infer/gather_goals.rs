@@ -3,8 +3,8 @@ use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::Type;
 use crate::span::Span;
-use crate::traversal::visitor::Visitor;
 use crate::traversal::visitor::AcceptVisitor;
+use crate::traversal::visitor::Visitor;
 
 use super::Context;
 use super::Goal;
@@ -47,8 +47,13 @@ impl Visitor for GatherGoals<'_> {
 }
 
 impl Program {
-    /// Gather all goals in a program.
     pub fn gather_goals(&self, ctx: &mut Context) {
-        self.visit(GatherGoals::new(ctx, self.span));
+        self.visit(&mut GatherGoals::new(ctx, self.span));
+    }
+}
+
+impl Type {
+    pub fn gather_goals(&self, ctx: &mut Context) {
+        self.visit(&mut GatherGoals::new(ctx, Span::default()));
     }
 }

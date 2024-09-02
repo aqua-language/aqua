@@ -15,48 +15,41 @@ use ena::unify::InPlaceUnificationTable;
 
 use crate::ast::Candidate;
 use crate::ast::Expr;
+use crate::ast::ExprBody;
 use crate::ast::Name;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::StmtDefBody;
-use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
-use crate::ast::StmtStruct;
-use crate::ast::StmtTrait;
-use crate::ast::StmtType;
 use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeVar;
 use crate::collections::map::Map;
 use crate::collections::set::Set;
+use crate::declare;
 use crate::diag::Report;
 use crate::span::Span;
 use crate::traversal::mapper::Mapper;
-use crate::traversal::visitor::Visitor;
+use crate::traversal::visitor::AcceptVisitor;
 
+use self::gather_goals::GatherGoals;
 use self::type_var::TypeVarKind;
 use self::type_var::TypeVarValue;
+
+#[derive(Debug)]
+pub struct Context {
+    var_stack: Vec<VarScope>,
+    infer_stack: Vec<InferScope>,
+    pub type_impls: Vec<StmtImpl>,
+    pub report: Report,
+    pub decls: declare::Context
+}
 
 impl Default for Context {
     fn default() -> Self {
         Self::new()
     }
-}
-
-#[derive(Debug)]
-pub struct Context {
-    stack: Vec<Scope>,
-    type_stack: Vec<InferContext>,
-    pub type_impls: Vec<StmtImpl>,
-    pub trait_impls: Map<Name, Vec<Rc<StmtImpl>>>,
-    defs: Map<Name, Rc<StmtDef>>,
-    structs: Map<Name, Rc<StmtStruct>>,
-    enums: Map<Name, Rc<StmtEnum>>,
-    traits: Map<Name, Rc<StmtTrait>>,
-    types: Map<Name, Rc<StmtType>>,
-    pub report: Report,
 }
 
 #[derive(Debug)]
@@ -108,10 +101,10 @@ pub fn default_float() -> Type {
 }
 
 #[derive(Default, Debug)]
-pub struct Scope(Map<Name, Binding>);
+pub struct VarScope(Map<Name, (Span, Type)>);
 
 #[derive(Debug)]
-pub struct InferContext {
+pub struct InferScope {
     pub table: InPlaceUnificationTable<TypeVar>,
     goals: Set<Goal>,
     pub where_clause: Vec<Trait>,
@@ -129,9 +122,9 @@ impl Goal {
     }
 }
 
-impl InferContext {
-    pub fn new(where_clause: Vec<Trait>) -> InferContext {
-        InferContext {
+impl InferScope {
+    pub fn new(where_clause: Vec<Trait>) -> InferScope {
+        InferScope {
             table: InPlaceUnificationTable::new(),
             goals: vec![].into(),
             where_clause,
@@ -139,31 +132,20 @@ impl InferContext {
     }
 }
 
-impl Scope {
-    pub fn new() -> Scope {
-        Scope::default()
+impl VarScope {
+    pub fn new() -> VarScope {
+        VarScope::default()
     }
-}
-
-#[derive(Debug, Clone)]
-pub enum Binding {
-    Var(Span, Type),
-    Type(Span, Vec<Name>),
 }
 
 impl Context {
     pub fn new() -> Context {
         Context {
-            stack: vec![Scope::new()],
-            type_stack: vec![],
+            var_stack: vec![VarScope::new()],
+            infer_stack: vec![InferScope::new(vec![])],
             report: Report::new(),
-            trait_impls: Map::new(),
             type_impls: vec![],
-            defs: Map::new(),
-            structs: Map::new(),
-            enums: Map::new(),
-            traits: Map::new(),
-            types: Map::new(),
+            decls: declare::Context::default(),
         }
     }
 
@@ -189,18 +171,19 @@ impl Context {
     }
 
     pub fn assumptions(&self) -> Vec<Trait> {
-        self.type_stack
+        self.infer_stack
             .iter()
             .flat_map(|s| s.where_clause.clone())
             .collect()
     }
 
     pub fn infer(&mut self, p: &Program) -> Program {
+        p.visit(&mut self.decls);
         self.map_program(p)
     }
 
-    pub fn type_scope(&mut self) -> &mut InferContext {
-        self.type_stack.last_mut().unwrap()
+    pub fn type_scope(&mut self) -> &mut InferScope {
+        self.infer_stack.last_mut().unwrap()
     }
 
     pub fn get_value(&mut self, a: TypeVar) -> TypeVarValue {
@@ -221,8 +204,11 @@ impl Context {
         Type::Var(self.type_scope().table.new_key(TypeVarValue::Unknown(kind)))
     }
 
-    #[cfg_attr(debug_assertions, track_caller)]
     pub fn unify(&mut self, s0: Span, s1: Span, t0: &Type, t1: &Type) {
+        t0.visit(&mut GatherGoals::new(self, s0));
+        t1.visit(&mut GatherGoals::new(self, s1));
+        let t0 = &t0.expand();
+        let t1 = &t1.expand();
         let snapshot = self.type_scope().table.snapshot();
         if self.try_unify(&t0, &t1).is_ok() {
             self.type_scope().table.commit(snapshot)
@@ -241,9 +227,6 @@ impl Context {
     }
 
     pub fn try_unify(&mut self, t0: &Type, t1: &Type) -> Result<(), ()> {
-        // TODO: This might be a bit inefficient.
-        let t0 = &t0.expand();
-        let t1 = &t1.expand();
         match (t0, t1) {
             (Type::Var(x0), Type::Var(x1)) => match (self.get_value(*x0), self.get_value(*x1)) {
                 (TypeVarValue::Known(t3), TypeVarValue::Known(t4)) => self.try_unify(&t3, &t4),
@@ -335,16 +318,16 @@ impl Context {
         }
     }
 
-    pub fn get(&self, x1: &Name) -> &Binding {
-        self.stack
+    pub fn get(&self, x1: &Name) -> &(Span, Type) {
+        self.var_stack
             .iter()
             .rev()
             .find_map(|s| s.0.iter().rev().find(|(x0, _)| x0 == x1).map(|(_, b)| b))
             .unwrap_or_else(|| panic!("Unknown variable {x1}"))
     }
 
-    pub fn bind(&mut self, x: Name, b: Binding) {
-        self.stack.last_mut().unwrap().0.insert(x, b);
+    pub fn bind(&mut self, x: Name, b: (Span, Type)) {
+        self.var_stack.last_mut().unwrap().0.insert(x, b);
     }
 
     fn solve_goals(&mut self) {
@@ -405,7 +388,7 @@ impl Context {
                 solutions.push(Candidate::Bound(b.clone()));
             }
         }
-        if let Some(impls) = self.trait_impls.get(x).cloned() {
+        if let Some(impls) = self.decls.trait_impls.get(x).cloned() {
             for stmt in impls {
                 let gsub = stmt
                     .generics
@@ -488,93 +471,48 @@ impl Context {
             println!("    {}", goal.tr.verbose());
         }
         println!("* Assumptions:");
-        for assumption in self.type_stack.iter().rev().flat_map(|s| &s.where_clause) {
+        for assumption in self.infer_stack.iter().rev().flat_map(|s| &s.where_clause) {
             println!("    {}", assumption.verbose());
-        }
-    }
-}
-
-impl Visitor for Context {
-    fn visit_stmt(&mut self, s: &Stmt) {
-        match s {
-            Stmt::Var(_) => {}
-            Stmt::Def(s) => {
-                self.defs.insert(s.name, s.clone());
-            }
-            Stmt::Impl(s) => match s.head {
-                Trait::Cons(x, _, _) => {
-                    self.trait_impls
-                        .entry(x)
-                        .or_insert_with(Vec::new)
-                        .push(s.clone());
-                }
-                Trait::Type(_) => {}
-                Trait::Path(_, _) => {}
-                Trait::Err => {}
-                Trait::Var(_) => {}
-            },
-            Stmt::Expr(_) => {}
-            Stmt::Struct(s) => {
-                self.structs.insert(s.name, s.clone());
-            }
-            Stmt::Enum(s) => {
-                self.enums.insert(s.name, s.clone());
-            }
-            Stmt::Type(s) => {
-                self.types.insert(s.name, s.clone());
-            }
-            Stmt::Trait(s) => {
-                self.traits.insert(s.name, s.clone());
-            }
-            Stmt::Err(_) => todo!(),
         }
     }
 }
 
 impl Mapper for Context {
     fn enter_scope(&mut self) {
-        self.stack.push(Scope::new());
+        self.var_stack.push(VarScope::new());
     }
 
     fn exit_scope(&mut self) {
-        self.stack.pop();
+        self.var_stack.pop();
     }
 
     fn map_program(&mut self, program: &Program) -> Program {
-        self.type_stack.push(InferContext::new(vec![]));
         let program = program.annotate(self);
-        self.visit_program(&program);
-        program.gather_goals(self);
         let stmts = self.map_stmts(&program.stmts);
         let program = Program::new(program.span, stmts);
         let program = program.apply(self);
+        program.gather_goals(self);
         self.solve_goals();
         program.defaults(self);
         let program = program.expand();
         let program = program.apply(self);
-        self.type_stack.pop();
         program
     }
 
     fn map_stmt(&mut self, s: &Stmt) -> Stmt {
         match s {
-            Stmt::Struct(s) => Stmt::Struct(s.clone()),
-            Stmt::Enum(s) => Stmt::Enum(s.clone()),
-            Stmt::Type(s) => Stmt::Type(s.clone()),
+            Stmt::Trait(_) => s.clone(),
+            Stmt::Struct(_) => s.clone(),
+            Stmt::Enum(_) => s.clone(),
+            Stmt::Type(_) => s.clone(),
+            Stmt::Err(_) => s.clone(),
             _ => self._map_stmt(s),
         }
     }
 
-    fn map_stmt_var(&mut self, s: &StmtVar) -> StmtVar {
-        let e = self.map_expr(&s.expr);
-        self.unify(s.span, e.span_of(), &s.ty, e.type_of());
-        self.bind(s.name, Binding::Var(s.span, s.ty.clone()));
-        StmtVar::new(e.span_of(), s.name, s.ty.clone(), e)
-    }
-
     fn map_stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
-        self.type_stack
-            .push(InferContext::new(s.where_clause.clone()));
+        self.infer_stack
+            .push(InferScope::new(s.where_clause.clone()));
         let generics = s.generics.clone();
         let head = s.head.clone();
         let defs = s
@@ -584,17 +522,17 @@ impl Mapper for Context {
             .collect::<Vec<_>>();
         let types = s.types.clone();
         let where_clause = s.where_clause.clone();
-        self.type_stack.pop();
+        self.infer_stack.pop();
         StmtImpl::new(s.span, generics, head, where_clause, defs, types)
     }
 
     fn map_stmt_def(&mut self, s: &StmtDef) -> StmtDef {
         match &s.body {
-            StmtDefBody::UserDefined(e) => {
-                self.type_stack
-                    .push(InferContext::new(s.where_clause.clone()));
+            ExprBody::UserDefined(e) => {
+                self.infer_stack
+                    .push(InferScope::new(s.where_clause.clone()));
                 for (x, t) in &s.params {
-                    self.bind(*x, Binding::Var(x.span, t.clone()));
+                    self.bind(*x, (x.span, t.clone()));
                 }
                 let e = e.annotate(self);
                 let e = self.map_expr(&e);
@@ -607,23 +545,30 @@ impl Mapper for Context {
                     s.params.clone(),
                     s.ty.clone(),
                     s.where_clause.clone(),
-                    StmtDefBody::UserDefined(e),
+                    ExprBody::UserDefined(Rc::new(e)),
                 );
                 stmt.defaults(self);
                 let s = stmt.apply(self);
-                self.type_stack.pop();
+                self.infer_stack.pop();
                 s
             }
-            StmtDefBody::Builtin(b) => StmtDef::new(
+            ExprBody::Builtin(b) => StmtDef::new(
                 s.span,
                 s.name,
                 s.generics.clone(),
                 s.params.clone(),
                 s.ty.clone(),
                 s.where_clause.clone(),
-                StmtDefBody::Builtin(b.clone()),
+                ExprBody::Builtin(b.clone()),
             ),
         }
+    }
+
+    fn map_stmt_var(&mut self, s: &StmtVar) -> StmtVar {
+        let e = self.map_expr(&s.expr);
+        self.unify(s.span, e.span_of(), &s.ty, e.type_of());
+        self.bind(s.name, (s.span, s.ty.clone()));
+        StmtVar::new(e.span_of(), s.name, s.ty.clone(), e)
     }
 
     fn map_expr(&mut self, e: &Expr) -> Expr {
@@ -647,7 +592,7 @@ impl Mapper for Context {
                 Expr::String(*s, t0.clone(), *v)
             }
             Expr::Struct(s, t0, x, ts, xes) => {
-                let stmt = self.structs.get(x).unwrap().clone();
+                let stmt = self.decls.structs.get(x).unwrap().clone();
                 let gsub = stmt
                     .generics
                     .clone()
@@ -669,7 +614,7 @@ impl Mapper for Context {
                 Expr::Struct(*s, t0.clone(), *x, ts.clone(), xes.clone())
             }
             Expr::Enum(s, t0, x, ts, x1, e) => {
-                let stmt = self.enums.get(x).unwrap().clone();
+                let stmt = self.decls.enums.get(x).unwrap().clone();
                 let gsub = stmt
                     .generics
                     .clone()
@@ -696,14 +641,12 @@ impl Mapper for Context {
                 Expr::Tuple(*s, t0.clone(), es)
             }
             Expr::Var(s, t0, x) => {
-                let Binding::Var(s1, t1) = self.get(x).clone() else {
-                    unreachable!()
-                };
+                let (s1, t1) = self.get(x).clone();
                 self.unify(*s, s1, t0, &t1);
                 Expr::Var(*s, t0.clone(), *x)
             }
             Expr::Def(s, t0, x, ts0) => {
-                let stmt = self.defs.get(x).unwrap().clone();
+                let stmt = self.decls.defs.get(x).unwrap().clone();
                 let gsub = stmt
                     .generics
                     .clone()
@@ -742,7 +685,7 @@ impl Mapper for Context {
                 let t = e.type_of().apply(self);
                 match t {
                     Type::Cons(x0, ts) => {
-                        let stmt = self.structs.get(&x0).unwrap().clone();
+                        let stmt = self.decls.structs.get(&x0).unwrap().clone();
                         let gsub = stmt
                             .generics
                             .clone()
@@ -837,7 +780,19 @@ impl Mapper for Context {
             Expr::Return(_, _, _) => todo!(),
             Expr::Continue(_, _) => todo!(),
             Expr::Break(_, _) => todo!(),
-            Expr::Fun(_, _, _, _, _) => todo!(),
+            Expr::Fun(s, t0, xts0, t1, e0) => {
+                self.enter_scope();
+                for (x, t) in xts0 {
+                    self.bind(*x, (x.span, t.clone()));
+                }
+                let e0 = self.map_expr(e0);
+                let ts0 = xts0.iter().map(|(_, t)| t.clone()).collect::<Vec<_>>();
+                let t2 = Type::Fun(ts0, Rc::new(t1.clone()));
+                self.unify(*s, e0.span_of(), e0.type_of(), &t1);
+                self.unify(*s, *s, t0, &t2);
+                self.exit_scope();
+                Expr::Fun(*s, t0.clone(), xts0.clone(), t1.clone(), Rc::new(e0))
+            }
             Expr::Match(_, _, _, _) => todo!(),
             Expr::While(s, t0, e0, b) => {
                 let e0 = self.map_expr(e0);
@@ -861,11 +816,17 @@ impl Mapper for Context {
                 Expr::Record(*s, t0.clone(), xes.clone())
             }
             Expr::Value(_, _) => unreachable!(),
-            Expr::For(_, _, _, _, _) => todo!(),
+            Expr::For(s, t0, x, e0, b) => {
+                let e0 = self.map_expr(e0);
+                let b = self.map_block(b);
+                self.unify(*s, *s, t0, &unit());
+                self.unify(*s, *s, t0, &b.expr.type_of());
+                Expr::For(*s, t0.clone(), *x, Rc::new(e0), b)
+            }
             Expr::TraitMethod(s, t0, b, x1, ts1) => match b {
                 Trait::Path(_, _) => unreachable!(),
                 Trait::Cons(x0, ts0, _) => {
-                    let stmt0 = self.traits.get(x0).unwrap();
+                    let stmt0 = self.decls.traits.get(x0).unwrap();
                     let stmt1 = stmt0.get_def(*x1).unwrap();
                     let gsub = stmt0
                         .generics
@@ -888,7 +849,12 @@ impl Mapper for Context {
                 Trait::Err => todo!(),
                 Trait::Var(_) => todo!(),
             },
-            Expr::Unresolved(_, _t, x, _ts) => todo!("{x}"),
+            Expr::Unresolved(s, _t, _x, _ts) => {
+                // Try to find a single implementation of a trait that provides the method
+                self.report
+                    .err(*s, "Unresolved method", "Could not resolve method call.");
+                Expr::Err(*s, Type::Err)
+            }
             Expr::Update(_, _, _, _, _) => todo!(),
             // These should ideally be unreachable, but covering all would require more passes
             Expr::Query(..) => unreachable!(),
@@ -911,6 +877,7 @@ impl Mapper for Context {
             Expr::IntSuffix(..) => unreachable!(),
             Expr::FloatSuffix(..) => unreachable!(),
             Expr::LetIn(..) => unreachable!(),
+            Expr::Anonymous(..) => unreachable!(),
         }
     }
 }

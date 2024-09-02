@@ -1,6 +1,6 @@
 use compiler::lexer::Lexer;
-use compiler::lexer::Token;
 use compiler::sources::Sources;
+use compiler::token::Token;
 
 fn next<'a>(lexer: &mut Lexer<'a>) -> Option<(std::ops::Range<u32>, Token, &'a str)> {
     lexer
@@ -47,7 +47,8 @@ fn test_lexer_float0() {
 #[test]
 fn test_lexer_float1() {
     let lexer = &mut Lexer::new(0, "123.");
-    assert_eq!(next(lexer), Some((0..4, Token::Float, "123.")));
+    assert_eq!(next(lexer), Some((0..3, Token::Int, "123")));
+    assert_eq!(next(lexer), Some((3..4, Token::Dot, ".")));
     assert_eq!(next(lexer), Some((4..4, Token::Eof, "")));
     assert_eq!(next(lexer), None);
     assert!(lexer.report.is_empty());
@@ -378,4 +379,17 @@ fn test_lexer_eof1() {
     assert_eq!(next(lexer), Some((1..1, Token::Eof, "")));
     assert_eq!(next(lexer), None);
     assert!(lexer.report.is_empty());
+}
+
+#[test]
+fn test_lexer_range0() {
+    let lexer = &mut Lexer::new(0, ".. 1.. ..2 1..2");
+    assert_eq!(next(lexer), Some(((0..2), Token::DotDot, "..")));
+    assert_eq!(next(lexer), Some(((3..4), Token::Int, "1")));
+    assert_eq!(next(lexer), Some(((4..6), Token::DotDot, "..")));
+    assert_eq!(next(lexer), Some(((7..9), Token::DotDot, "..")));
+    assert_eq!(next(lexer), Some(((9..10), Token::Int, "2")));
+    assert_eq!(next(lexer), Some(((11..12), Token::Int, "1")));
+    assert_eq!(next(lexer), Some(((12..14), Token::DotDot, "..")));
+    assert_eq!(next(lexer), Some(((14..15), Token::Int, "2")));
 }

@@ -7,13 +7,13 @@ use super::Expr;
 use super::Name;
 use super::Stmt;
 use super::StmtDef;
-use super::StmtDefBody;
+use super::ExprBody;
 use super::StmtEnum;
 use super::StmtImpl;
 use super::StmtStruct;
 use super::StmtTrait;
 use super::StmtType;
-use super::StmtTypeBody;
+use super::TypeBody;
 use super::StmtVar;
 use super::Type;
 
@@ -64,15 +64,15 @@ impl From<StmtTrait> for Stmt {
     }
 }
 
-impl From<Expr> for StmtDefBody {
-    fn from(e: Expr) -> StmtDefBody {
-        StmtDefBody::UserDefined(e)
+impl From<Expr> for ExprBody {
+    fn from(e: Expr) -> ExprBody {
+        ExprBody::UserDefined(Rc::new(e))
     }
 }
 
-impl From<Type> for StmtTypeBody {
-    fn from(t: Type) -> StmtTypeBody {
-        StmtTypeBody::UserDefined(t)
+impl From<Type> for TypeBody {
+    fn from(t: Type) -> TypeBody {
+        TypeBody::UserDefined(t)
     }
 }
 

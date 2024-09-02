@@ -14,7 +14,7 @@ use super::Program;
 use super::Segment;
 use super::Stmt;
 use super::StmtDef;
-use super::StmtDefBody;
+use super::ExprBody;
 use super::StmtEnum;
 use super::StmtImpl;
 use super::StmtStruct;
@@ -22,7 +22,7 @@ use super::StmtTrait;
 use super::StmtTraitDef;
 use super::StmtTraitType;
 use super::StmtType;
-use super::StmtTypeBody;
+use super::TypeBody;
 use super::StmtVar;
 use super::Trait;
 use super::Type;
@@ -54,7 +54,7 @@ impl StmtImpl {
 }
 
 impl StmtType {
-    pub fn new(span: Span, name: Name, generics: Vec<Name>, body: StmtTypeBody) -> StmtType {
+    pub fn new(span: Span, name: Name, generics: Vec<Name>, body: TypeBody) -> StmtType {
         StmtType {
             span,
             name,
@@ -127,7 +127,7 @@ impl StmtDef {
         params: Map<Name, Type>,
         ty: Type,
         where_clause: Vec<Trait>,
-        body: StmtDefBody,
+        body: ExprBody,
     ) -> StmtDef {
         StmtDef {
             span,

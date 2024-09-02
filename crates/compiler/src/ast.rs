@@ -10,11 +10,11 @@ mod with_type;
 
 use std::rc::Rc;
 
-use crate::builtins::Value;
+use crate::builtins::value::Value;
 use crate::interpret::Context;
-use crate::lexer::Token;
 use crate::span::Span;
 use crate::symbol::Symbol;
+use crate::token::Token;
 
 pub use crate::collections::map::Map;
 
@@ -177,7 +177,7 @@ pub struct StmtDef {
     pub params: Map<Name, Type>,
     pub ty: Type,
     pub where_clause: Vec<Trait>,
-    pub body: StmtDefBody,
+    pub body: ExprBody,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -201,26 +201,32 @@ pub struct StmtType {
     pub span: Span,
     pub name: Name,
     pub generics: Vec<Name>,
-    pub body: StmtTypeBody,
+    pub body: TypeBody,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum StmtDefBody {
-    UserDefined(Expr),
+pub enum ExprBody {
+    UserDefined(Rc<Expr>),
     Builtin(BuiltinDef),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum StmtTypeBody {
+pub enum TypeBody {
     UserDefined(Type),
     Builtin(BuiltinType),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq)]
 pub struct BuiltinDef {
     // pub codegen: fn(&mut Formatter, &[Value]) -> Value,
-    pub fun: fn(&mut Context, &[Type], &[Value]) -> Value,
+    pub fun: fn(&mut Context, &[Value]) -> Value,
     pub rust: &'static str,
+}
+
+impl PartialEq for BuiltinDef {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -256,11 +262,12 @@ pub enum Expr {
     Def(Span, Type, Name, Vec<Type>),
     Call(Span, Type, Rc<Expr>, Vec<Expr>),
     Block(Span, Type, Block),
-    Query(Span, Type, Name, Rc<Expr>, Vec<Query>),
+    Query(Span, Type, Name, Type, Rc<Expr>, Vec<Query>),
     QueryInto(
         Span,
         Type,
         Name,
+        Type,
         Rc<Expr>,
         Vec<Query>,
         Name,
@@ -287,6 +294,7 @@ pub enum Expr {
     Paren(Span, Type, Rc<Expr>),
     Dot(Span, Type, Rc<Expr>, Name, Vec<Type>, Vec<Expr>),
     LetIn(Span, Type, Name, Type, Rc<Expr>, Rc<Expr>),
+    Anonymous(Span, Type),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

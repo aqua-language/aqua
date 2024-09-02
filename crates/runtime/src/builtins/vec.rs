@@ -11,7 +11,21 @@ use crate::traits::DeepClone;
 
 #[derive(Debug, Send, Sync, Unpin, Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd)]
 #[repr(C)]
-pub struct Vec<T>(pub(crate) UncheckedCell<std::vec::Vec<T>>);
+pub struct Vec<T>(pub UncheckedCell<std::vec::Vec<T>>);
+
+impl<T: std::fmt::Display> std::fmt::Display for Vec<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "[")?;
+        let mut iter = self.0.iter();
+        if let Some(v) = iter.next() {
+            write!(f, "{}", v)?;
+            for v in iter {
+                write!(f, ", {}", v)?;
+            }
+        }
+        write!(f, "]")
+    }
+}
 
 impl<T> Clone for Vec<T> {
     fn clone(&self) -> Self {

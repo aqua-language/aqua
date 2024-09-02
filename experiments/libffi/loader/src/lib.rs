@@ -58,7 +58,7 @@ fn test_i32_add() {
     let fun = fun(&lib, "add");
     let res = unsafe {
         cif([Type::i32(), Type::i32()], Type::i32())
-            .call::<i32>(CodePtr(*fun), &[Arg::new(&10), Arg::new(&20)])
+            .call::<i32>(CodePtr(*fun), &[Arg::new(&10i32), Arg::new(&20i32)])
     };
     assert_eq!(res, 30);
 }
@@ -71,23 +71,23 @@ struct Pair<L, R> {
 }
 
 #[test]
-fn test_struct_pair() {
+fn test_struct_pair_i32_i32() {
     let lib = load();
-    let fun = fun(&lib, "pair");
+    let fun = fun(&lib, "pair_i32_i32");
     let res = unsafe {
         cif(
             [Type::i32(), Type::i32()],
             Type::structure([Type::i32(), Type::i32()]),
         )
-        .call::<Pair<i32, i32>>(CodePtr(*fun), &[Arg::new(&10), Arg::new(&20)])
+        .call::<Pair<i32, i32>>(CodePtr(*fun), &[Arg::new(&10i32), Arg::new(&20i32)])
     };
     assert_eq!(res, Pair { x: 10, y: 20 });
 }
 
 #[test]
-fn test_struct_pair2() {
+fn test_struct_pair_i64_i32() {
     let lib = load();
-    let fun = fun(&lib, "pair2");
+    let fun = fun(&lib, "pair_i64_i32");
     let res = unsafe {
         cif(
             [Type::i64(), Type::i32()],
@@ -96,6 +96,20 @@ fn test_struct_pair2() {
         .call::<Pair<i64, i32>>(CodePtr(*fun), &[Arg::new(&10i64), Arg::new(&20i32)])
     };
     assert_eq!(res, Pair { x: 10i64, y: 20i32 });
+}
+
+#[test]
+fn test_struct_pair_i32_i64() {
+    let lib = load();
+    let fun = fun(&lib, "pair_i32_i64");
+    let res = unsafe {
+        cif(
+            [Type::i32(), Type::i64()],
+            Type::structure([Type::i32(), Type::i64()]),
+        )
+        .call::<Pair<i32, i64>>(CodePtr(*fun), &[Arg::new(&10i32), Arg::new(&20i64)])
+    };
+    assert_eq!(res, Pair { x: 10i32, y: 20i64 });
 }
 
 #[test]
@@ -227,9 +241,9 @@ fn test_enum_just_pair() {
 }
 
 #[test]
-fn test_struct_pair_dynamic_heap() {
+fn test_struct_pair_alloc() {
     let lib = load();
-    let fun = fun(&lib, "pair2");
+    let fun = fun(&lib, "pair_i64_i32");
     unsafe {
         let (layout, offset) = Layout::new::<i64>().extend(Layout::new::<i32>()).unwrap();
         let layout = layout.pad_to_align();
@@ -253,9 +267,9 @@ fn test_struct_pair_dynamic_heap() {
 }
 
 #[test]
-fn test_struct_pair_dynamic_stack() {
+fn test_struct_pair_alloca() {
     let lib = load();
-    let fun = fun(&lib, "pair2");
+    let fun = fun(&lib, "pair_i64_i32");
     unsafe {
         let (layout, offset) = Layout::new::<i64>().extend(Layout::new::<i32>()).unwrap();
         let layout = layout.pad_to_align();
@@ -280,7 +294,48 @@ fn test_struct_pair_dynamic_stack() {
 }
 
 #[test]
-fn test_enum_just_dynamic_heap() {
+fn test_struct_pair_alloca2() {
+    let lib = load();
+    let fun = fun(&lib, "pair_i64_i32");
+    unsafe {
+        alloca::with_alloca_zeroed(std::mem::size_of::<i64>(), |arg1_ptr| {
+            alloca::with_alloca_zeroed(std::mem::size_of::<i32>(), |arg2_ptr| {
+                let (layout, offset) = Layout::new::<i64>().extend(Layout::new::<i32>()).unwrap();
+                let layout = layout.pad_to_align();
+
+                alloca::with_alloca_zeroed(layout.size(), |return_ptr| {
+                    *(arg1_ptr.as_ptr() as *mut i64) = 10i64;
+                    *(arg2_ptr.as_ptr() as *mut i32) = 20i32;
+
+                    let args = [
+                        arg1_ptr.as_ptr() as *mut std::os::raw::c_void,
+                        arg2_ptr.as_ptr() as *mut std::os::raw::c_void,
+                    ];
+
+                    libffi::raw::ffi_call(
+                        cif(
+                            [Type::i64(), Type::i32()],
+                            Type::structure([Type::i64(), Type::i32()]),
+                        )
+                        .as_raw_ptr(),
+                        Some(*CodePtr(*fun).as_safe_fun()),
+                        (return_ptr).as_mut_ptr() as *mut std::os::raw::c_void,
+                        args.as_ptr() as *mut *mut std::os::raw::c_void,
+                    );
+
+                    let x = (return_ptr).as_ptr().cast::<i64>().read();
+                    let y = (return_ptr).as_ptr().add(offset).cast::<i32>().read();
+
+                    assert_eq!(x, 10i64);
+                    assert_eq!(y, 20i32);
+                });
+            });
+        });
+    }
+}
+
+#[test]
+fn test_enum_just_alloc() {
     let lib = load();
     let fun = fun(&lib, "just");
     unsafe {
@@ -301,13 +356,10 @@ fn test_enum_just_dynamic_heap() {
     };
 }
 
-use stabby::alloc::libc_alloc::LibcAlloc;
-type StabbyString = stabby::string::String<LibcAlloc>;
-
 #[test]
 fn test_pair_raw() {
     let lib = load();
-    let fun = fun(&lib, "pair");
+    let fun = fun(&lib, "pair_i32_i32");
     unsafe {
         let (layout, offset) = Layout::new::<i32>().extend(Layout::new::<i32>()).unwrap();
         let layout = layout.pad_to_align();
@@ -343,78 +395,82 @@ fn test_pair_raw() {
     };
 }
 
-#[test]
-fn test_string_raw() {
-    let lib = load();
-    let fun = fun(&lib, "stabby_string");
-    unsafe {
-        let layout = Layout::new::<StabbyString>();
-        let ptr = alloc(layout);
-        let mut return_ty = libffi::low::ffi_type {
-            size: layout.size(),
-            alignment: layout.align() as u16,
-            type_: libffi::raw::FFI_TYPE_STRUCT as u16,
-            elements: [Type::structure([]).as_raw_ptr()].as_mut_ptr(),
-        };
-        let mut arg_types = [Type::i32().as_raw_ptr()];
-        let nargs = arg_types.len() as u32;
-        let mut cif = ffi_cif::default();
-        ffi_prep_cif(
-            &mut cif,
-            ffi_abi_FFI_DEFAULT_ABI,
-            nargs,
-            &mut return_ty as *mut ffi_type,
-            arg_types.as_mut_ptr(),
-        );
-        let mut ptr = alloc(layout);
-        ffi_call(
-            &mut cif,
-            Some(*CodePtr(*fun).as_safe_fun()),
-            ptr as *mut c_void,
-            [Arg::new(&100i32)].as_ptr() as *mut *mut c_void,
-        );
-        let s = ptr.cast::<StabbyString>().read();
-        assert_eq!(s, "hello 100");
-        dealloc(ptr, layout);
-    };
-}
-
-#[test]
-fn test_string_concat() {
-    let lib = load();
-    let fun = fun(&lib, "concat");
-    unsafe {
-        let layout = Layout::new::<StabbyString>();
-        let ptr = alloc(layout);
-        // Create string type
-        let string_ty = &mut libffi::low::ffi_type {
-            size: layout.size(),
-            alignment: layout.align() as u16,
-            type_: libffi::raw::FFI_TYPE_STRUCT as u16,
-            elements: [Type::structure([]).as_raw_ptr()].as_mut_ptr(),
-        } as *mut ffi_type;
-
-        let mut arg_types = [string_ty, string_ty];
-        let nargs = arg_types.len() as u32;
-        let mut cif = ffi_cif::default();
-        ffi_prep_cif(
-            &mut cif,
-            ffi_abi_FFI_DEFAULT_ABI,
-            nargs,
-            string_ty,
-            arg_types.as_mut_ptr(),
-        );
-        let a0 = StabbyString::from("hello");
-        let a1 = StabbyString::from("world");
-        ffi_call(
-            &mut cif,
-            Some(*CodePtr(*fun).as_safe_fun()),
-            ptr as *mut c_void,
-            [Arg::new(&a0), Arg::new(&a1)].as_ptr() as *mut *mut c_void,
-        );
-        std::mem::forget(a0);
-        std::mem::forget(a1);
-        let s = ptr.cast::<StabbyString>().read();
-        assert_eq!(s, "helloworld");
-    };
-}
+// NOTE: Stabby does not work in the latest stable Rust version.
+//
+// type StabbyString = stabby::string::String;
+//
+// #[test]
+// fn test_string_raw() {
+//     let lib = load();
+//     let fun = fun(&lib, "stabby_string");
+//     unsafe {
+//         let layout = Layout::new::<StabbyString>();
+//         let ptr = alloc(layout);
+//         let mut return_ty = libffi::low::ffi_type {
+//             size: layout.size(),
+//             alignment: layout.align() as u16,
+//             type_: libffi::raw::FFI_TYPE_STRUCT as u16,
+//             elements: [Type::structure([]).as_raw_ptr()].as_mut_ptr(),
+//         };
+//         let mut arg_types = [Type::i32().as_raw_ptr()];
+//         let nargs = arg_types.len() as u32;
+//         let mut cif = ffi_cif::default();
+//         ffi_prep_cif(
+//             &mut cif,
+//             ffi_abi_FFI_DEFAULT_ABI,
+//             nargs,
+//             &mut return_ty as *mut ffi_type,
+//             arg_types.as_mut_ptr(),
+//         );
+//         let mut ptr = alloc(layout);
+//         ffi_call(
+//             &mut cif,
+//             Some(*CodePtr(*fun).as_safe_fun()),
+//             ptr as *mut c_void,
+//             [Arg::new(&100i32)].as_ptr() as *mut *mut c_void,
+//         );
+//         let s = ptr.cast::<StabbyString>().read();
+//         assert_eq!(s, "hello 100");
+//         dealloc(ptr, layout);
+//     };
+// }
+//
+// #[test]
+// fn test_string_concat() {
+//     let lib = load();
+//     let fun = fun(&lib, "concat");
+//     unsafe {
+//         let layout = Layout::new::<StabbyString>();
+//         let ptr = alloc(layout);
+//         // Create string type
+//         let string_ty = &mut libffi::low::ffi_type {
+//             size: layout.size(),
+//             alignment: layout.align() as u16,
+//             type_: libffi::raw::FFI_TYPE_STRUCT as u16,
+//             elements: [Type::structure([]).as_raw_ptr()].as_mut_ptr(),
+//         } as *mut ffi_type;
+//
+//         let mut arg_types = [string_ty, string_ty];
+//         let nargs = arg_types.len() as u32;
+//         let mut cif = ffi_cif::default();
+//         ffi_prep_cif(
+//             &mut cif,
+//             ffi_abi_FFI_DEFAULT_ABI,
+//             nargs,
+//             string_ty,
+//             arg_types.as_mut_ptr(),
+//         );
+//         let a0 = StabbyString::from("hello");
+//         let a1 = StabbyString::from("world");
+//         ffi_call(
+//             &mut cif,
+//             Some(*CodePtr(*fun).as_safe_fun()),
+//             ptr as *mut c_void,
+//             [Arg::new(&a0), Arg::new(&a1)].as_ptr() as *mut *mut c_void,
+//         );
+//         std::mem::forget(a0);
+//         std::mem::forget(a1);
+//         let s = ptr.cast::<StabbyString>().read();
+//         assert_eq!(s, "helloworld");
+//     };
+// }

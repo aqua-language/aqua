@@ -1,6 +1,6 @@
 use crate::ast::Index;
 use crate::ast::Name;
-use crate::lexer::Token;
+use crate::token::Token;
 use crate::symbol::Symbol;
 
 pub trait Print<'b> {
@@ -164,6 +164,10 @@ pub trait Print<'b> {
 
     fn brack(&mut self, fun: impl Fn(&mut Self) -> std::fmt::Result) -> std::fmt::Result {
         self.group(fun, "[", "]")
+    }
+
+    fn bars(&mut self, fun: impl Fn(&mut Self) -> std::fmt::Result) -> std::fmt::Result {
+        self.group(fun, "|", "|")
     }
 
     fn if_nonempty<T>(

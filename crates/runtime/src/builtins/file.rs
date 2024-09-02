@@ -8,6 +8,12 @@ use crate::builtins::string::String;
 #[repr(C)]
 pub struct File(pub std::rc::Rc<std::cell::RefCell<std::fs::File>>);
 
+impl std::fmt::Display for File {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "File({:?})", self.0)
+    }
+}
+
 impl File {
     pub fn open(path: impl Into<Path>) -> Self {
         File::from(std::fs::File::open(path.into().0).unwrap())

@@ -9,7 +9,7 @@ use crate::builtins::string::String;
 // use crate::builtins::url::Url;
 use crate::traits::Data;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[repr(C)]
 pub enum Reader {
     Stdin,
@@ -17,6 +17,18 @@ pub enum Reader {
     // Http { url: Url },
     Tcp { addr: SocketAddr },
     Kafka { addr: SocketAddr, topic: String },
+}
+
+impl std::fmt::Display for Reader {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Reader::Stdin => write!(f, "Stdin"),
+            Reader::File { path, watch } => write!(f, "File(path={path}, watch={watch})"),
+            // Reader::Http { url } => write!(f, "Http(url={})", url),
+            Reader::Tcp { addr } => write!(f, "Tcp(addr={addr})"),
+            Reader::Kafka { addr, topic } => write!(f, "Kafka(addr={addr}, topic={topic})"),
+        }
+    }
 }
 
 impl Reader {

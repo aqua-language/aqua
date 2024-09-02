@@ -34,6 +34,7 @@ use crate::ast::Block;
 use crate::ast::BuiltinDef;
 use crate::ast::BuiltinType;
 use crate::ast::Expr;
+use crate::ast::ExprBody;
 use crate::ast::Index;
 use crate::ast::Name;
 use crate::ast::Pat;
@@ -44,7 +45,6 @@ use crate::ast::Query;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::StmtDefBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
@@ -52,15 +52,15 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::StmtTypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
+use crate::ast::TypeBody;
 use crate::collections::map::Map;
 use crate::diag::Report;
-use crate::lexer::Spanned;
-use crate::lexer::Token;
 use crate::span::Span;
+use crate::spanned::Spanned;
+use crate::token::Token;
 
 pub struct Parser<'a, I>
 where
@@ -68,7 +68,7 @@ where
 {
     input: &'a str,
     iter: std::iter::Peekable<I>,
-    delims: Vec<Spanned<Token>>,
+    openers: Vec<Spanned<Token>>,
     pub report: Report,
 }
 
@@ -115,7 +115,7 @@ where
             input,
             iter: iter.peekable(),
             report: Report::new(),
-            delims: Vec::new(),
+            openers: Vec::new(),
         }
     }
 
@@ -142,17 +142,11 @@ where
     }
 
     fn report_unmatched(&mut self) {
-        for t in self.delims.drain(..) {
+        for t in self.openers.drain(..) {
             match t.v {
-                Token::LParen => {
-                    self.report.err(t.s, "Unmatched `(`", "expected `)`");
-                }
-                Token::LBrace => {
-                    self.report.err(t.s, "Unmatched `{`", "expected `}`");
-                }
-                Token::LBrack => {
-                    self.report.err(t.s, "Unmatched `[`", "expected `]`");
-                }
+                Token::LParen => self.report.err(t.s, "Unmatched `(`", "expected `)`"),
+                Token::LBrace => self.report.err(t.s, "Unmatched `{`", "expected `}`"),
+                Token::LBrack => self.report.err(t.s, "Unmatched `[`", "expected `]`"),
                 _ => unreachable!(),
             }
         }
@@ -167,34 +161,28 @@ where
         loop {
             let t = self.peek();
             match t.v {
-                _ if first.contains(t.v) && self.delims.is_empty() => {
+                _ if first.contains(t.v) && self.openers.is_empty() => {
                     return Ok(t);
                 }
-                // TODO: Handle what happens when the follow set contains a closing token
-                _ if follow.contains(t.v) && self.delims.is_empty() => {
-                    return Err(t.s);
-                }
                 _ if fuel == 0 || t.v == Token::Eof => {
-                    if !self.delims.is_empty() {
+                    if !self.openers.is_empty() {
                         self.report_unmatched();
                     }
                     return Err(t.s);
                 }
+                // TODO: Handle what happens when the follow set contains a closing token
+                _ if follow.contains(t.v) && self.openers.is_empty() => {
+                    return Err(t.s);
+                }
                 Token::LBrace | Token::LParen | Token::LBrack => {
                     self.skip();
-                    self.delims.push(t)
+                    self.openers.push(t)
                 }
-                Token::RBrace if self.delims.last().is_some_and(|t1| t1.v == Token::LBrace) => {
+                Token::RBrace | Token::RParen | Token::RBrack
+                    if self.openers.last().is_some_and(|t1| t1.v.opens(t.v)) =>
+                {
                     self.skip();
-                    self.delims.pop();
-                }
-                Token::RParen if self.delims.last().is_some_and(|t1| t1.v == Token::LParen) => {
-                    self.skip();
-                    self.delims.pop();
-                }
-                Token::RBrack if self.delims.last().is_some_and(|t1| t1.v == Token::LBrack) => {
-                    self.skip();
-                    self.delims.pop();
+                    self.openers.pop();
                 }
                 _ => self.skip(),
             }
@@ -419,7 +407,7 @@ where
         let bs = self.where_clause(follow | Token::SemiColon)?;
         self.expect(Token::SemiColon, follow)?;
         let s = t0.s + x.s;
-        let body = StmtDefBody::Builtin(body);
+        let body = ExprBody::Builtin(body);
         Ok(Spanned::new(
             s,
             StmtDef::new(s, x.v, gs, xts.v, t.v, bs, body),
@@ -436,7 +424,7 @@ where
         let gs = self.generics(follow | Token::SemiColon)?;
         let t1 = self.expect(Token::SemiColon, follow)?;
         let s = t0.s + t1.s;
-        let body = StmtTypeBody::Builtin(body);
+        let body = TypeBody::Builtin(body);
         Ok(Spanned::new(s, StmtType::new(s, x.v, gs, body)))
     }
 
@@ -530,7 +518,15 @@ where
         let s = t0.s + e.s;
         Ok(Spanned::new(
             s,
-            StmtDef::new(s, x.v, gs, xts.v, t.v, bs, StmtDefBody::UserDefined(e.v)),
+            StmtDef::new(
+                s,
+                x.v,
+                gs,
+                xts.v,
+                t.v,
+                bs,
+                ExprBody::UserDefined(Rc::new(e.v)),
+            ),
         ))
     }
 
@@ -570,7 +566,7 @@ where
         self.expect(Token::SemiColon, follow)?;
         Ok(Spanned::new(
             s,
-            StmtType::new(s, x.v, gs, StmtTypeBody::UserDefined(t.v)),
+            StmtType::new(s, x.v, gs, TypeBody::UserDefined(t.v)),
         ))
     }
 
@@ -1451,6 +1447,10 @@ where
             Token::From => {
                 let t = self.next();
                 let x0 = self.name(follow | Token::In)?;
+                let t0 = self
+                    .optional(Self::ty_annot, Token::Colon, follow | Token::In)?
+                    .map(|x| x.v)
+                    .unwrap_or(Type::Unknown);
                 self.expect(Token::In, follow | Expr::FIRST)?;
                 let e = self.expr(follow | Query::FIRST | Token::Into)?;
                 let qs = self.repeat(Self::query, Query::FIRST, follow | Query::FOLLOW)?;
@@ -1469,6 +1469,7 @@ where
                                 s,
                                 Type::Unknown,
                                 x0.v,
+                                t0,
                                 Rc::new(e.v),
                                 qs,
                                 x1.v,
@@ -1484,6 +1485,7 @@ where
                                 s,
                                 Type::Unknown,
                                 x0.v,
+                                t0,
                                 Rc::new(e.v),
                                 qs,
                                 x1.v,
@@ -1500,13 +1502,17 @@ where
                     };
                     Ok(Spanned::new(
                         s,
-                        Expr::Query(s, Type::Unknown, x0.v, Rc::new(e.v), qs),
+                        Expr::Query(s, Type::Unknown, x0.v, t0, Rc::new(e.v), qs),
                     ))
                 }
             }
             Token::LBrace => {
                 let b = self.block(follow)?;
                 Ok(Spanned::new(b.s, Expr::Block(b.s, Type::Unknown, b.v)))
+            }
+            Token::Underscore => {
+                let t = self.next();
+                Ok(Spanned::new(t.s, Expr::Anonymous(t.s, Type::Unknown)))
             }
             t => unreachable!("{:?}", t),
         }
@@ -1657,7 +1663,8 @@ impl Expr {
         .or(Token::LBrace)
         .or(Token::Record)
         .or(Token::From)
-        .or(Token::Let);
+        .or(Token::Let)
+        .or(Token::Underscore);
     const FOLLOW: Token = Token::Eof
         .or(Token::And)
         .or(Token::DotDot)

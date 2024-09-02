@@ -5,6 +5,12 @@ use serde::Serialize;
 #[repr(C)]
 pub struct Path(pub std::path::PathBuf);
 
+impl std::fmt::Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0.display())
+    }
+}
+
 impl Path {
     pub fn new(path: impl AsRef<str>) -> Self {
         Self(std::path::PathBuf::from(path.as_ref()))

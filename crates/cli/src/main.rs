@@ -14,12 +14,14 @@ fn main() -> Result<()> {
 
     let config = Config::parse();
 
-    if config.version {
+    if config.compiler.version {
         version::print();
         return Ok(());
     }
 
-    let compiler = Compiler::new(config);
+    let mut compiler = Compiler::new(config.compiler);
+
+    compiler.init();
 
     match compiler.config.command {
         Some(Command::Check) => {
@@ -32,25 +34,17 @@ fn main() -> Result<()> {
                 input::read_stdin()?
             };
             match Program::parse(&source) {
-                Ok(program) => {
-                    println!("{}", program);
-                }
-                Err(_) => {
-                    print!("{}", source);
-                }
+                Ok(program) => println!("{}", program),
+                Err(_) => print!("{}", source),
             }
             Ok(())
         }
         None => {
             if let Some(path) = &compiler.config.file {
                 let (_name, source) = input::read_file(path)?;
-                if compiler.config.interactive {
-                    Repl::new(compiler).run(Some(source))
-                } else {
-                    todo!()
-                }
+                Repl::new(config.repl, compiler).run(Some(source))
             } else {
-                Repl::new(compiler).run(None)
+                Repl::new(config.repl, compiler).run(None)
             }
         }
     }

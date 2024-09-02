@@ -9,4 +9,4 @@ edition = "2021"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-stabby = "4.0.2"
+# stabby = "36.1.1"

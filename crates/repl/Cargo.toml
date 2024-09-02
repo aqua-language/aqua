@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 compiler = { path = "../compiler" }
+config = { path = "../config" }
 
 anyhow = { version = "1.0.75" }
 regex = { version = "1.10.3" }

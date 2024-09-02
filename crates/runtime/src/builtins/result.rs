@@ -10,6 +10,15 @@ use crate::traits::DeepClone;
 #[repr(C)]
 pub struct Result<T>(pub std::result::Result<T, String>);
 
+impl<T:std::fmt::Display> std::fmt::Display for Result<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match &self.0 {
+            std::result::Result::Ok(x) => write!(f, "Ok({})", x),
+            std::result::Result::Err(x) => write!(f, "Error({})", x),
+        }
+    }
+}
+
 impl<T> Result<T> {
     pub fn ok(x: T) -> Self {
         Self(std::result::Result::Ok(x))

@@ -7,6 +7,13 @@ use crate::SmolStr;
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct String(pub(crate) SmolStr);
 
+impl std::fmt::Display for String {
+    #[inline(always)]
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl PartialEq<str> for String {
     #[inline(always)]
     fn eq(&self, other: &str) -> bool {
@@ -46,12 +53,5 @@ impl From<std::string::String> for String {
     #[inline(always)]
     fn from(s: std::string::String) -> Self {
         Self(SmolStr::from(s))
-    }
-}
-
-impl std::fmt::Display for String {
-    #[inline(always)]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
     }
 }

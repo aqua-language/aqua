@@ -13,7 +13,7 @@ use crate::ast::Query;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::StmtDefBody;
+use crate::ast::ExprBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
@@ -21,7 +21,7 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::StmtTypeBody;
+use crate::ast::TypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
@@ -152,14 +152,14 @@ pub(crate) trait Mapper {
         self.map_name(g)
     }
 
-    fn map_stmt_def_body(&mut self, b: &StmtDefBody) -> StmtDefBody {
+    fn map_stmt_def_body(&mut self, b: &ExprBody) -> ExprBody {
         self._map_stmt_def_body(b)
     }
     #[inline(always)]
-    fn _map_stmt_def_body(&mut self, b: &StmtDefBody) -> StmtDefBody {
+    fn _map_stmt_def_body(&mut self, b: &ExprBody) -> ExprBody {
         match b {
-            StmtDefBody::UserDefined(e) => StmtDefBody::UserDefined(self.map_expr(e)),
-            StmtDefBody::Builtin(b) => StmtDefBody::Builtin(b.clone()),
+            ExprBody::UserDefined(e) => ExprBody::UserDefined(Rc::new(self.map_expr(e))),
+            ExprBody::Builtin(b) => ExprBody::Builtin(b.clone()),
         }
     }
 
@@ -374,14 +374,14 @@ pub(crate) trait Mapper {
         StmtType::new(span, name, generics, body)
     }
 
-    fn map_stmt_type_body(&mut self, b: &StmtTypeBody) -> StmtTypeBody {
+    fn map_stmt_type_body(&mut self, b: &TypeBody) -> TypeBody {
         self._map_stmt_type_body(b)
     }
     #[inline(always)]
-    fn _map_stmt_type_body(&mut self, b: &StmtTypeBody) -> StmtTypeBody {
+    fn _map_stmt_type_body(&mut self, b: &TypeBody) -> TypeBody {
         match b {
-            StmtTypeBody::UserDefined(t) => StmtTypeBody::UserDefined(self.map_type(t)),
-            StmtTypeBody::Builtin(b) => StmtTypeBody::Builtin(b.clone()),
+            TypeBody::UserDefined(t) => TypeBody::UserDefined(self.map_type(t)),
+            TypeBody::Builtin(b) => TypeBody::Builtin(b.clone()),
         }
     }
 
@@ -506,20 +506,22 @@ pub(crate) trait Mapper {
             }
             Expr::Err(_, _) => Expr::Err(s, t),
             Expr::Value(_, _) => unreachable!(),
-            Expr::Query(_, _, x, e, qs) => {
-                let x = self.map_name(x);
+            Expr::Query(_, _, x0, t0, e, qs) => {
+                let x0 = self.map_name(x0);
+                let t0 = self.map_type(t0);
                 let e = self.map_expr(e);
                 let qs = self.map_query_stmts(qs);
-                Expr::Query(s, t, x, Rc::new(e), qs)
+                Expr::Query(s, t, x0, t0, Rc::new(e), qs)
             }
-            Expr::QueryInto(_, _, x0, e, qs, x1, ts, es) => {
+            Expr::QueryInto(_, _, x0, t0, e, qs, x1, ts, es) => {
                 let x0 = self.map_name(x0);
+                let t0 = self.map_type(t0);
                 let e = self.map_expr(e);
                 let qs = self.map_query_stmts(qs);
                 let x1 = self.map_name(x1);
                 let ts = self.map_types(ts);
                 let es = self.map_exprs(es);
-                Expr::QueryInto(s, t, x0, Rc::new(e), qs, x1, ts, es)
+                Expr::QueryInto(s, t, x0, t0, Rc::new(e), qs, x1, ts, es)
             }
             Expr::InfixBinaryOp(_, _, op, e0, e1) => {
                 let e0 = self.map_expr(e0);
@@ -570,6 +572,7 @@ pub(crate) trait Mapper {
                 let e1 = self.map_expr(e1);
                 Expr::Update(s, t, Rc::new(e0), x, Rc::new(e1))
             }
+            Expr::Anonymous(_, _) => Expr::Anonymous(s, t),
         }
     }
 
@@ -922,83 +925,83 @@ pub(crate) trait Mapper {
 }
 
 pub(crate) trait AcceptMapper {
-    fn map(&self, mapper: impl Mapper) -> Self;
+    fn map(&self, mapper: &mut impl Mapper) -> Self;
 }
 
 impl AcceptMapper for Program {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_program(self)
     }
 }
 
 impl AcceptMapper for Stmt {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_stmt(self)
     }
 }
 
 impl AcceptMapper for Expr {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_expr(self)
     }
 }
 
 impl AcceptMapper for Path {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_path(self)
     }
 }
 
 impl AcceptMapper for Segment {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_segment(self)
     }
 }
 
 impl AcceptMapper for Name {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_name(self)
     }
 }
 
 impl AcceptMapper for Type {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_type(self)
     }
 }
 
 impl AcceptMapper for Pat {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_pattern(self)
     }
 }
 
 impl AcceptMapper for Query {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_query_stmt(self)
     }
 }
 
 impl AcceptMapper for StmtDef {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_stmt_def(self)
     }
 }
 
-impl AcceptMapper for StmtDefBody {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+impl AcceptMapper for ExprBody {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_stmt_def_body(self)
     }
 }
 
 impl AcceptMapper for Trait {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_trait(self)
     }
 }
 
 impl AcceptMapper for Vec<Stmt> {
-    fn map(&self, mut mapper: impl Mapper) -> Self {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_stmts(self)
     }
 }

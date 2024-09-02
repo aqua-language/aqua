@@ -10,7 +10,7 @@ use crate::traits::DeepClone;
     Default, Send, Sync, Unpin, Serialize, Deserialize, Eq, PartialEq, Hash, Ord, PartialOrd,
 )]
 #[repr(C)]
-pub(crate) struct UncheckedCell<T: ?Sized>(pub(crate) std::rc::Rc<T>);
+pub struct UncheckedCell<T: ?Sized>(pub std::rc::Rc<T>);
 
 impl<T: DeepClone> DeepClone for UncheckedCell<T> {
     fn deep_clone(&self) -> Self {

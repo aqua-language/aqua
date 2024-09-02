@@ -12,7 +12,21 @@ use crate::HashMap;
 
 #[derive(Default, Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 #[repr(C)]
-pub struct Dict<K: Eq + Hash, V>(pub(crate) UncheckedCell<HashMap<K, V>>);
+pub struct Dict<K: Eq + Hash, V>(pub UncheckedCell<HashMap<K, V>>);
+
+impl<K: Eq + Hash + std::fmt::Display, V: std::fmt::Display> std::fmt::Display for Dict<K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{{")?;
+        let mut iter = self.0.iter();
+        if let Some((k, v)) = iter.next() {
+            write!(f, "{}: {}", k, v)?;
+            for (k, v) in iter {
+                write!(f, ", {}: {}", k, v)?;
+            }
+        }
+        write!(f, "}}")
+    }
+}
 
 impl<K: Key, V: Data> DeepClone for Dict<K, V> {
     fn deep_clone(&self) -> Self {

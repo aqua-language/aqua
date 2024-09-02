@@ -14,6 +14,12 @@ use super::string::String;
 #[repr(C)]
 pub struct Time(pub time::OffsetDateTime);
 
+impl std::fmt::Display for Time {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl Serialize for Time {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         let v = time::OffsetDateTime::format(self.0, &well_known::Iso8601::DEFAULT)

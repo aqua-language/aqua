@@ -16,7 +16,7 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::StmtTypeBody;
+use crate::ast::TypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
@@ -226,6 +226,7 @@ impl Mapper for Context {
                         Expr::Err(*s, t.clone())
                     }
                     None => {
+                        // Could potentially be a trait function call
                         let ts = self.map_types(&seg0.ts);
                         Expr::Unresolved(*s, t, seg0.name, ts)
                     }
@@ -383,8 +384,8 @@ impl Mapper for Context {
                             return Type::Err;
                         }
                         match &stmt.body {
-                            StmtTypeBody::UserDefined(_) => Type::Alias(seg0.name, seg0.ts.clone()),
-                            StmtTypeBody::Builtin(_) => Type::Cons(seg0.name, seg0.ts.clone()),
+                            TypeBody::UserDefined(_) => Type::Alias(seg0.name, seg0.ts.clone()),
+                            TypeBody::Builtin(_) => Type::Cons(seg0.name, seg0.ts.clone()),
                         }
                     }
                     Some(Binding::Trait(stmt)) => {

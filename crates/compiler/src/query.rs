@@ -73,14 +73,14 @@ impl Context {
     /// from x in e
     /// =>
     /// map(e, fun(x) = record(x=x))
-    fn first_from_clause(&mut self, s: Span, x: Name, e: &Expr) -> Expr {
+    fn first_from_clause(&mut self, s: Span, x: Name, t: Type, e: &Expr) -> Expr {
         let e = self.map_expr(e);
         self.bind_relational_var(x);
         let estruct = Expr::Record(s, Type::Unknown, vec![(x, expr_var(x))].into());
         let elam = Expr::Fun(
             s,
             Type::Unknown,
-            vec![(x, Type::Unknown)].into(),
+            vec![(x, t)].into(),
             Type::Unknown,
             Rc::new(estruct),
         );
@@ -268,16 +268,16 @@ impl Mapper for Context {
 
     fn map_expr(&mut self, e: &Expr) -> Expr {
         match e {
-            Expr::Query(s, _, x, e, qs) => {
+            Expr::Query(s, _, x, t, e, qs) => {
                 self.enter_scope();
-                let e = self.first_from_clause(*s, *x, e);
+                let e = self.first_from_clause(*s, *x, t.clone(), e);
                 let e = qs.iter().fold(e, |e, q| self.query(e, q));
                 self.exit_scope();
                 e
             }
-            Expr::QueryInto(s, t, x0, e, qs, x1, ts, es) => {
+            Expr::QueryInto(s, t, x0, t0, e, qs, x1, ts, es) => {
                 self.enter_scope();
-                let e = self.first_from_clause(*s, *x0, e);
+                let e = self.first_from_clause(*s, *x0, t0.clone(), e);
                 let e = qs.iter().fold(e, |e, q| self.query(e, q));
                 let es = self.map_exprs(es);
                 let es = std::iter::once(e).chain(es).collect();

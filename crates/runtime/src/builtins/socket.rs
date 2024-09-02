@@ -9,6 +9,12 @@ use crate::builtins::string::String;
 #[repr(C)]
 pub struct SocketAddr(pub std::net::SocketAddr);
 
+impl std::fmt::Display for SocketAddr {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl SocketAddr {
     pub fn new(ip: &'static str, port: u16) -> Self {
         Self(std::net::SocketAddr::new(ip.parse().unwrap(), port))

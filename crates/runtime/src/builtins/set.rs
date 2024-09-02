@@ -8,7 +8,21 @@ use crate::builtins::unchecked_cell::UncheckedCell;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(C)]
-pub struct Set<T: Eq + Hash>(pub(crate) UncheckedCell<HashSet<T>>);
+pub struct Set<T: Eq + Hash>(pub UncheckedCell<HashSet<T>>);
+
+impl<T: Eq + Hash + std::fmt::Display> std::fmt::Display for Set<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{{")?;
+        let mut iter = self.0.iter();
+        if let Some(x) = iter.next() {
+            write!(f, "{}", x)?;
+            for x in iter {
+                write!(f, ", {}", x)?;
+            }
+        }
+        write!(f, "}}")
+    }
+}
 
 impl<T: Eq + Hash> Default for Set<T> {
     fn default() -> Self {

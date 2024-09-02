@@ -9,7 +9,7 @@ use crate::ast::Name;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::StmtDefBody;
+use crate::ast::ExprBody;
 use crate::ast::StmtVar;
 use crate::span::Span;
 use crate::traversal::mapper::Mapper;
@@ -114,7 +114,7 @@ impl Visitor for Context {
 
     fn visit_stmt_def(&mut self, stmt: &StmtDef) {
         match &stmt.body {
-            StmtDefBody::UserDefined(e) => {
+            ExprBody::UserDefined(e) => {
                 self.stack.push(Scope::new());
                 let e = self.map_expr(e);
                 let s = e.span_of();
@@ -122,10 +122,10 @@ impl Visitor for Context {
                 let stmts = self.stack.pop().unwrap().stmts;
                 let e = Expr::Block(s, t.clone(), Block::new(s, stmts, e));
                 let mut stmt = stmt.clone();
-                stmt.body = StmtDefBody::UserDefined(e);
+                stmt.body = ExprBody::UserDefined(Rc::new(e));
                 self.push_stmt(Stmt::Def(Rc::new(stmt)));
             }
-            StmtDefBody::Builtin(_) => self.push_stmt(Stmt::Def(Rc::new(stmt.clone()))),
+            ExprBody::Builtin(_) => self.push_stmt(Stmt::Def(Rc::new(stmt.clone()))),
         }
     }
 }

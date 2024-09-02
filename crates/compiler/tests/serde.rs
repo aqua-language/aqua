@@ -5,12 +5,10 @@ use compiler::ast::TypeVar;
 use serde::de::DeserializeSeed;
 
 use compiler::ast::Type;
-use compiler::builtins::Array;
-use compiler::builtins::Record;
-use compiler::builtins::Tuple;
-use compiler::builtins::Value;
-
-use compiler::builtins::de::Seed;
+use compiler::builtins::types::array::Array;
+use compiler::builtins::types::record::Record;
+use compiler::builtins::types::tuple::Tuple;
+use compiler::builtins::value::Value;
 
 #[test]
 fn test_serde_i32() {
@@ -18,7 +16,7 @@ fn test_serde_i32() {
     let s = serde_json::to_string(&v0).unwrap();
     let mut de = serde_json::Deserializer::from_str(&s);
     let t = Type::Cons("i32".into(), vec![]);
-    let v1 = Seed(t).deserialize(&mut de).unwrap();
+    let v1 = t.deserialize(&mut de).unwrap();
     assert_eq!(v0, v1);
     assert_eq!(s, "1");
 }
@@ -33,7 +31,7 @@ fn test_serde_vec() {
     let mut de = serde_json::Deserializer::from_str(&s);
     let t0 = Type::Cons("i32".into(), vec![]);
     let t1 = Type::Cons("Vec".into(), vec![t0]);
-    let v4 = Seed(t1).deserialize(&mut de).unwrap();
+    let v4 = t1.deserialize(&mut de).unwrap();
     assert_eq!(v3, v4);
     assert_eq!(s, "[1,2,3]");
 }
@@ -50,7 +48,7 @@ fn test_serde_tuple() {
     let t1 = Type::Cons("i32".into(), vec![]);
     let t2 = Type::Cons("String".into(), vec![]);
     let t3 = Type::Tuple(vec![t0, t1, t2]);
-    let v4 = Seed(t3).deserialize(&mut de).unwrap();
+    let v4 = t3.deserialize(&mut de).unwrap();
     assert_eq!(v3, v4);
     assert_eq!(s, r#"[1,2,"Hello"]"#);
 }
@@ -72,7 +70,7 @@ fn test_serde_record() {
     let t0 = Type::Cons("i32".into(), vec![]);
     let t1 = Type::Cons("String".into(), vec![]);
     let t2 = Type::Record(Map::from(vec![("a".into(), t0), ("b".into(), t1)]));
-    let v3 = Seed(t2).deserialize(&mut de).unwrap();
+    let v3 = t2.deserialize(&mut de).unwrap();
     assert!(v2 == v3 || v2_permut == v3);
     assert!((s == r#"{"a":1,"b":"Hello"}"#) || (s == r#"{"b":"Hello","a":1}"#));
 }
@@ -93,7 +91,7 @@ fn test_serde_dict() {
     let t0 = Type::Cons("String".into(), vec![]);
     let t1 = Type::Cons("i32".into(), vec![]);
     let t2 = Type::Cons("Dict".into(), vec![t0, t1]);
-    let v3 = Seed(t2).deserialize(&mut de).unwrap();
+    let v3 = t2.deserialize(&mut de).unwrap();
     assert_eq!(v2, v3);
     assert!((s == r#"{"a":1,"b":2}"#) || (s == r#"{"b":2,"a":1}"#));
 }
@@ -108,7 +106,7 @@ fn test_serde_array() {
     let mut de = serde_json::Deserializer::from_str(&s);
     let t0 = Type::Cons("i32".into(), vec![]);
     let t1 = Type::Array(Rc::new(t0), Some(3));
-    let v4 = Seed(t1).deserialize(&mut de).unwrap();
+    let v4 = t1.deserialize(&mut de).unwrap();
     assert_eq!(v3, v4);
     assert_eq!(s, "[1,2,3]");
 }
@@ -126,7 +124,7 @@ fn test_serde_set() {
     let mut de = serde_json::Deserializer::from_str(&s);
     let t0 = Type::Cons("i32".into(), vec![]);
     let t1 = Type::Cons("Set".into(), vec![t0]);
-    let v3 = Seed(t1).deserialize(&mut de).unwrap();
+    let v3 = t1.deserialize(&mut de).unwrap();
     assert_eq!(v2, v3);
     assert!((s == r#"[1,2]"#) || (s == r#"[2,1]"#));
 }
@@ -139,7 +137,7 @@ fn test_serde_option_some() {
     let mut de = serde_json::Deserializer::from_str(&s);
     let t0 = Type::Cons("i32".into(), vec![]);
     let t1 = Type::Cons("Option".into(), vec![t0]);
-    let v2 = Seed(t1).deserialize(&mut de).unwrap();
+    let v2 = t1.deserialize(&mut de).unwrap();
     assert_eq!(v1, v2);
     assert_eq!(s, "1");
 }
@@ -151,7 +149,7 @@ fn test_serde_option_none() {
     let mut de = serde_json::Deserializer::from_str(&s);
     let t0 = Type::Cons("i32".into(), vec![]);
     let t1 = Type::Cons("Option".into(), vec![t0]);
-    let v2 = Seed(t1).deserialize(&mut de).unwrap();
+    let v2 = t1.deserialize(&mut de).unwrap();
     assert_eq!(v0, v2);
     assert_eq!(s, "null");
 }
@@ -164,7 +162,7 @@ fn test_serde_result_ok() {
     let mut de = serde_json::Deserializer::from_str(&s);
     let t0 = Type::Cons("i32".into(), vec![]);
     let t1 = Type::Cons("Result".into(), vec![t0]);
-    let v2 = Seed(t1).deserialize(&mut de).unwrap();
+    let v2 = t1.deserialize(&mut de).unwrap();
     assert_eq!(v1, v2);
     assert_eq!(s, r#"{"Ok":1}"#);
 }
@@ -177,7 +175,7 @@ fn test_serde_result_err() {
     let mut de = serde_json::Deserializer::from_str(&s);
     let t0 = Type::Cons("i32".into(), vec![]);
     let t1 = Type::Cons("Result".into(), vec![t0]);
-    let v2 = Seed(t1).deserialize(&mut de).unwrap();
+    let v2 = t1.deserialize(&mut de).unwrap();
     assert_eq!(v1, v2);
     assert_eq!(s, r#"{"Err":"Hello"}"#);
 }
@@ -201,12 +199,12 @@ fn test_serde_result_err() {
 fn test_serde_type_variable() {
     let mut de = serde_json::Deserializer::from_str("1");
     let t = Type::Var(TypeVar(1).into());
-    assert!(Seed(t).deserialize(&mut de).is_err());
+    assert!(t.deserialize(&mut de).is_err());
 }
 
 #[test]
 fn test_serde_type_error() {
     let mut de = serde_json::Deserializer::from_str("1.0");
     let t = Type::Cons("i32".into(), vec![]);
-    assert!(Seed(t).deserialize(&mut de).is_err());
+    assert!(t.deserialize(&mut de).is_err());
 }

@@ -1,7 +1,9 @@
 #![allow(unused)]
 
 use compiler::ast::Program;
+use compiler::parser::Parser;
 use compiler::Compiler;
+use config::ReplConfig;
 use helper::validator::StmtIterator;
 
 use std::io;
@@ -42,27 +44,29 @@ pub struct Repl {
     pub(crate) count: usize,
     pub(crate) editor: Editor<Helper, FileHistory>,
     pub(crate) compiler: Compiler,
+    pub(crate) config: ReplConfig,
 }
 
 impl Drop for Repl {
     fn drop(&mut self) {
-        self.editor.save_history(&self.compiler.config.history).ok();
+        self.editor.save_history(&self.config.history).ok();
     }
 }
 
 impl Repl {
-    pub fn new(compiler: Compiler) -> Self {
+    pub fn new(config: ReplConfig, compiler: Compiler) -> Self {
         let mut editor = Self::editor();
-        if !compiler.config.history.exists() {
-            std::fs::create_dir_all(compiler.config.history.parent().unwrap())
+        if !config.history.exists() {
+            std::fs::create_dir_all(config.history.parent().unwrap())
                 .expect("Unable to create history directory");
-            std::fs::File::create(&compiler.config.history).expect("Unable to create history");
+            std::fs::File::create(&config.history).expect("Unable to create history");
         }
-        editor.load_history(&compiler.config.history).ok();
+        editor.load_history(&config.history).ok();
         Self {
             count: 0,
             editor,
             compiler,
+            config,
         }
     }
 
@@ -114,17 +118,15 @@ impl Repl {
                 Ok(input) => {
                     let input: Rc<str> = Rc::from(input);
                     self.editor.add_history_entry(input.as_ref());
-                    todo!()
-                    // match self.compiler.parse(self.count, input, |p| p.parse()) {
-                    //     Ok(v) => {
-                    //         println!("{v}");
-                    //         self.color(Green);
-                    //     }
-                    //     Err((_, s)) => {
-                    //         println!("{s}");
-                    //         self.color(Red);
-                    //     }
-                    // }
+                    match self.compiler.compile_and_run(self.count, input.as_ref()) {
+                        Ok(_) => {
+                            self.color(Green);
+                        }
+                        Err(_) => {
+                            self.compiler.print_report();
+                            self.color(Red);
+                        }
+                    }
                 }
                 Err(ReadlineError::Interrupted) => {
                     stmts = None;

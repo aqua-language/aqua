@@ -121,7 +121,7 @@ fn test_union_find2() {
     let t2 = ty_tuple([t0.clone(), ty("i32")]);
 
     assert!(ctx.try_unify(&t1, &t2).is_ok());
-    assert!(ctx.try_unify(&t0, &ty("i32")).is_ok());
+    assert!(ctx.try_unify(&t0, &ty("bool")).is_ok());
 }
 
 #[test]
@@ -132,7 +132,7 @@ fn test_union_find3() {
 
     assert!(ctx.try_unify(&t0, &t1).is_ok());
     assert!(ctx.try_unify(&t0, &ty("i32")).is_ok());
-    assert_eq!(t1.apply(&mut ctx), ty_tuple([ty("i32"), ty("bool")]));
+    assert_eq!(t1.apply(&mut ctx), ty("i32"));
 }
 
 #[test]

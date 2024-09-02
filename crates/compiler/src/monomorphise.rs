@@ -1,44 +1,38 @@
-use std::collections::HashMap;
+pub mod mangle;
+
 use std::collections::HashSet;
-use std::fmt::Write;
 use std::rc::Rc;
 
 use ena::unify::InPlaceUnificationTable;
 
-use crate::ast::Trait;
+use mangle::Mangler;
 use crate::ast::Expr;
+use crate::ast::ExprBody;
 use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::StmtDefBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
+use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeVar;
+use crate::declare;
 use crate::infer::instantiate::Instantiate;
 use crate::infer::type_var::TypeVarKind;
 use crate::infer::type_var::TypeVarValue;
+use crate::traversal::mapper::AcceptMapper;
 use crate::traversal::mapper::Mapper;
-use crate::traversal::visitor::Visitor;
+use crate::traversal::visitor::AcceptVisitor;
 
 #[derive(Debug, Default)]
 pub struct Context {
     unique: HashSet<Name>,
-    defs: HashMap<Name, Rc<StmtDef>>,
-    types: HashMap<Name, Kind>,
-    impls: HashMap<Name, Vec<Rc<StmtImpl>>>,
+    decls: declare::Context,
     stmts: Vec<Stmt>,
     table: InPlaceUnificationTable<TypeVar>,
-}
-
-#[derive(Debug, Clone)]
-enum Kind {
-    Type,
-    Struct(Rc<StmtStruct>),
-    Enum(Rc<StmtEnum>),
 }
 
 impl Context {
@@ -47,7 +41,7 @@ impl Context {
     }
 
     pub fn monomorphise(&mut self, p: &Program) -> Program {
-        self.visit_program(p);
+        p.visit(&mut self.decls);
         let stmts1 = p
             .stmts
             .iter()
@@ -80,6 +74,8 @@ impl Context {
         let x = Mangler::mangle_fun(stmt.name, ts);
         if self.unique.contains(&x) {
             return x;
+        } else {
+            self.unique.insert(x);
         }
         let gsub = stmt
             .generics
@@ -87,10 +83,10 @@ impl Context {
             .into_iter()
             .zip(ts.to_vec())
             .collect::<Map<Name, Type>>();
-        let stmt = Instantiate::new(&gsub).map_stmt_def(stmt);
+        let stmt = stmt.map(&mut Instantiate::new(&gsub));
         let ps = stmt.params.mapv(|t| self.map_type(t));
-        let t = self.map_type(&stmt.ty);
-        let b = StmtDefBody::UserDefined(self.map_expr(stmt.body.as_expr()));
+        let t = stmt.ty.map(self);
+        let b = ExprBody::UserDefined(Rc::new(stmt.body.as_expr().map(self)));
         let stmt = StmtDef::new(stmt.span, x, vec![], ps, t, vec![], b);
         self.stmts.push(Stmt::Def(Rc::new(stmt)));
         x
@@ -100,6 +96,8 @@ impl Context {
         let x = Mangler::mangle_struct(stmt.name, ts);
         if self.unique.contains(&x) {
             return x;
+        } else {
+            self.unique.insert(x);
         }
         let gsub = stmt
             .generics
@@ -123,6 +121,8 @@ impl Context {
         let x = Mangler::mangle_enum(stmt.name, ts);
         if self.unique.contains(&x) {
             return x;
+        } else {
+            self.unique.insert(x);
         }
         let gsub = stmt
             .generics
@@ -148,6 +148,8 @@ impl Context {
         let x = Mangler::mangle_impl_def(x0, ts0, x1, ts1);
         if self.unique.contains(&x) {
             return x;
+        } else {
+            self.unique.insert(x);
         }
         let stmt_def = stmt.get_def(x1).unwrap();
         let gsub = stmt_def
@@ -170,7 +172,7 @@ impl Context {
         let Trait::Cons(x, _, _) = goal else {
             todo!();
         };
-        if let Some(impls) = self.impls.get(x).cloned() {
+        if let Some(impls) = self.decls.trait_impls.get(x).cloned() {
             for stmt in impls {
                 let gsub = stmt
                     .generics
@@ -275,50 +277,19 @@ impl Context {
     }
 }
 
-impl Visitor for Context {
-    fn visit_stmt(&mut self, s: &Stmt) {
-        match s {
-            Stmt::Var(_) => {}
-            Stmt::Def(s) => {
-                self.defs.insert(s.name, s.clone());
-            }
-            Stmt::Trait(_) => {}
-            Stmt::Impl(s) => match s.head {
-                Trait::Cons(x, _, _) => self.impls.entry(x.clone()).or_default().push(s.clone()),
-                _ => {}
-            },
-            Stmt::Struct(s) => {
-                self.types.insert(s.name, Kind::Struct(s.clone()));
-            }
-            Stmt::Enum(s) => {
-                self.types.insert(s.name, Kind::Enum(s.clone()));
-            }
-            Stmt::Type(s) => {
-                self.types.insert(s.name, Kind::Type);
-            }
-            Stmt::Expr(_) => {}
-            Stmt::Err(_) => {}
-        }
-    }
-}
-
 impl Mapper for Context {
     fn map_expr(&mut self, e: &Expr) -> Expr {
         let t = self.map_type(e.type_of());
         let s = e.span_of();
         match e {
             Expr::Struct(_, _, x, ts, xes) => {
-                let Kind::Struct(stmt) = self.types.get(x).unwrap().clone() else {
-                    unreachable!()
-                };
+                let stmt = self.decls.structs.get(x).unwrap().clone();
                 let x = self.monomorphise_stmt_struct(&stmt, ts);
                 let xes = self.map_expr_fields(xes).into();
                 Expr::Struct(s, t, x, vec![], xes)
             }
             Expr::Enum(_, _, x, ts, x1, e) => {
-                let Kind::Enum(stmt) = self.types.get(x).unwrap().clone() else {
-                    unreachable!()
-                };
+                let stmt = self.decls.enums.get(x).unwrap().clone();
                 let x = self.monomorphise_stmt_enum(&stmt, ts);
                 let e = self.map_expr(e);
                 Expr::Enum(s, t, x, vec![], *x1, Rc::new(e))
@@ -333,13 +304,13 @@ impl Mapper for Context {
             }
             Expr::Def(_, _, x, ts) => {
                 let ts = self.map_types(ts);
-                let stmt = self.defs.get(x).unwrap();
+                let stmt = self.decls.defs.get(x).unwrap();
                 match &stmt.body {
-                    StmtDefBody::UserDefined(_) => {
+                    ExprBody::UserDefined(_) => {
                         let x = self.monomorphise_stmt_def(&stmt.clone(), &ts);
                         Expr::Def(s, t, x, vec![])
                     }
-                    StmtDefBody::Builtin(_) => Expr::Def(s, t, *x, ts),
+                    ExprBody::Builtin(_) => Expr::Def(s, t, *x, ts),
                 }
             }
             _ => self._map_expr(e),
@@ -348,118 +319,21 @@ impl Mapper for Context {
 
     fn map_type(&mut self, t: &Type) -> Type {
         match t {
-            Type::Cons(x, ts) => match self.types.get(x).cloned().unwrap() {
-                Kind::Type => {
+            Type::Cons(x, ts) => {
+                if let Some(_) = self.decls.types.get(x).cloned() {
                     let ts = self.map_types(ts);
                     Type::Cons(*x, ts)
-                }
-                Kind::Struct(stmt) => {
+                } else if let Some(stmt) = self.decls.structs.get(x).cloned() {
                     let x = self.monomorphise_stmt_struct(stmt.as_ref(), ts);
                     Type::Cons(x, vec![])
-                }
-                Kind::Enum(stmt) => {
+                } else if let Some(stmt) = self.decls.enums.get(x).cloned() {
                     let x = self.monomorphise_stmt_enum(stmt.as_ref(), ts);
                     Type::Cons(x, vec![])
+                } else {
+                    unreachable!()
                 }
-            },
+            }
             _ => self._map_type(t),
-        }
-    }
-}
-
-struct Mangler(String);
-
-impl Mangler {
-    fn new() -> Mangler {
-        Mangler(String::new())
-    }
-
-    fn finish(self) -> Name {
-        self.0.into()
-    }
-
-    fn mangle_fun(x: Name, ts: &[Type]) -> Name {
-        if ts.len() == 0 {
-            return x;
-        }
-        let mut m = Mangler::new();
-        m.write(x);
-        ts.into_iter().for_each(|t| m.mangle_type_rec(t));
-        m.finish()
-    }
-
-    fn mangle_struct(x: Name, ts: &[Type]) -> Name {
-        if ts.len() == 0 {
-            return x;
-        }
-        let mut m = Mangler::new();
-        m.write(x);
-        ts.into_iter().for_each(|t| m.mangle_type_rec(t));
-        m.finish()
-    }
-
-    fn mangle_enum(x: Name, ts: &[Type]) -> Name {
-        if ts.len() == 0 {
-            return x;
-        }
-        let mut m = Mangler::new();
-        m.write(x);
-        ts.into_iter().for_each(|t| m.mangle_type_rec(t));
-        m.finish()
-    }
-
-    fn mangle_impl_def(x0: Name, ts0: &[Type], x1: Name, ts1: &[Type]) -> Name {
-        let mut m = Mangler::new();
-        m.write(x0);
-        ts0.into_iter().for_each(|t| m.mangle_type_rec(t));
-        m.write(x1);
-        ts1.into_iter().for_each(|t| m.mangle_type_rec(t));
-        m.finish()
-    }
-
-    fn write(&mut self, s: impl std::fmt::Display) {
-        write!(&mut self.0, "{s}").expect("Mangling should not fail");
-    }
-
-    fn mangle_type_rec(&mut self, t: &Type) {
-        match t {
-            Type::Path(_) => unreachable!(),
-            Type::Cons(x, ts) => {
-                self.write(x);
-                ts.into_iter().for_each(|t| self.mangle_type_rec(t));
-            }
-            Type::Alias(_, _) => unreachable!(),
-            Type::Assoc(_, _, _) => unreachable!(),
-            Type::Var(_) => unreachable!(),
-            Type::Generic(_) => unreachable!(),
-            Type::Fun(ts, t) => {
-                self.write("Fun");
-                ts.into_iter().for_each(|t| self.mangle_type_rec(t));
-                self.mangle_type_rec(t);
-                self.write("End");
-            }
-            Type::Tuple(ts) => {
-                self.write("Tuple");
-                ts.into_iter().for_each(|t| self.mangle_type_rec(t));
-                self.write("End");
-            }
-            Type::Record(xts) => {
-                self.write("Record");
-                xts.into_iter().for_each(|(x, t)| {
-                    self.write(x);
-                    self.mangle_type_rec(t);
-                });
-                self.write("End");
-            }
-            Type::Array(t, _i) => {
-                self.write("Array");
-                self.mangle_type_rec(t);
-                self.write("End");
-            }
-            Type::Never => unreachable!(),
-            Type::Paren(_) => unreachable!(),
-            Type::Err => unreachable!(),
-            Type::Unknown => unreachable!(),
         }
     }
 }
