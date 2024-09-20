@@ -1,5 +1,5 @@
 use compiler::lexer::Lexer;
-use compiler::sources::Sources;
+use compiler::source::SourceId;
 use compiler::token::Token;
 
 fn next<'a>(lexer: &mut Lexer<'a>) -> Option<(std::ops::Range<u32>, Token, &'a str)> {
@@ -8,9 +8,13 @@ fn next<'a>(lexer: &mut Lexer<'a>) -> Option<(std::ops::Range<u32>, Token, &'a s
         .map(|t| ((*t.s.start()..*t.s.end()), t.v, lexer.text(t)))
 }
 
+fn lexer(s: &'static str) -> Lexer<'static> {
+    Lexer::new(SourceId::new("test", s), s)
+}
+
 #[test]
 fn test_lexer_int0() {
-    let lexer = &mut Lexer::new(0, "123");
+    let lexer = &mut lexer("123");
     assert_eq!(next(lexer), Some((0..3, Token::Int, "123")));
     assert_eq!(next(lexer), Some((3..3, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -19,7 +23,7 @@ fn test_lexer_int0() {
 
 #[test]
 fn test_lexer_int_suffix0() {
-    let lexer = &mut Lexer::new(0, "60s");
+    let lexer = &mut lexer("60s");
     assert_eq!(next(lexer), Some((0..3, Token::IntSuffix, "60s")));
     assert_eq!(next(lexer), Some((3..3, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -28,7 +32,7 @@ fn test_lexer_int_suffix0() {
 
 #[test]
 fn test_lexer_int_suffix1() {
-    let lexer = &mut Lexer::new(0, "60_foo");
+    let lexer = &mut lexer("60_foo");
     assert_eq!(next(lexer), Some((0..6, Token::IntSuffix, "60_foo")));
     assert_eq!(next(lexer), Some((6..6, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -37,7 +41,7 @@ fn test_lexer_int_suffix1() {
 
 #[test]
 fn test_lexer_float0() {
-    let lexer = &mut Lexer::new(0, "123.456");
+    let lexer = &mut lexer("123.456");
     assert_eq!(next(lexer), Some((0..7, Token::Float, "123.456")));
     assert_eq!(next(lexer), Some((7..7, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -46,7 +50,7 @@ fn test_lexer_float0() {
 
 #[test]
 fn test_lexer_float1() {
-    let lexer = &mut Lexer::new(0, "123.");
+    let lexer = &mut lexer("123.");
     assert_eq!(next(lexer), Some((0..3, Token::Int, "123")));
     assert_eq!(next(lexer), Some((3..4, Token::Dot, ".")));
     assert_eq!(next(lexer), Some((4..4, Token::Eof, "")));
@@ -56,7 +60,7 @@ fn test_lexer_float1() {
 
 #[test]
 fn test_lexer_float_suffix0() {
-    let lexer = &mut Lexer::new(0, "60.0ms");
+    let lexer = &mut lexer("60.0ms");
     assert_eq!(next(lexer), Some((0..6, Token::FloatSuffix, "60.0ms")));
     assert_eq!(next(lexer), Some((6..6, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -65,7 +69,7 @@ fn test_lexer_float_suffix0() {
 
 #[test]
 fn test_lexer_float_suffix1() {
-    let lexer = &mut Lexer::new(0, "60.0_foo");
+    let lexer = &mut lexer("60.0_foo");
     assert_eq!(next(lexer), Some((0..8, Token::FloatSuffix, "60.0_foo")));
     assert_eq!(next(lexer), Some((8..8, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -74,7 +78,7 @@ fn test_lexer_float_suffix1() {
 
 #[test]
 fn test_lexer_name0() {
-    let lexer = &mut Lexer::new(0, "abc");
+    let lexer = &mut lexer("abc");
     assert_eq!(next(lexer), Some((0..3, Token::Name, "abc")));
     assert_eq!(next(lexer), Some((3..3, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -83,7 +87,7 @@ fn test_lexer_name0() {
 
 #[test]
 fn test_lexer_name1() {
-    let lexer = &mut Lexer::new(0, "_ _1 _a a_ a_1");
+    let lexer = &mut lexer("_ _1 _a a_ a_1");
     assert_eq!(next(lexer), Some((0..1, Token::Underscore, "_")));
     assert_eq!(next(lexer), Some((2..4, Token::Name, "_1")));
     assert_eq!(next(lexer), Some((5..7, Token::Name, "_a")));
@@ -96,7 +100,7 @@ fn test_lexer_name1() {
 
 #[test]
 fn test_lexer_keywords0() {
-    let lexer = &mut Lexer::new(0, "def impl struct enum var type");
+    let lexer = &mut lexer("def impl struct enum var type");
     assert_eq!(next(lexer), Some((0..3, Token::Def, "def")));
     assert_eq!(next(lexer), Some((4..8, Token::Impl, "impl")));
     assert_eq!(next(lexer), Some((9..15, Token::Struct, "struct")));
@@ -110,10 +114,7 @@ fn test_lexer_keywords0() {
 
 #[test]
 fn test_lexer_keywords1() {
-    let lexer = &mut Lexer::new(
-        0,
-        "true false or and if else while for break continue return match fun",
-    );
+    let lexer = &mut lexer("true false or and if else while for break continue return match");
     assert_eq!(next(lexer), Some((0..4, Token::True, "true")));
     assert_eq!(next(lexer), Some((5..10, Token::False, "false")));
     assert_eq!(next(lexer), Some((11..13, Token::Or, "or")));
@@ -126,15 +127,14 @@ fn test_lexer_keywords1() {
     assert_eq!(next(lexer), Some((42..50, Token::Continue, "continue")));
     assert_eq!(next(lexer), Some((51..57, Token::Return, "return")));
     assert_eq!(next(lexer), Some((58..63, Token::Match, "match")));
-    assert_eq!(next(lexer), Some((64..67, Token::Fun, "fun")));
-    assert_eq!(next(lexer), Some((67..67, Token::Eof, "")));
+    assert_eq!(next(lexer), Some((63..63, Token::Eof, "")));
     assert_eq!(next(lexer), None);
     assert!(lexer.report.is_empty());
 }
 
 #[test]
 fn test_lexer_keywords2() {
-    let lexer = &mut Lexer::new(0, "from into where select group with over join on");
+    let lexer = &mut lexer("from into where select group with over join on");
     assert_eq!(next(lexer), Some((0..4, Token::From, "from")));
     assert_eq!(next(lexer), Some((5..9, Token::Into, "into")));
     assert_eq!(next(lexer), Some((10..15, Token::Where, "where")));
@@ -151,7 +151,7 @@ fn test_lexer_keywords2() {
 
 #[test]
 fn test_lexer_punct0() {
-    let lexer = &mut Lexer::new(0, "= == != < <= > >= + - * / . .. , : ; ? _ => ::");
+    let lexer = &mut lexer("= == != < <= > >= + - * / . .. , : ; ? _ => ::");
     assert_eq!(next(lexer), Some((0..1, Token::Eq, "=")));
     assert_eq!(next(lexer), Some((2..4, Token::EqEq, "==")));
     assert_eq!(next(lexer), Some((5..7, Token::NotEq, "!=")));
@@ -179,7 +179,7 @@ fn test_lexer_punct0() {
 
 #[test]
 fn test_lexer_string0() {
-    let lexer = &mut Lexer::new(0, r#""abc""#);
+    let lexer = &mut lexer(r#""abc""#);
     assert_eq!(next(lexer), Some((0..5, Token::String, "abc")));
     assert_eq!(next(lexer), Some((5..5, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -188,7 +188,7 @@ fn test_lexer_string0() {
 
 #[test]
 fn test_lexer_string1() {
-    let lexer = &mut Lexer::new(0, r#""abc\"def""#);
+    let lexer = &mut lexer(r#""abc\"def""#);
     assert_eq!(next(lexer), Some((0..10, Token::String, r#"abc\"def"#)));
     assert_eq!(next(lexer), Some((10..10, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -197,7 +197,7 @@ fn test_lexer_string1() {
 
 #[test]
 fn test_lexer_char0() {
-    let lexer = &mut Lexer::new(0, "'a' 'b' 'c' 'd' 'e' 'f' 'g' 'h' 'i' 'j'");
+    let lexer = &mut lexer("'a' 'b' 'c' 'd' 'e' 'f' 'g' 'h' 'i' 'j'");
     assert_eq!(next(lexer), Some((0..3, Token::Char, "a")));
     assert_eq!(next(lexer), Some((4..7, Token::Char, "b")));
     assert_eq!(next(lexer), Some((8..11, Token::Char, "c")));
@@ -215,7 +215,7 @@ fn test_lexer_char0() {
 
 #[test]
 fn test_lexer_char1() {
-    let lexer = &mut Lexer::new(0, r"'\n' '\t' '\r' '\0' '\\' '\''");
+    let lexer = &mut lexer(r"'\n' '\t' '\r' '\0' '\\' '\''");
     assert_eq!(next(lexer), Some((0..4, Token::Char, r"\n")));
     assert_eq!(next(lexer), Some((5..9, Token::Char, r"\t")));
     assert_eq!(next(lexer), Some((10..14, Token::Char, r"\r")));
@@ -229,7 +229,7 @@ fn test_lexer_char1() {
 
 #[test]
 fn test_lexer_separators0() {
-    let lexer = &mut Lexer::new(0, "[[]] (()) {{}}");
+    let lexer = &mut lexer("[[]] (()) {{}}");
     assert_eq!(next(lexer), Some((0..1, Token::LBrack, "[")));
     assert_eq!(next(lexer), Some((1..2, Token::LBrack, "[")));
     assert_eq!(next(lexer), Some((2..3, Token::RBrack, "]")));
@@ -249,7 +249,7 @@ fn test_lexer_separators0() {
 
 #[test]
 fn test_lexer_code0() {
-    let lexer = &mut Lexer::new(0, "--- fn main() {} ---");
+    let lexer = &mut lexer("--- fn main() {} ---");
     assert_eq!(next(lexer), Some((0..20, Token::Code, " fn main() {} ")));
     assert_eq!(next(lexer), Some((20..20, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -258,7 +258,7 @@ fn test_lexer_code0() {
 
 #[test]
 fn test_lexer_code1() {
-    let lexer = &mut Lexer::new(0, "1 + 2; --- fn main() {} --- 3 + 4;");
+    let lexer = &mut lexer("1 + 2; --- fn main() {} --- 3 + 4;");
     assert_eq!(next(lexer), Some((0..1, Token::Int, "1")));
     assert_eq!(next(lexer), Some((2..3, Token::Plus, "+")));
     assert_eq!(next(lexer), Some((4..5, Token::Int, "2")));
@@ -275,7 +275,7 @@ fn test_lexer_code1() {
 
 #[test]
 fn test_lexer_code2() {
-    let lexer = &mut Lexer::new(0, "-- -");
+    let lexer = &mut lexer("-- -");
     assert_eq!(next(lexer), Some((0..1, Token::Minus, "-")));
     assert_eq!(next(lexer), Some((1..2, Token::Minus, "-")));
     assert_eq!(next(lexer), Some((3..4, Token::Minus, "-")));
@@ -286,7 +286,7 @@ fn test_lexer_code2() {
 
 #[test]
 fn test_lexer_code3() {
-    let lexer = &mut Lexer::new(0, "--- -- - ---");
+    let lexer = &mut lexer("--- -- - ---");
     assert_eq!(next(lexer), Some((0..12, Token::Code, " -- - ")));
     assert_eq!(next(lexer), Some((12..12, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -295,7 +295,7 @@ fn test_lexer_code3() {
 
 #[test]
 fn test_lexer_comments0() {
-    let lexer = &mut Lexer::new(0, "1 # + 2");
+    let lexer = &mut lexer("1 # + 2");
     assert_eq!(next(lexer), Some((0..1, Token::Int, "1")));
     assert_eq!(next(lexer), Some((7..7, Token::Eof, "")));
     assert_eq!(next(lexer), None);
@@ -304,7 +304,7 @@ fn test_lexer_comments0() {
 
 #[test]
 fn test_lexer_comments1() {
-    let lexer = &mut Lexer::new(0, "1 # + 2\n3");
+    let lexer = &mut lexer("1 # + 2\n3");
     assert_eq!(next(lexer), Some((0..1, Token::Int, "1")));
     assert_eq!(next(lexer), Some((8..9, Token::Int, "3")));
     assert_eq!(next(lexer), Some((9..9, Token::Eof, "")));
@@ -314,7 +314,7 @@ fn test_lexer_comments1() {
 
 #[test]
 fn test_lexer_err0() {
-    let lexer = &mut Lexer::new(0, "\\ % ^ & ~ ` $");
+    let lexer = &mut lexer("\\ % ^ & ~ ` $");
     assert_eq!(next(lexer), Some((0..1, Token::Err, "\\")));
     assert_eq!(next(lexer), Some((2..3, Token::Err, "%")));
     assert_eq!(next(lexer), Some((4..5, Token::Err, "^")));
@@ -329,18 +329,15 @@ fn test_lexer_err0() {
 
 #[test]
 fn test_lexer_err1() {
-    let mut sources = Sources::new();
-    let source = "%";
-    let file = sources.add("file", source);
-    let lexer = &mut Lexer::new(file, source);
+    let lexer = &mut lexer("%");
     assert_eq!(next(lexer), Some((0..1, Token::Err, "%")));
     assert_eq!(next(lexer), Some((1..1, Token::Eof, "")));
     assert_eq!(next(lexer), None);
     assert_eq!(
-        lexer.report.string(&mut sources).unwrap(),
+        lexer.report.string().unwrap(),
         indoc::indoc! {"
         Error: Unexpected character
-           ╭─[file:1:1]
+           ╭─[test:1:1]
            │
          1 │ %
            │ ┬  
@@ -353,7 +350,7 @@ fn test_lexer_err1() {
 
 #[test]
 fn test_lexer_unused0() {
-    let lexer = &mut Lexer::new(0, "-> <- ..=");
+    let lexer = &mut lexer("-> <- ..=");
     assert_eq!(next(lexer), Some((0..1, Token::Minus, "-")));
     assert_eq!(next(lexer), Some((1..2, Token::Gt, ">")));
     assert_eq!(next(lexer), Some((3..4, Token::Lt, "<")));
@@ -367,7 +364,7 @@ fn test_lexer_unused0() {
 
 #[test]
 fn test_lexer_eof0() {
-    let lexer = &mut Lexer::new(0, "");
+    let lexer = &mut lexer("");
     assert_eq!(next(lexer), Some((0..0, Token::Eof, "")));
     assert_eq!(next(lexer), None);
     assert!(lexer.report.is_empty());
@@ -375,7 +372,7 @@ fn test_lexer_eof0() {
 
 #[test]
 fn test_lexer_eof1() {
-    let lexer = &mut Lexer::new(0, " ");
+    let lexer = &mut lexer(" ");
     assert_eq!(next(lexer), Some((1..1, Token::Eof, "")));
     assert_eq!(next(lexer), None);
     assert!(lexer.report.is_empty());
@@ -383,7 +380,7 @@ fn test_lexer_eof1() {
 
 #[test]
 fn test_lexer_range0() {
-    let lexer = &mut Lexer::new(0, ".. 1.. ..2 1..2");
+    let lexer = &mut lexer(".. 1.. ..2 1..2");
     assert_eq!(next(lexer), Some(((0..2), Token::DotDot, "..")));
     assert_eq!(next(lexer), Some(((3..4), Token::Int, "1")));
     assert_eq!(next(lexer), Some(((4..6), Token::DotDot, "..")));

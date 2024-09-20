@@ -4,6 +4,7 @@ use serde::Serialize;
 use crate::builtins::path::Path;
 use crate::builtins::socket::SocketAddr;
 use crate::builtins::string::String;
+use crate::traits::DeepClone;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[repr(C)]
@@ -13,6 +14,12 @@ pub enum Writer {
     // Http { url: Url },
     Tcp { addr: SocketAddr },
     Kafka { addr: SocketAddr, topic: String },
+}
+
+impl DeepClone for Writer {
+    fn deep_clone(&self) -> Self {
+        self.clone()
+    }
 }
 
 impl std::fmt::Display for Writer {

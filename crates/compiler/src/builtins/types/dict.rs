@@ -1,20 +1,33 @@
+use linkme::distributed_slice;
 use runtime::builtins::dict::Dict;
 
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_dict(&mut self) {
-        self.declare_type("type Dict[K,V];", BuiltinType { rust: "Dict" });
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Dict[K,V];",
+        codegen: Some(Codegen {
+            rust: "Dict",
+            java: "Dict",
+            egglog: None,
+        }),
+    });
 
-        self.declare_def(
-            "def dict_new[K,V](): Dict[K,V];",
-            BuiltinDef {
+    ctx.declare(Decl::Impl {
+        aqua: "impl[K,V] Dict[K,V]",
+        decls: &[ImplDecl::Def {
+            aqua: "def new(): Dict[K,V];",
+            codegen: Some(Codegen {
                 rust: "Dict::new",
-                fun: |_ctx, _v| Dict::new().into(),
-            },
-        );
-    }
+                java: "Dict.new",
+                egglog: None,
+            }),
+            fun: |_ctx, _v| Dict::new().into(),
+        }],
+    });
 }

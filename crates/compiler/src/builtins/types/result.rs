@@ -1,79 +1,99 @@
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_result(&mut self) {
-        self.declare_type("type Result[T];", BuiltinType { rust: "Result" });
-        self.declare_def(
-            "def ok[T](v: T): Result[T];",
-            BuiltinDef {
-                rust: "Result::ok",
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Result[T];",
+        codegen: Some(Codegen {
+            rust: "Result",
+            java: "Result",
+            egglog: None,
+        }),
+    });
+    ctx.declare(Decl::Impl {
+        aqua: "impl Result",
+        decls: &[
+            ImplDecl::Def {
+                aqua: "def ok[T](v: T): Result[T];",
+                codegen: Some(Codegen {
+                    rust: "Result::ok",
+                    java: "Result.ok",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].clone();
                     // Result::ok(v0).into()
                 },
             },
-        );
-
-        self.declare_def(
-            "def error[T](v: T): Result[T];",
-            BuiltinDef {
-                rust: "Result::error",
+            ImplDecl::Def {
+                aqua: "def error[T](v: T): Result[T];",
+                codegen: Some(Codegen {
+                    rust: "Result::error",
+                    java: "Result.error",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_string();
                     // Result::error(v0).into()
                 },
             },
-        );
-
-        self.declare_def(
-            "def is_ok[T](v: Result[T]): bool;",
-            BuiltinDef {
-                rust: "Result::is_ok",
+            ImplDecl::Def {
+                aqua: "def is_ok[T](v: Result[T]): bool;",
+                codegen: Some(Codegen {
+                    rust: "Result::is_ok",
+                    java: "Result.isOk",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     let v0 = _v[0].as_result();
                     v0.is_ok().into()
                 },
             },
-        );
-
-        self.declare_def(
-            "def is_error[T](v: Result[T]): bool;",
-            BuiltinDef {
-                rust: "Result::is_error",
+            ImplDecl::Def {
+                aqua: "def is_error[T](v: Result[T]): bool;",
+                codegen: Some(Codegen {
+                    rust: "Result::is_error",
+                    java: "Result.isError",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     let v0 = _v[0].as_result();
                     v0.is_error().into()
                 },
             },
-        );
-
-        self.declare_def(
-            "def unwrap_ok[T](v: Result[T]): T;",
-            BuiltinDef {
-                rust: "Result::unwrap_ok",
+            ImplDecl::Def {
+                aqua: "def unwrap_ok[T](v: Result[T]): T;",
+                codegen: Some(Codegen {
+                    rust: "Result::unwrap_ok",
+                    java: "Result.unwrapOk",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_result();
                     // v0.unwrap_ok()
                 },
             },
-        );
-
-        self.declare_def(
-            "def unwrap_error[T](v: Result[T]): T;",
-            BuiltinDef {
-                rust: "Result::unwrap_error",
+            ImplDecl::Def {
+                aqua: "def unwrap_error[T](v: Result[T]): T;",
+                codegen: Some(Codegen {
+                    rust: "Result::unwrap_error",
+                    java: "Result.unwrapError",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_result();
                     // v0.unwrap_error().into()
                 },
             },
-        );
-    }
+        ],
+    });
 }

@@ -93,6 +93,17 @@ impl<K, V> Map<K, V> {
         self.0.iter().map(|(k, _)| k)
     }
 
+    pub fn remove(&mut self, k: &K) -> Option<V>
+    where
+        K: PartialEq,
+    {
+        let idx = self.0.iter().position(|(k1, _)| k1 == k);
+        match idx {
+            Some(idx) => Some(self.0.remove(idx).1),
+            None => None,
+        }
+    }
+
     pub fn values(&self) -> impl Iterator<Item = &V> {
         self.0.iter().map(|(_, v)| v)
     }

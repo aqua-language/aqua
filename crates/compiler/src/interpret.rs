@@ -1,3 +1,6 @@
+use runtime::prelude::Send;
+use runtime::prelude::Sync;
+
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
@@ -13,19 +16,17 @@ use crate::builtins::types::tuple::Tuple;
 use crate::builtins::types::variant::Variant;
 use crate::builtins::value::Value;
 use crate::declare;
-use crate::diag::Report;
 use crate::package;
 use crate::traversal::visitor::AcceptVisitor;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Send, Sync, Clone)]
 pub struct Context {
     pub stack: Stack,
-    pub report: Report,
     pub decls: declare::Context,
     pub workspace: package::Workspace,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Stack(Vec<Scope>);
 
 impl Default for Stack {
@@ -61,7 +62,7 @@ impl Stack {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Scope(Map<Name, Value>);
 
 impl Scope {
@@ -74,7 +75,6 @@ impl Context {
     pub fn new() -> Context {
         Context {
             stack: Stack::new(),
-            report: Report::new(),
             decls: declare::Context::default(),
             workspace: package::Workspace::new(),
         }
@@ -175,7 +175,7 @@ impl Context {
                 let s = self.decls.defs.get(x).unwrap().clone();
                 Fun::new(s.params.clone(), s.body.clone()).into()
             }
-            Expr::TraitMethod(_, _, _, _, _) => unreachable!(),
+            Expr::Assoc(_, _, _, _, _) => unreachable!(),
             Expr::Call(_, _, e, es) => {
                 let f = self.eval_expr(e).as_function();
                 let vs = es.iter().map(|e| self.eval_expr(e)).collect::<Vec<_>>();
@@ -212,13 +212,11 @@ impl Context {
                 }
                 Tuple::new(vec![]).into()
             }
-            Expr::Fun(_, _, xts, _, e) => {
+            Expr::Lambda(_, _, xts, _, e) => {
                 Fun::new(xts.clone(), ExprBody::UserDefined(e.clone())).into()
             }
             Expr::Err(_, _) => unreachable!(),
-            Expr::Value(_, _) => unreachable!(),
             Expr::For(_, _, _, _, _) => unreachable!(),
-            Expr::Unresolved(_, _, _, _) => unreachable!(),
             Expr::InfixBinaryOp(_, _, _, _, _) => todo!(),
             Expr::PrefixUnaryOp(_, _, _, _) => todo!(),
             Expr::PostfixUnaryOp(_, _, _, _) => todo!(),
@@ -237,6 +235,9 @@ impl Context {
             Expr::LetIn(_, _, _, _, _, _) => todo!(),
             Expr::Update(_, _, _, _, _) => todo!(),
             Expr::Anonymous(_, _) => unreachable!(),
+            Expr::Closure(_, _, _xts0, _xts1, _t, _e) => {
+                todo!()
+            }
         }
     }
 }

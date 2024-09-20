@@ -6,17 +6,19 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::builtins::option::Option;
-use crate::builtins::unchecked_cell::UncheckedCell;
 use crate::traits::DeepClone;
+
+use super::cell::Cell;
 
 #[derive(Debug, Send, Sync, Unpin, Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd)]
 #[repr(C)]
-pub struct Vec<T>(pub UncheckedCell<std::vec::Vec<T>>);
+pub struct Vec<T>(pub Cell<std::vec::Vec<T>>);
 
 impl<T: std::fmt::Display> std::fmt::Display for Vec<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "[")?;
-        let mut iter = self.0.iter();
+        let x = self.0.as_ref();
+        let mut iter = x.iter();
         if let Some(v) = iter.next() {
             write!(f, "{}", v)?;
             for v in iter {
@@ -47,7 +49,7 @@ impl<T: DeepClone> DeepClone for Vec<T> {
 
 impl<T> Default for Vec<T> {
     fn default() -> Self {
-        Vec(UncheckedCell::new(std::vec::Vec::<T>::new()))
+        Vec(Cell::new(std::vec::Vec::<T>::new()))
     }
 }
 
@@ -57,87 +59,66 @@ impl<T> Vec<T> {
     }
 
     pub fn len(self) -> usize {
-        self.0.len()
+        self.0.as_ref().len()
     }
 
-    /// # Safety
-    ///
-    /// Refer to the documentation of `UncheckedCell::as_mut_unchecked`.
-    pub unsafe fn push(&self, value: T)
+    pub fn push(&self, value: T)
     where
         T: Clone,
     {
-        self.0.as_mut_unchecked().push(value);
+        self.0.as_mut().push(value);
     }
 
-    /// # Safety
-    ///
-    /// Refer to the documentation of `UncheckedCell::as_mut_unchecked`.
-    pub unsafe fn pop(&self) -> Option<T>
+    pub fn pop(&self) -> Option<T>
     where
         T: Clone,
     {
-        Option::from(self.0.as_mut_unchecked().pop())
+        Option::from(self.0.as_mut().pop())
     }
 
-    /// # Safety
-    ///
-    /// Refer to the documentation of `UncheckedCell::as_mut_unchecked`.
-    pub unsafe fn remove(&self, index: usize) -> T
+    pub fn remove(&self, index: usize) -> T
     where
         T: Clone,
     {
-        self.0.as_mut_unchecked().remove(index)
+        self.0.as_mut().remove(index)
     }
 
     pub fn get(&self, index: usize) -> Option<T>
     where
         T: Clone,
     {
-        Option::from(self.0.get(index).cloned())
+        Option::from(self.0.as_ref().get(index).cloned())
     }
 
-    /// # Safety
-    ///
-    /// Refer to the documentation of `UncheckedCell::as_mut_unchecked`.
-    pub unsafe fn insert(&self, index: usize, value: T)
+    pub fn insert(&self, index: usize, value: T)
     where
         T: Clone,
     {
-        self.0.as_mut_unchecked().insert(index, value);
+        self.0.as_mut().insert(index, value);
     }
 
     pub fn is_empty(self) -> bool {
-        self.0.is_empty()
+        self.0.as_ref().is_empty()
     }
 
-    /// # Safety
-    ///
-    /// Refer to the documentation of `UncheckedCell::as_mut_unchecked`.
-    pub unsafe fn sort(&self)
+    pub fn sort(&self)
     where
         T: Clone + PartialOrd,
     {
         self.0
-            .as_mut_unchecked()
+            .as_mut()
             .sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     }
 
-    /// # Safety
-    ///
-    /// Refer to the documentation of `UncheckedCell::as_mut_unchecked`.
-    pub unsafe fn truncate(&self, len: usize)
+    pub fn truncate(&self, len: usize)
     where
         T: Clone,
     {
-        self.0.as_mut_unchecked().truncate(len);
+        self.0.as_mut().truncate(len);
     }
 
-    /// # Safety
-    ///
-    /// Refer to the documentation of `UncheckedCell::as_mut_unchecked`.
-    pub unsafe fn clear(&self) {
-        self.0.as_mut_unchecked().clear();
+    pub fn clear(&self) {
+        self.0.as_mut().clear();
     }
 
     pub fn iter(&self) -> VecIter<T>
@@ -149,11 +130,18 @@ impl<T> Vec<T> {
             index: 0,
         }
     }
+
+    pub fn extend(&self, other: Vec<T>)
+    where
+        T: Clone,
+    {
+        self.0.as_mut().extend(other.0.as_ref().clone());
+    }
 }
 
 impl<T> From<std::vec::Vec<T>> for Vec<T> {
     fn from(vec: std::vec::Vec<T>) -> Self {
-        Vec(UncheckedCell::new(vec))
+        Vec(Cell::new(vec))
     }
 }
 
@@ -177,6 +165,6 @@ where
 
 impl<T> FromIterator<T> for Vec<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        Vec(UncheckedCell::new(std::vec::Vec::from_iter(iter)))
+        Vec(Cell::new(std::vec::Vec::from_iter(iter)))
     }
 }

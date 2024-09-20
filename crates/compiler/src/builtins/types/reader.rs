@@ -1,66 +1,64 @@
 use runtime::builtins::reader::Reader;
 
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_reader(&mut self) {
-        self.declare_type("type Reader;", BuiltinType { rust: "Reader" });
-        // self.declare_def(
-        //     "def stdin_reader(): Reader;",
-        //     BuiltinDef {
-        //         rust: "Reader::stdin",
-        //         fun: |_ctx, _v| Reader::stdin().into(),
-        //     },
-        // );
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Reader;",
+        codegen: None,
+    });
+    // ctx.declare_def(
+    //     "def stdin_reader(): Reader;",
+    //     ImplDecl::Def {
+    //         rust: "Reader::stdin",
+    //         fun: |_ctx, _v| Reader::stdin().into(),
+    //     },
+    // );
 
-        self.declare_def(
-            "def file_reader(path: Path, watch: bool): Reader;",
-            BuiltinDef {
-                rust: "Reader::file",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Reader",
+        decls: &[
+            ImplDecl::Def {
+                aqua: "def file_reader(path: Path, watch: bool): Reader;",
+                codegen: None,
                 fun: |_ctx, v| {
                     let path = v[0].as_path();
                     let watch = v[1].as_bool();
                     Reader::file(path, watch).into()
                 },
             },
-        );
-
-        // self.declare_def(
-        //     "def http_reader(a0: Url): Reader;",
-        //     BuiltinDef {
-        //         rust: "Reader::http",
-        //         fun: |_ctx, _v| {
-        //             todo!()
-        //             // let url = v[0].as_url();
-        //             // Reader::http(url).into()
-        //         },
-        //     },
-        // );
-
-        // self.declare_def(
-        //     "def tcp_reader(a0: SocketAddr): Reader;",
-        //     BuiltinDef {
-        //         rust: "Reader::tcp",
-        //         fun: |_ctx, v| {
-        //             let addr = v[0].as_socket_addr();
-        //             Reader::tcp(addr).into()
-        //         },
-        //     },
-        // );
-        //
-        // self.declare_def(
-        //     "def kafka_reader(a0: SocketAddr, a1: String): Reader;",
-        //     BuiltinDef {
-        //         rust: "Reader::kafka",
-        //         fun: |_ctx, _v| {
-        //             todo!()
-        //             // let addr = v[0].as_socket_addr();
-        //             // let topic = v[1].as_string();
-        //             // Reader::kafka(addr, topic).into()
-        //         },
-        //     },
-        // );
-    }
+            ImplDecl::Def {
+                aqua: "def http_reader(a0: Url): Reader;",
+                codegen: None,
+                fun: |_ctx, _v| {
+                    todo!()
+                    // let url = v[0].as_url();
+                    // Reader::http(url).into()
+                },
+            },
+            ImplDecl::Def {
+                aqua: "def tcp_reader(a0: SocketAddr): Reader;",
+                codegen: None,
+                fun: |_ctx, v| {
+                    let addr = v[0].as_socket_addr();
+                    Reader::tcp(addr).into()
+                },
+            },
+            ImplDecl::Def {
+                aqua: "def kafka_reader(a0: SocketAddr, a1: String): Reader;",
+                codegen: None,
+                fun: |_ctx, _v| {
+                    todo!()
+                    // let addr = v[0].as_socket_addr();
+                    // let topic = v[1].as_string();
+                    // Reader::kafka(addr, topic).into()
+                },
+            },
+        ],
+    });
 }

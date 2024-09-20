@@ -1,8 +1,18 @@
-use crate::Compiler;
-use crate::ast::BuiltinType;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_i64(&mut self) {
-        self.declare_type("type i64;", BuiltinType { rust: "i64" });
-    }
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type i64;",
+        codegen: Some(Codegen {
+            rust: "i64",
+            java: "long",
+            egglog: None,
+        }),
+    });
 }

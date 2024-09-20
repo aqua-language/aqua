@@ -28,7 +28,7 @@ impl<T: Data> Stream<T> {
         O: Data,
         P: Data,
     {
-        ctx.operator(|tx| async move {
+        ctx.operator(move |tx| async move {
             let mut buffer: BTreeMap<Time, P> = BTreeMap::new();
             let mut first: Option<WindowRange> = None;
             let mut agg: P = init;
@@ -53,7 +53,7 @@ impl<T: Data> Stream<T> {
                         if let Some(wr) = first {
                             if wr.t1 <= time {
                                 let data = lower(&agg, wr);
-                                tx.send(Event::Data(wr.t1, data.deep_clone())).await;
+                                tx.send(Event::Data(wr.t1, data.deep_clone())).await?;
                                 let after = buffer.split_off(&(wr.t0 + step));
                                 for (_, p) in std::mem::replace(&mut buffer, after) {
                                     agg = inverse(&agg, &p);
@@ -68,7 +68,7 @@ impl<T: Data> Stream<T> {
                                     agg = combine(&agg, p);
                                 }
                                 let data = lower(&agg, wr);
-                                tx.send(Event::Data(wr.t1, data.deep_clone())).await;
+                                tx.send(Event::Data(wr.t1, data.deep_clone())).await?;
                                 // Evict the part of the oldest window that is no longer needed.
                                 let after = buffer.split_off(&(wr.t0 + step));
                                 for (_, p) in std::mem::replace(&mut buffer, after) {
@@ -76,17 +76,18 @@ impl<T: Data> Stream<T> {
                                 }
                             }
                         }
-                        tx.send(Event::Watermark(time)).await;
+                        tx.send(Event::Watermark(time)).await?;
                     }
                     Event::Snapshot(i) => {
-                        tx.send(Event::Snapshot(i)).await;
+                        tx.send(Event::Snapshot(i)).await?;
                     }
                     Event::Sentinel => {
-                        tx.send(Event::Sentinel).await;
+                        tx.send(Event::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

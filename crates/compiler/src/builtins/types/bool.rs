@@ -1,24 +1,40 @@
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
 // `and` and `or` desugar to `if` expressions instead of functions, so we don't implement them.
-impl Compiler {
-    pub(super) fn declare_bool(&mut self) {
-        self.declare_type("type bool;", BuiltinType { rust: "bool" });
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type bool;",
+        codegen: Some(Codegen {
+            rust: "bool",
+            java: "boolean",
+            egglog: None,
+        }),
+    });
 
-        self.declare_impl(
-            "impl Not[bool] {
-                 type Output = bool;
-                 def not(a:bool): bool;
-             }",
-            [BuiltinDef {
-                rust: "(|a| !a)",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Not[bool]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = bool;",
+            },
+            ImplDecl::Def {
+                aqua: "def not(a:bool): bool;",
+                codegen: Some(Codegen {
+                    rust: "(|a| !a)",
+                    java: "(a) -> !a",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_bool();
                     (!v0).into()
                 },
-            }],
-        );
-    }
+            },
+        ],
+    });
 }

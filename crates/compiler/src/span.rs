@@ -1,3 +1,5 @@
+use crate::source::SourceId;
+
 impl ariadne::Span for Span {
     fn start(&self) -> usize {
         *self.start() as usize
@@ -7,16 +9,16 @@ impl ariadne::Span for Span {
         *self.end() as usize
     }
 
-    type SourceId = u16;
+    type SourceId = SourceId;
 
     fn source(&self) -> &Self::SourceId {
-        self.file()
+        self.file().as_ref().unwrap()
     }
 }
 
 #[derive(Clone, Copy, Default)]
 pub enum Span {
-    Source(u16, u32, u32),
+    Source(SourceId, u32, u32),
     #[default]
     Generated,
 }
@@ -62,14 +64,14 @@ impl std::fmt::Display for Span {
 }
 
 impl Span {
-    pub fn new(file: u16, range: std::ops::Range<u32>) -> Span {
+    pub fn new(file: SourceId, range: std::ops::Range<u32>) -> Span {
         Span::Source(file, range.start, range.end)
     }
 
-    pub fn file(&self) -> &u16 {
+    pub fn file(&self) -> Option<&SourceId> {
         match self {
-            Span::Source(file, _, _) => file,
-            Span::Generated => &0,
+            Span::Source(file, _, _) => Some(file),
+            Span::Generated => None,
         }
     }
 

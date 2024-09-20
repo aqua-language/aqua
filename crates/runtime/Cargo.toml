@@ -36,6 +36,7 @@ futures-util = { version = "0.3.30", default-features = false, features = ["sink
 time = { version = "0.3.36", default-features = false, features = ["serde-human-readable"] }
 serde_json = { version = "1.0.114" }
 csv-core = { version = "0.1.11" }
+url = { version = "2.5.2", features = ["serde"] }
 
 # Optimisations 
 
@@ -56,9 +57,8 @@ jemalloc = { version = "0.5.4", optional = true, package = "tikv-jemallocator" }
 
 # TODO: Extensions
 
-# url = { version = "2.5.0", features = ["serde"] }
 # sled                  = { version = "0.34.7" }
-# hyper                 = { version = "1.1.0" }
+hyper = { version = "1.1.0", features = ["server", "http2"] }
 # once_cell             = { version = "1.19.0" }
 # ort                   = { version = "1.16.3" , optional = true }
 # num-traits            = { version = "0.2.17" }
@@ -72,7 +72,6 @@ criterion = "0.5.1"
 smartstring = "1.0.1"
 smol_str = "0.2.1"
 smallstr = "0.3.0"
-lasso = "0.7.2"
 
 # Serialisation
 serde = { version = "1.0.197", features = ["derive", "rc"] }

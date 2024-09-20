@@ -1,62 +1,106 @@
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 use std::cmp::Ordering;
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
 
-impl Compiler {
-    pub(super) fn declare_ordering(&mut self) {
-        self.declare_type("type Ordering;", BuiltinType { rust: "Ordering" });
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Ordering;",
+        codegen: Some(Codegen {
+            rust: "Ordering",
+            java: "Ordering",
+            egglog: None,
+        }),
+    });
 
-        self.declare_impl(
-            "impl Ordering {
-                 def less(): Ordering;
-                 def equal(): Ordering;
-                 def greater(): Ordering;
-                 def is_eq(a:Ordering): bool;
-                 def is_ne(a:Ordering): bool;
-                 def is_lt(a:Ordering): bool;
-                 def is_gt(a:Ordering): bool;
-                 def is_le(a:Ordering): bool;
-                 def is_ge(a:Ordering): bool;
-             }",
-            [
-                BuiltinDef {
+    ctx.declare(Decl::Impl {
+        aqua: "impl Ordering",
+        decls: &[
+            ImplDecl::Def {
+                aqua: "def less(): Ordering;",
+                codegen: Some(Codegen {
                     rust: "(|| Ordering::Less)",
-                    fun: |_ctx, _v| Ordering::Less.into(),
-                },
-                BuiltinDef {
+                    java: "(|| Ordering.Less)",
+                    egglog: None,
+                }),
+                fun: |_ctx, _v| Ordering::Less.into(),
+            },
+            ImplDecl::Def {
+                aqua: "def equal(): Ordering;",
+                codegen: Some(Codegen {
                     rust: "(|| Ordering::Equal)",
-                    fun: |_ctx, _v| Ordering::Equal.into(),
-                },
-                BuiltinDef {
+                    java: "(|| Ordering.Equal)",
+                    egglog: None,
+                }),
+                fun: |_ctx, _v| Ordering::Equal.into(),
+            },
+            ImplDecl::Def {
+                aqua: "def greater(): Ordering;",
+                codegen: Some(Codegen {
                     rust: "(|| Ordering::Greater)",
-                    fun: |_ctx, _v| Ordering::Greater.into(),
-                },
-                BuiltinDef {
+                    java: "(|| Ordering.Greater)",
+                    egglog: None,
+                }),
+                fun: |_ctx, _v| Ordering::Greater.into(),
+            },
+            ImplDecl::Def {
+                aqua: "def is_eq(a:Ordering): bool;",
+                codegen: Some(Codegen {
                     rust: "Ordering::is_eq",
-                    fun: |_ctx, v| v[0].as_ordering().is_eq().into(),
-                },
-                BuiltinDef {
+                    java: "Ordering.isEq",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| v[0].as_ordering().is_eq().into(),
+            },
+            ImplDecl::Def {
+                aqua: "def is_ne(a:Ordering): bool;",
+                codegen: Some(Codegen {
                     rust: "Ordering::is_ne",
-                    fun: |_ctx, v| v[0].as_ordering().is_ne().into(),
-                },
-                BuiltinDef {
+                    java: "Ordering.isNe",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| v[0].as_ordering().is_ne().into(),
+            },
+            ImplDecl::Def {
+                aqua: "def is_lt(a:Ordering): bool;",
+                codegen: Some(Codegen {
                     rust: "Ordering::is_lt",
-                    fun: |_ctx, v| v[0].as_ordering().is_lt().into(),
-                },
-                BuiltinDef {
+                    java: "Ordering.isLt",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| v[0].as_ordering().is_lt().into(),
+            },
+            ImplDecl::Def {
+                aqua: "def is_gt(a:Ordering): bool;",
+                codegen: Some(Codegen {
                     rust: "Ordering::is_gt",
-                    fun: |_ctx, v| v[0].as_ordering().is_gt().into(),
-                },
-                BuiltinDef {
+                    java: "Ordering.isGt",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| v[0].as_ordering().is_gt().into(),
+            },
+            ImplDecl::Def {
+                aqua: "def is_le(a:Ordering): bool;",
+                codegen: Some(Codegen {
                     rust: "Ordering::is_le",
-                    fun: |_ctx, v| v[0].as_ordering().is_le().into(),
-                },
-                BuiltinDef {
+                    java: "Ordering.isLe",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| v[0].as_ordering().is_le().into(),
+            },
+            ImplDecl::Def {
+                aqua: "def is_ge(a:Ordering): bool;",
+                codegen: Some(Codegen {
                     rust: "Ordering::is_ge",
-                    fun: |_ctx, v| v[0].as_ordering().is_ge().into(),
-                },
-            ],
-        );
-    }
+                    java: "Ordering.isGe",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| v[0].as_ordering().is_ge().into(),
+            },
+        ],
+    });
 }

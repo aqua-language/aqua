@@ -18,7 +18,7 @@ impl<T: Data> Stream<T> {
         I: IntoIterator<Item = T> + Send + 'static,
         <I as IntoIterator>::IntoIter: Send + 'static,
     {
-        ctx.operator(|tx| async move {
+        ctx.operator(move |tx| async move {
             let mut latest_time = Time::zero();
             let mut watermark = Time::zero();
             for (i, v) in iter.into_iter().enumerate() {
@@ -31,11 +31,11 @@ impl<T: Data> Stream<T> {
                 }
                 if i % watermark_frequency == 0 {
                     watermark = latest_time - slack;
-                    tx.send(Event::Watermark(watermark)).await;
+                    tx.send(Event::Watermark(watermark)).await?;
                 }
-                tx.send(Event::Data(time, v)).await;
+                tx.send(Event::Data(time, v)).await?;
             }
-            tx.send(Event::Sentinel).await;
+            tx.send(Event::Sentinel).await
         })
     }
 }

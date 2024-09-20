@@ -1,3 +1,4 @@
+use serde::de::DeserializeSeed;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -16,6 +17,14 @@ pub trait Decode {
     fn decode<'de, T>(&mut self, input: &'de [u8]) -> Result<T, Self::Error>
     where
         T: Deserialize<'de>;
+
+    fn decode_dyn<'de, T, Tag>(
+        &mut self,
+        input: &'de [u8],
+        tag: Tag,
+    ) -> Result<T, <Self as Decode>::Error>
+    where
+        Tag: Clone + DeserializeSeed<'de, Value = T>;
 }
 
 pub trait Encode {

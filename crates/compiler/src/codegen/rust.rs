@@ -1,3 +1,10 @@
+use runtime::builtins::assigner::Assigner;
+use runtime::builtins::duration::Duration;
+use runtime::builtins::encoding::Encoding;
+use runtime::builtins::path::Path;
+use runtime::builtins::reader::Reader;
+use runtime::builtins::writer::Writer;
+
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
@@ -12,6 +19,10 @@ use crate::ast::StmtType;
 use crate::ast::StmtVar;
 use crate::ast::Type;
 use crate::ast::TypeBody;
+use crate::builtins::types::stream::StreamKind;
+use crate::builtins::value::Dataflow;
+use crate::builtins::value::Fun;
+use crate::builtins::value::Stream;
 use crate::print::Print;
 
 use super::Codegen;
@@ -49,18 +60,35 @@ impl StmtEnum {
     }
 }
 
+impl Dataflow {
+    pub fn rust(&self) -> Rust<&Self> {
+        Rust(self)
+    }
+}
+
 impl<'a> std::fmt::Display for Rust<&'a Codegen<'a>> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "#![allow(unused_imports)]")?;
+        writeln!(f, "#![allow(unused_parens)]")?;
+        writeln!(f, "#![allow(non_upper_case_globals)]")?;
+        writeln!(f, "#![allow(unused_variables)]")?;
+        writeln!(f, "#![allow(clippy::redundant_field_names)]")?;
+        writeln!(f)?;
+        writeln!(f, "use runtime::prelude::*;")?;
+        writeln!(f)?;
         for stmt in self.0.decls.defs.values() {
             writeln!(f, "{}", stmt.rust())?;
         }
+        writeln!(f)?;
         for stmt in self.0.decls.structs.values() {
             writeln!(f, "{}", stmt.rust())?;
         }
+        writeln!(f)?;
         for stmt in self.0.decls.enums.values() {
             writeln!(f, "{}", stmt.rust())?;
         }
-        writeln!(f, "{}", self.0.dataflow)
+        writeln!(f)?;
+        writeln!(f, "{}", self.0.dataflow.rust())
     }
 }
 
@@ -93,6 +121,14 @@ impl<'a> std::fmt::Display for Rust<&'a StmtEnum> {
         let mut p = Printer::new(f);
         p.type_info = true;
         p.stmt_enum(self.0)
+    }
+}
+
+impl<'a> std::fmt::Display for Rust<&'a Dataflow> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut p = Printer::new(f);
+        p.type_info = true;
+        p.main(self.0)
     }
 }
 
@@ -187,23 +223,25 @@ impl<'a, 'b> Printer<'a, 'b> {
                 })?;
             }
             ExprBody::Builtin(b) => {
-                self.kw("const")?;
-                self.space()?;
-                self.name(&s.name)?;
-                self.punct(":")?;
-                self.kw("fn")?;
-                self.paren(|this| this.comma_sep(s.params.values(), Self::ty))?;
-                self.space()?;
-                self.punct("->")?;
-                self.space()?;
-                self.ty(&s.ty)?;
-                self.space()?;
-                self.punct("=")?;
-                self.space()?;
-                self.lit(b.rust)?;
-                // assert!(s.where_clause.is_empty());
-                // self.space()?;
-                // self.punct(";")?;
+                if let Some(c) = &b.codegen {
+                    self.kw("const")?;
+                    self.space()?;
+                    self.name(&s.name)?;
+                    self.space()?;
+                    self.punct(":")?;
+                    self.space()?;
+                    self.kw("fn")?;
+                    self.paren(|this| this.comma_sep(s.params.values(), Self::ty))?;
+                    self.space()?;
+                    self.punct("->")?;
+                    self.space()?;
+                    self.ty(&s.ty)?;
+                    self.space()?;
+                    self.punct("=")?;
+                    self.space()?;
+                    self.lit(c.rust)?;
+                    self.punct(";")?;
+                }
             }
         }
         Ok(())
@@ -215,19 +253,21 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn stmt_struct(&mut self, s: &StmtStruct) -> std::fmt::Result {
+        assert!(s.generics.is_empty());
+        self.lit("#[data]")?;
+        self.newline()?;
         self.kw("struct")?;
         self.space()?;
         self.name(&s.name)?;
-        assert!(s.generics.is_empty());
-        self.fields(s.fields.as_ref(), Self::annotate)?;
-        self.punct(";")
+        self.space()?;
+        self.fields(s.fields.as_ref(), Self::annotate)
     }
 
     fn stmt_enum(&mut self, s: &StmtEnum) -> std::fmt::Result {
+        assert!(s.generics.is_empty());
         self.kw("enum")?;
         self.space()?;
         self.name(&s.name)?;
-        assert!(s.generics.is_empty());
         self.space()?;
         self.scope(s.variants.as_ref(), Self::variant)
     }
@@ -238,10 +278,10 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn stmt_type(&mut self, s: &StmtType) -> std::fmt::Result {
+        assert!(s.generics.is_empty());
         self.kw("type")?;
         self.space()?;
         self.name(&s.name)?;
-        assert!(s.generics.is_empty());
         self.space()?;
         self.punct("=")?;
         self.space()?;
@@ -254,13 +294,6 @@ impl<'a, 'b> Printer<'a, 'b> {
             TypeBody::UserDefined(t) => self.ty(t),
             TypeBody::Builtin(_) => todo!(),
         }
-    }
-
-    fn type_args(&mut self, ts: &[Type]) -> std::fmt::Result {
-        if !ts.is_empty() {
-            self.brack(|this| this.comma_sep(ts, Self::ty))?;
-        }
-        Ok(())
     }
 
     fn expr(&mut self, e: &Expr) -> std::fmt::Result {
@@ -290,23 +323,27 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.paren(|this| this.comma_sep_trailing(es, Self::expr))?;
             }
             Expr::Struct(_, _, name, ts, xes) => {
+                assert!(ts.is_empty());
                 self.name(name)?;
-                self.type_args(ts)?;
+                self.space()?;
                 self.fields(xes.as_ref(), Self::assign)?;
             }
             Expr::Enum(_, _, name, ts, x1, e) => {
+                assert!(ts.is_empty());
                 self.name(name)?;
-                self.type_args(ts)?;
                 self.punct("::")?;
                 self.name(x1)?;
                 self.paren(|this| this.expr(e))?;
             }
             Expr::Var(_, _, x) => {
                 self.name(x)?;
+                self.punct(".")?;
+                self.lit("clone")?;
+                self.paren(|_| Ok(()))?;
             }
             Expr::Def(_, _, name, ts) => {
+                assert!(ts.is_empty());
                 self.name(name)?;
-                self.type_args(ts)?;
             }
             Expr::Call(_, _, e, es) => {
                 self.expr(e)?;
@@ -317,7 +354,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             }
             Expr::Query(..) => unreachable!(),
             Expr::QueryInto(..) => unreachable!(),
-            Expr::TraitMethod(..) => unreachable!(),
+            Expr::Assoc(..) => unreachable!(),
             Expr::Index(_, _, e, i) => {
                 self.expr(e)?;
                 self.punct(".")?;
@@ -345,7 +382,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             Expr::Break(_, _) => {
                 self.kw("break")?;
             }
-            Expr::Fun(_, _, ps, t, e) => {
+            Expr::Lambda(_, _, ps, t, e) => {
                 self.bars(|this| this.comma_sep(ps, Self::param))?;
                 self.punct("->")?;
                 self.space()?;
@@ -374,9 +411,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             Expr::Record(_, _, xts) => {
                 self.fields(xts.as_ref(), Self::assign)?;
             }
-            Expr::Value(_, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
-            Expr::Unresolved(_, _, _, _) => unreachable!(),
             Expr::InfixBinaryOp(_, _, _, _, _) => unreachable!(),
             Expr::PrefixUnaryOp(_, _, _, _) => unreachable!(),
             Expr::PostfixUnaryOp(_, _, _, _) => unreachable!(),
@@ -393,6 +428,9 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.kw("else")?;
                 self.space()?;
                 self.block(b1)?;
+            }
+            Expr::Closure(_, _, _xts0, _xts1, _t, _e) => {
+                todo!()
             }
             Expr::IntSuffix(_, _, _, _) => unreachable!(),
             Expr::FloatSuffix(_, _, _, _) => unreachable!(),
@@ -424,37 +462,39 @@ impl<'a, 'b> Printer<'a, 'b> {
 
     fn assign(&mut self, (x, e): &(Name, Expr)) -> std::fmt::Result {
         self.name(x)?;
-        self.punct(" = ")?;
+        self.punct(": ")?;
         self.expr(e)
     }
 
     fn bind(&mut self, (p, e): &(Name, Pat)) -> std::fmt::Result {
         self.name(p)?;
-        self.punct("=")?;
+        self.punct(":")?;
         self.pat(e)
     }
 
     fn annotate(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
         self.name(x)?;
         self.punct(":")?;
+        self.space()?;
         self.ty(t)
     }
 
     fn ty(&mut self, t: &Type) -> std::fmt::Result {
         match t {
             Type::Cons(name, ts) => {
+                assert!(ts.is_empty());
                 self.name(name)?;
-                self.type_args(ts)?;
             }
             Type::Assoc(..) => unreachable!("{t}"),
             Type::Var(_) => unreachable!(),
             Type::Unknown => unreachable!(),
             Type::Err => unreachable!(),
             Type::Generic(_) => unreachable!(),
-            Type::Fun(ts, t) => {
-                self.kw("fun")?;
-                self.paren(|this| this.comma_sep(ts, Self::ty))?;
-                self.punct(":")?;
+            Type::Lambda(ts, t) => {
+                self.kw("fn")?;
+                self.bars(|this| this.comma_sep(ts, Self::ty))?;
+                self.space()?;
+                self.punct("->")?;
                 self.space()?;
                 self.ty(t)?;
             }
@@ -508,13 +548,14 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.paren(|this| this.comma_sep_trailing(ps, Self::pat))?;
             }
             Pat::Struct(_, _, x, ts, xps) => {
+                assert!(ts.is_empty());
                 self.name(x)?;
-                self.type_args(ts)?;
+                self.space()?;
                 self.fields(xps.as_ref(), Self::bind)?;
             }
             Pat::Enum(_, _, x0, ts, x1, p) => {
+                assert!(ts.is_empty());
                 self.name(x0)?;
-                self.type_args(ts)?;
                 self.punct("::")?;
                 self.name(x1)?;
                 self.paren(|this| this.pat(p))?;
@@ -544,9 +585,334 @@ impl<'a, 'b> Printer<'a, 'b> {
         items: &[T],
         f: impl Fn(&mut Self, &T) -> std::fmt::Result,
     ) -> std::fmt::Result {
-        if !items.is_empty() {
-            self.paren(|this| this.comma_sep(items, |this, item| f(this, item)))?;
+        self.brace(|this| {
+            this.space()?;
+            this.comma_sep(items, |this, item| f(this, item))?;
+            this.space()
+        })
+    }
+
+    fn main(&mut self, d: &Dataflow) -> std::fmt::Result {
+        self.kw("fn")?;
+        self.space()?;
+        self.lit("main")?;
+        self.paren(|_| Ok(()))?;
+        self.space()?;
+        self.brace(|this| {
+            this.indented(|this| {
+                this.newline()?;
+                this.lit("CurrentThreadRunner")?;
+                this.punct("::")?;
+                this.lit("run")?;
+                this.paren(|this| {
+                    this.bars(|this| this.lit("ctx"))?;
+                    this.space()?;
+                    this.brace(|this| {
+                        this.indented(|this| {
+                            this.newline()?;
+                            this.dataflow_stmt(d)
+                        })?;
+                        this.newline()
+                    })
+                })?;
+                this.punct(";")
+            })?;
+            this.newline()
+        })
+    }
+
+    fn dataflow_stmt(&mut self, d: &Dataflow) -> std::fmt::Result {
+        match d {
+            Dataflow::Collocate(_, _) => todo!(),
+            Dataflow::Sink(s, w, e) => {
+                self.stream_stmt(s)?;
+                self.kw("let")?;
+                self.space()?;
+                self.lit("_")?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.lit("Stream")?;
+                self.lit("::")?;
+                self.lit("sink")?;
+                self.paren(|this| {
+                    this.stream_id(s)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.lit("ctx")?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.writer(w)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.encoding(e)
+                })?;
+                self.punct(";")?;
+                self.newline()?;
+            }
         }
         Ok(())
+    }
+
+    fn writer(&mut self, w: &Writer) -> std::fmt::Result {
+        self.lit("Writer")?;
+        self.punct("::")?;
+        match w {
+            Writer::Stdout => {
+                self.lit("stdout")?;
+                self.paren(|_| Ok(()))
+            }
+            Writer::File { path } => {
+                self.lit("file")?;
+                self.paren(|this| this.path(path))
+            }
+            Writer::Tcp { addr: _ } => todo!(),
+            Writer::Kafka { addr: _, topic: _ } => todo!(),
+        }
+    }
+
+    fn reader(&mut self, r: &Reader) -> std::fmt::Result {
+        self.lit("Reader")?;
+        self.punct("::")?;
+        match r {
+            Reader::Stdin => todo!(),
+            Reader::File { path, watch } => {
+                self.lit("file")?;
+                self.paren(|this| {
+                    this.path(path)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.lit(watch)
+                })
+            }
+            Reader::Tcp { addr: _ } => todo!(),
+            Reader::Kafka { addr: _, topic: _ } => todo!(),
+            Reader::Http { addr: _ } => todo!(),
+        }
+    }
+
+    fn path(&mut self, p: &Path) -> std::fmt::Result {
+        self.lit("Path")?;
+        self.punct("::")?;
+        self.lit("new")?;
+        self.paren(|this| {
+            this.punct("\"")?;
+            this.lit(p.0.as_os_str().to_str().unwrap())?;
+            this.punct("\"")
+        })
+    }
+
+    fn encoding(&mut self, e: &Encoding) -> std::fmt::Result {
+        match e {
+            Encoding::Csv { sep } => {
+                self.lit("Encoding")?;
+                self.punct("::")?;
+                self.lit("csv")?;
+                self.paren(|this| {
+                    this.lit("'")?;
+                    this.lit(sep)?;
+                    this.lit("'")
+                })
+            }
+            Encoding::Json => todo!(),
+        }
+    }
+
+    fn duration(&mut self, d: &Duration) -> std::fmt::Result {
+        self.lit("Duration")?;
+        self.punct("::")?;
+        self.lit("from_milliseconds")?;
+        self.paren(|this| this.lit(d.milliseconds()))
+    }
+
+    fn stream_stmt(&mut self, s0: &Stream) -> std::fmt::Result {
+        match s0.kind() {
+            StreamKind::Source(r, e, f, slack, winterval) => {
+                self.kw("let")?;
+                self.space()?;
+                self.stream_id(s0)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.lit("Stream")?;
+                self.punct("::")?;
+                self.lit("source")?;
+                self.paren(|this| {
+                    this.lit("ctx")?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.reader(r)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.encoding(e)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.fun(f)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.duration(slack)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.duration(winterval)
+                })?;
+            }
+            StreamKind::Map(s1, f) => {
+                self.stream_stmt(s1)?;
+                self.kw("let")?;
+                self.space()?;
+                self.stream_id(s0)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.lit("Stream")?;
+                self.punct("::")?;
+                self.lit("map")?;
+                self.paren(|this| {
+                    this.stream_id(s1)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.lit("ctx")?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.fun(f)
+                })?;
+            }
+            StreamKind::Filter(s1, f) => {
+                self.stream_stmt(s1)?;
+                self.kw("let")?;
+                self.space()?;
+                self.stream_id(s0)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.lit("Stream")?;
+                self.punct("::")?;
+                self.lit("filter")?;
+                self.paren(|this| {
+                    this.stream_id(s1)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.lit("ctx")?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.clone_fun(f)
+                })?;
+            }
+            StreamKind::Flatten(_) => todo!(),
+            StreamKind::FlatMap(_, _) => todo!(),
+            StreamKind::Keyby(_, _) => todo!(),
+            StreamKind::Unkey(_) => todo!(),
+            StreamKind::Window(s1, a, f) => {
+                self.stream_stmt(s1)?;
+                self.kw("let")?;
+                self.space()?;
+                self.stream_id(s0)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.lit("Stream")?;
+                self.punct("::")?;
+                self.lit("window")?;
+                self.paren(|this| {
+                    this.stream_id(s1)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.lit("ctx")?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.assigner(a)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.fun(f)
+                })?;
+            }
+            StreamKind::Merge(s1, s2) => {
+                self.stream_stmt(s1)?;
+                self.stream_stmt(s2)?;
+                self.kw("let")?;
+                self.space()?;
+                self.stream_id(s0)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.lit("Stream")?;
+                self.punct("::")?;
+                self.lit("merge")?;
+                self.paren(|this| {
+                    this.stream_id(s1)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.stream_id(s2)
+                })?;
+            }
+            StreamKind::IncrWindow(_, _, _, _, _) => todo!(),
+            StreamKind::Take(s1, i) => {
+                self.stream_stmt(s1)?;
+                self.kw("let")?;
+                self.space()?;
+                self.stream_id(s0)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.lit("Stream")?;
+                self.punct("::")?;
+                self.lit("take")?;
+                self.paren(|this| {
+                    this.stream_id(s1)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.lit("ctx")?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.lit(i)
+                })?;
+            }
+        }
+        self.punct(";")?;
+        self.newline()
+    }
+
+    fn assigner(&mut self, a: &Assigner) -> std::fmt::Result {
+        self.lit("Assigner")?;
+        self.punct("::")?;
+        match a {
+            Assigner::Tumbling { length } => {
+                self.lit("tumbling")?;
+                self.paren(|this| this.duration(length))
+            }
+            Assigner::Sliding { duration, step } => {
+                self.lit("sliding")?;
+                self.paren(|this| {
+                    this.duration(duration)?;
+                    this.punct(",")?;
+                    this.space()?;
+                    this.duration(step)
+                })
+            }
+            Assigner::Session { .. } => todo!(),
+            Assigner::Counting { .. } => todo!(),
+            Assigner::Moving { .. } => todo!(),
+        }
+    }
+
+    fn stream_id(&mut self, s: &Stream) -> std::fmt::Result {
+        self.lit(&format!("_{}", s.id()))
+    }
+
+    fn fun(&mut self, f: &Fun) -> std::fmt::Result {
+        self.bars(|this| this.comma_sep(&f.params, Self::param))?;
+        self.space()?;
+        match &f.body {
+            ExprBody::UserDefined(e) => self.expr(e),
+            ExprBody::Builtin(_) => todo!(),
+        }
+    }
+
+    // TODO: Remove this when we have ownership
+    // (|x| f(x))(x.clone())
+    fn clone_fun(&mut self, f: &Fun) -> std::fmt::Result {
+        self.lit("|x|")?;
+        self.paren(|this| this.fun(f))?;
+        self.lit("(x.clone())")
     }
 }

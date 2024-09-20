@@ -6,14 +6,14 @@ use std::rc::Rc;
 use runtime::HashMap;
 
 use crate::ast::Block;
-use crate::ast::Trait;
 use crate::ast::Expr;
+use crate::ast::ExprBody;
+use crate::ast::Impl;
 use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::ExprBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
@@ -21,9 +21,9 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::TypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Type;
+use crate::ast::TypeBody;
 use crate::diag::Report;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
@@ -61,17 +61,8 @@ impl Stack {
         new
     }
 
-    #[track_caller]
     fn get(&self, x: &Name) -> Name {
-        if let Some(x) = self.scopes.iter().rev().find_map(|s| s.0.get(x)) {
-            *x
-        } else {
-            panic!(
-                "Variable not found: {:?}: {}",
-                x,
-                std::panic::Location::caller()
-            )
-        }
+        *self.scopes.iter().rev().find_map(|s| s.0.get(x)).unwrap()
     }
 }
 
@@ -163,7 +154,7 @@ impl Mapper for Context {
         let generics = self.map_generics(&s.generics);
         let params = self.map_params(&s.params).into();
         let ty = self.map_type(&s.ty);
-        let where_clause = self.map_bounds(&s.where_clause);
+        let where_clause = self.map_impls(&s.where_clause);
         let body = self.map_stmt_def_body(&s.body);
         StmtDef::new(s.span, name, generics, params, ty, where_clause, body)
     }
@@ -176,25 +167,11 @@ impl Mapper for Context {
 
     fn map_stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
         let generics = self.map_generics(&s.generics);
-        let head = self.map_trait(&s.head);
-        let where_clause = self.map_bounds(&s.where_clause);
+        let head = self.map_impl(&s.head);
+        let where_clause = self.map_impls(&s.where_clause);
         let defs = self.map_rc_iter(&s.defs, Self::_map_stmt_def).into();
         let types = self.map_rc_iter(&s.types, Self::_map_stmt_type).into();
         StmtImpl::new(s.span, generics, head, where_clause, defs, types)
-    }
-
-    fn map_trait(&mut self, b: &Trait) -> Trait {
-        match b {
-            Trait::Path(..) => unreachable!(),
-            Trait::Cons(x, ts, xts) => {
-                let ts = ts.iter().map(|t| self.map_type(t)).collect();
-                let xts = xts.iter().map(|(n, t)| (*n, self.map_type(t))).collect();
-                Trait::Cons(*x, ts, xts)
-            }
-            Trait::Type(t) => Trait::Type(Rc::new(self.map_type(t))),
-            Trait::Err => Trait::Err,
-            Trait::Var(_) => todo!(),
-        }
     }
 
     fn map_stmt_struct(&mut self, s: &StmtStruct) -> StmtStruct {

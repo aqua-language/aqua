@@ -92,7 +92,7 @@ impl Mapper for Context {
             Expr::Continue(_, _) => todo!(),
             Expr::Break(_, _) => todo!(),
             Expr::While(_, _, _, _) => todo!(),
-            Expr::Fun(_, _, _, _, _) => todo!(),
+            Expr::Lambda(_, _, _, _, _) => todo!(),
             Expr::For(_, _, _, _, _) => todo!(),
             Expr::Block(s, t, b) => {
                 self.push_scope(ScopeKind::Block);

@@ -1,16 +1,18 @@
 use crate::builtins::value::Value;
-use crate::Compiler;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_ord(&mut self) {
-        self.declare_trait(
-            "trait Ord[T] where PartialOrd[T,T] {
-                 def cmp(a:T, b:T): Ordering;
-                 def min(a:T, b:T): T;
-                 def max(a:T, b:T): T;
-             }",
-        );
-    }
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Trait {
+        aqua: "trait Ord[T] where PartialOrd[T,T] {
+             def cmp(a:T, b:T): Ordering;
+             def min(a:T, b:T): T;
+             def max(a:T, b:T): T;
+         }",
+    });
 }
 
 #[allow(clippy::non_canonical_partial_ord_impl)]
@@ -27,7 +29,6 @@ impl PartialOrd for Value {
 impl Ord for Value {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match (self, other) {
-            (Value::Aggregator(_), Value::Aggregator(_)) => unreachable!(),
             (Value::Array(a), Value::Array(b)) => a.cmp(b),
             (Value::Blob(_), Value::Blob(_)) => unreachable!(),
             (Value::Bool(a), Value::Bool(b)) => a.cmp(b),
@@ -60,7 +61,6 @@ impl Ord for Value {
             (Value::Stream(_), Value::Stream(_)) => unreachable!(),
             (Value::String(a), Value::String(b)) => a.cmp(b),
             (Value::Time(a), Value::Time(b)) => a.cmp(b),
-            (Value::TimeSource(_), Value::TimeSource(_)) => unreachable!(),
             (Value::Tuple(a), Value::Tuple(b)) => a.cmp(b),
             // (Value::Url(a), Value::Url(b)) => a.cmp(b),
             (Value::Vec(a), Value::Vec(b)) => a.cmp(b),

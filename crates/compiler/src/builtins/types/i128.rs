@@ -1,8 +1,18 @@
-use crate::Compiler;
-use crate::ast::BuiltinType;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(in super) fn declare_i128(&mut self) {
-        self.declare_type("type i128;", BuiltinType { rust: "i128" });
-    }
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type i128;",
+        codegen: Some(Codegen {
+            rust: "i128",
+            java: "long",
+            egglog: None,
+        }),
+    });
 }

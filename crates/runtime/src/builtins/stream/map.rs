@@ -12,15 +12,16 @@ impl<T: Data> Stream<T> {
         ctx.operator(|tx| async move {
             loop {
                 match self.recv().await {
-                    Event::Data(t, v) => tx.send(Event::Data(t, f(v))).await,
-                    Event::Watermark(t) => tx.send(Event::Watermark(t)).await,
-                    Event::Snapshot(i) => tx.send(Event::Snapshot(i)).await,
+                    Event::Data(t, v) => tx.send(Event::Data(t, f(v))).await?,
+                    Event::Watermark(t) => tx.send(Event::Watermark(t)).await?,
+                    Event::Snapshot(i) => tx.send(Event::Snapshot(i)).await?,
                     Event::Sentinel => {
-                        tx.send(Event::Sentinel).await;
+                        tx.send(Event::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

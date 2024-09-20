@@ -1,16 +1,18 @@
+use linkme::distributed_slice;
 
 use crate::builtins::value::Value;
-use crate::Compiler;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
 
-impl Compiler {
-    pub(super) fn declare_add(&mut self) {
-        self.declare_trait(
-            "trait Add[A,B] {
-                 type Output;
-                 def add(a:A, b:B): Add[A,B]::Output;
-             }",
-        );
-    }
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Trait {
+        aqua: "trait Add[A,B] {
+             type Output;
+             def add(a:A, b:B): Add[A,B]::Output;
+         }",
+    });
 }
 
 impl std::ops::Add for Value {

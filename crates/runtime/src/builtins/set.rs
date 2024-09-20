@@ -4,16 +4,26 @@ use std::hash::Hash;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::builtins::unchecked_cell::UncheckedCell;
+use crate::traits::DeepClone;
+
+use super::cell::Cell;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(C)]
-pub struct Set<T: Eq + Hash>(pub UncheckedCell<HashSet<T>>);
+pub struct Set<T: Eq + Hash>(pub Cell<HashSet<T>>);
+
+impl<T: Eq + Hash + DeepClone> DeepClone for Set<T> {
+    fn deep_clone(&self) -> Self {
+        let set = self.0.as_ref().iter().map(|x| x.deep_clone()).collect();
+        Set(Cell::new(set))
+    }
+}
 
 impl<T: Eq + Hash + std::fmt::Display> std::fmt::Display for Set<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{{")?;
-        let mut iter = self.0.iter();
+        let x = self.0.as_ref();
+        let mut iter = x.iter();
         if let Some(x) = iter.next() {
             write!(f, "{}", x)?;
             for x in iter {
@@ -26,7 +36,7 @@ impl<T: Eq + Hash + std::fmt::Display> std::fmt::Display for Set<T> {
 
 impl<T: Eq + Hash> Default for Set<T> {
     fn default() -> Self {
-        Self(UncheckedCell::new(HashSet::new()))
+        Self(Cell::new(HashSet::new()))
     }
 }
 
@@ -38,40 +48,40 @@ impl<T: Eq + Hash> Set<T> {
     /// # Safety
     ///
     /// Refer to the documentation of `UncheckedCell::as_mut_unchecked`.
-    pub unsafe fn insert(&self, value: T)
+    pub fn insert(&self, value: T)
     where
         T: Clone,
     {
-        self.0.as_mut_unchecked().insert(value);
+        self.0.as_mut().insert(value);
     }
 
     /// # Safety
     ///
     /// Refer to the documentation of `UncheckedCell::as_mut_unchecked`.
-    pub unsafe fn remove(&self, value: impl std::borrow::Borrow<T>)
+    pub fn remove(&self, value: impl std::borrow::Borrow<T>)
     where
         T: Clone,
     {
-        self.0.as_mut_unchecked().remove(value.borrow());
+        self.0.as_mut().remove(value.borrow());
     }
 
     pub fn contains(&self, value: impl std::borrow::Borrow<T>) -> bool
     where
         T: Clone,
     {
-        self.0.contains(value.borrow())
+        self.0.as_mut().contains(value.borrow())
     }
 
     pub fn into_vec(&self) -> Vec<T>
     where
         T: Clone,
     {
-        self.0.iter().cloned().collect()
+        self.0.as_ref().iter().cloned().collect()
     }
 }
 
 impl<T: Eq + Hash> From<HashSet<T>> for Set<T> {
     fn from(set: HashSet<T>) -> Self {
-        Self(UncheckedCell::new(set))
+        Self(Cell::new(set))
     }
 }

@@ -13,7 +13,7 @@ impl<T: Data> Stream<T> {
     where
         O: Data,
     {
-        ctx.operator(|tx| async move {
+        ctx.operator(move |tx| async move {
             let mut agg: Vec<T> = Vec::with_capacity(size);
             loop {
                 match self.recv().await {
@@ -21,22 +21,19 @@ impl<T: Data> Stream<T> {
                         agg.push(data);
                         if agg.len() == size {
                             let result = compute(Window::new(&agg));
-                            tx.send(Event::Data(time, result.deep_clone())).await;
+                            tx.send(Event::Data(time, result.deep_clone())).await?;
                             agg.clear();
                         }
                     }
-                    Event::Watermark(time) => {
-                        tx.send(Event::Watermark(time)).await;
-                    }
-                    Event::Snapshot(i) => {
-                        tx.send(Event::Snapshot(i)).await;
-                    }
+                    Event::Watermark(time) => tx.send(Event::Watermark(time)).await?,
+                    Event::Snapshot(i) => tx.send(Event::Snapshot(i)).await?,
                     Event::Sentinel => {
-                        tx.send(Event::Sentinel).await;
+                        tx.send(Event::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

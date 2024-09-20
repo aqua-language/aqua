@@ -7,6 +7,7 @@ use compiler::ast::Block;
 use compiler::ast::BuiltinDef;
 use compiler::ast::Expr;
 use compiler::ast::ExprBody;
+use compiler::ast::Impl;
 use compiler::ast::Index;
 use compiler::ast::Map;
 use compiler::ast::Name;
@@ -37,7 +38,7 @@ pub fn program<const N: usize>(ss: [Stmt; N]) -> Program {
 pub fn stmt_trait<const N: usize, const M: usize, const K: usize, const L: usize>(
     x: &'static str,
     gs: [&'static str; N],
-    bounds: [Trait; M],
+    bounds: [Impl; M],
     defs: [StmtTraitDef; K],
     types: [StmtTraitType; L],
 ) -> Stmt {
@@ -81,8 +82,8 @@ fn map3<const N: usize, T, U, S, V: Clone>(xs: [(T, U, S); N], f: impl Fn(T, U, 
 // impl<{gs}> {head} where {body}
 pub fn stmt_impl<const N: usize, const M: usize, const K: usize, const L: usize>(
     gs: [&'static str; N],
-    head: Trait,
-    body: [Trait; M],
+    head: Impl,
+    body: [Impl; M],
     defs: [Stmt; K],
     types: [Stmt; L],
 ) -> Stmt {
@@ -101,7 +102,7 @@ pub fn stmt_impl<const N: usize, const M: usize, const K: usize, const L: usize>
 // impl<{gs}> {head}
 pub fn fact<const N: usize, const M: usize, const K: usize>(
     gs: [&'static str; N],
-    head: Trait,
+    head: Impl,
     defs: [StmtDef; M],
     types: [StmtType; K],
 ) -> StmtImpl {
@@ -115,20 +116,20 @@ pub fn fact<const N: usize, const M: usize, const K: usize>(
     )
 }
 
-pub fn type_bound(t: Type) -> Trait {
-    Trait::Type(Rc::new(t))
+pub fn type_bound(t: Type) -> Impl {
+    Impl::Type(Rc::new(t))
 }
 
 pub fn trait_bound<const N: usize, const M: usize>(
     x: &'static str,
     ts: [Type; N],
     xts: [(&'static str, Type); M],
-) -> Trait {
-    Trait::Cons(name(x), vec(ts), name_map(xts))
+) -> Impl {
+    Impl::Trait(Trait::new(name(x), vec(ts), name_map(xts)))
 }
 
-pub fn bound_err() -> Trait {
-    Trait::Err
+pub fn bound_err() -> Impl {
+    Impl::Err
 }
 
 pub fn ty_alias<const N: usize>(x: &'static str, ts: [Type; N]) -> Type {
@@ -152,8 +153,8 @@ pub fn ty_tuple<const N: usize>(ts: [Type; N]) -> Type {
     Type::Tuple(vec(ts))
 }
 
-pub fn ty_fun<const N: usize>(ts: [Type; N], t: Type) -> Type {
-    Type::Fun(vec(ts), Rc::new(t))
+pub fn ty_lambda<const N: usize>(ts: [Type; N], t: Type) -> Type {
+    Type::Lambda(vec(ts), Rc::new(t))
 }
 
 pub fn ty_var(id: u32) -> Type {
@@ -385,13 +386,13 @@ pub mod unresolved {
     use super::name_map;
     use super::vec;
     use compiler::ast::Expr;
+    use compiler::ast::Impl;
     use compiler::ast::Map;
     use compiler::ast::Name;
     use compiler::ast::Pat;
     use compiler::ast::Path;
     use compiler::ast::PathPatField;
     use compiler::ast::Segment;
-    use compiler::ast::Trait;
     use compiler::ast::Type;
 
     use super::app;
@@ -557,12 +558,12 @@ pub mod unresolved {
         x: &'static str,
         ts: [Type; N],
         xts: [(&'static str, Type); M],
-    ) -> Trait {
-        Trait::Path(span(), name_path(x, ts, xts))
+    ) -> Impl {
+        Impl::Path(span(), name_path(x, ts, xts))
     }
 
-    pub fn head<const N: usize>(x: &'static str, ts: [Type; N]) -> Trait {
-        Trait::Path(span(), name_path(x, ts, []))
+    pub fn head<const N: usize>(x: &'static str, ts: [Type; N]) -> Impl {
+        Impl::Path(span(), name_path(x, ts, []))
     }
 
     pub fn path<const N: usize>(segments: [(&'static str, Vec<Type>, Map<Name, Type>); N]) -> Path {
@@ -584,8 +585,8 @@ pub mod unresolved {
     }
 }
 
-pub fn expr_assoc<const N: usize>(b: Trait, x1: &'static str, ts1: [Type; N]) -> Expr {
-    Expr::TraitMethod(span(), Type::Unknown, b, name(x1), vec(ts1))
+pub fn expr_assoc<const N: usize>(b: Impl, x1: &'static str, ts1: [Type; N]) -> Expr {
+    Expr::Assoc(span(), Type::Unknown, b, name(x1), vec(ts1))
 }
 
 pub fn expr_assign(e0: Expr, e1: Expr) -> Expr {
@@ -681,7 +682,7 @@ pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
     gs: [&'static str; N],
     ps: [(&'static str, Type); K],
     t: Type,
-    qs: [Trait; M],
+    qs: [Impl; M],
     b: impl Into<ExprBody>,
 ) -> Stmt {
     StmtDef::new(
@@ -699,7 +700,7 @@ pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
 pub fn dummy_body() -> ExprBody {
     ExprBody::Builtin(BuiltinDef {
         fun: |_, _| todo!(),
-        rust: "dummy",
+        codegen: None,
     })
 }
 
@@ -716,7 +717,7 @@ pub fn tr_def<const N: usize, const M: usize, const K: usize>(
     gs: [&'static str; N],
     xts: [(&'static str, Type); K],
     t: Type,
-    qs: [Trait; M],
+    qs: [Impl; M],
 ) -> StmtTraitDef {
     StmtTraitDef::new(span(), name(x), app(gs, name), params(xts), t, vec(qs))
 }
@@ -746,7 +747,7 @@ pub fn expr_call<const N: usize>(e: Expr, es: [Expr; N]) -> Expr {
 }
 
 pub fn expr_unresolved<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
-    Expr::Unresolved(span(), Type::Unknown, name(x), vec(ts))
+    Expr::Assoc(span(), Type::Unknown, Impl::Unknown, name(x), vec(ts))
 }
 
 pub fn expr_call_direct<const N: usize, const M: usize>(
@@ -886,8 +887,8 @@ pub fn expr_err() -> Expr {
     Expr::Err(span(), Type::Unknown)
 }
 
-pub fn expr_fun<const N: usize>(ps: [&'static str; N], e: Expr) -> Expr {
-    Expr::Fun(
+pub fn expr_lambda<const N: usize>(ps: [&'static str; N], e: Expr) -> Expr {
+    Expr::Lambda(
         span(),
         Type::Unknown,
         app(ps, |s| (name(s), Type::Unknown)).into(),
@@ -900,8 +901,14 @@ fn param((x, t): (&'static str, Type)) -> (Name, Type) {
     (name(x), t)
 }
 
-pub fn expr_fun_typed<const N: usize>(ps: [(&'static str, Type); N], t: Type, e: Expr) -> Expr {
-    Expr::Fun(span(), Type::Unknown, app(ps, param).into(), t, Rc::new(e))
+pub fn expr_lambda_typed<const N: usize>(ps: [(&'static str, Type); N], e: Expr) -> Expr {
+    Expr::Lambda(
+        span(),
+        Type::Unknown,
+        app(ps, param).into(),
+        Type::Unknown,
+        Rc::new(e),
+    )
 }
 
 pub fn expr_return(e: Expr) -> Expr {
@@ -988,7 +995,11 @@ pub fn query_over_compute<const N: usize>(e: Expr, aggs: [Aggr; N]) -> Query {
 }
 
 pub fn aggr(x: &'static str, e0: Expr, e1: Expr) -> Aggr {
-    Aggr::new(name(x), e0, e1)
+    Aggr::new(name(x), e0, e1, None)
+}
+
+pub fn aggr_if(x: &'static str, e0: Expr, e1: Expr, e2: Expr) -> Aggr {
+    Aggr::new(name(x), e0, e1, Some(e2))
 }
 
 pub fn expr_while(e: Expr, b: Block) -> Expr {
@@ -1041,9 +1052,9 @@ pub mod types {
 pub mod traits {
     use std::rc::Rc;
 
+    use compiler::ast::Impl;
     use compiler::ast::Stmt;
     use compiler::ast::StmtImpl;
-    use compiler::ast::Trait;
     use compiler::ast::Type;
 
     use super::app;
@@ -1056,8 +1067,8 @@ pub mod traits {
 
     pub fn imp<const N: usize, const M: usize, const K: usize, const L: usize>(
         gs: [&'static str; N],
-        head: Trait,
-        where_clause: [Trait; M],
+        head: Impl,
+        where_clause: [Impl; M],
         defs: [Stmt; K],
         types: [Stmt; L],
     ) -> StmtImpl {
@@ -1078,12 +1089,12 @@ pub mod traits {
     pub fn impl_clone<const N: usize, const M: usize>(
         gs: [&'static str; N],
         t: Type,
-        where_clause: [Trait; M],
+        where_clause: [Impl; M],
     ) -> StmtImpl {
         imp(gs, tr_clone(t), where_clause, [], [])
     }
 
-    pub fn tr_clone(t: Type) -> Trait {
+    pub fn tr_clone(t: Type) -> Impl {
         trait_bound("Clone", [t], [])
     }
 
@@ -1091,7 +1102,7 @@ pub mod traits {
         gs: [&'static str; N],
         t: Type,
         t1: Type,
-        where_clause: [Trait; M],
+        where_clause: [Impl; M],
     ) -> StmtImpl {
         imp(
             gs,
@@ -1102,7 +1113,7 @@ pub mod traits {
         )
     }
 
-    pub fn tr_iterator(t0: Type) -> Trait {
+    pub fn tr_iterator(t0: Type) -> Impl {
         trait_bound("Iterator", [t0], [])
     }
 
@@ -1114,7 +1125,7 @@ pub mod traits {
         gs: [&'static str; N],
         ts: [Type; 2],
         t: Type,
-        where_clause: [Trait; M],
+        where_clause: [Impl; M],
     ) -> StmtImpl {
         imp(
             gs,
@@ -1125,7 +1136,7 @@ pub mod traits {
         )
     }
 
-    pub fn tr_add(ts: [Type; 2]) -> Trait {
+    pub fn tr_add(ts: [Type; 2]) -> Impl {
         trait_bound("Add", ts, [])
     }
 
@@ -1138,7 +1149,7 @@ pub mod traits {
         self_ty: Type,
         item_ty: Type,
         intoiter_ty: Type,
-        where_clause: [Trait; M],
+        where_clause: [Impl; M],
     ) -> StmtImpl {
         imp(
             gs,
@@ -1152,7 +1163,7 @@ pub mod traits {
         )
     }
 
-    pub fn tr_into_iterator(t0: Type) -> Trait {
+    pub fn tr_into_iterator(t0: Type) -> Impl {
         trait_bound("IntoIterator", [t0], [])
     }
 

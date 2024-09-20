@@ -1,11 +1,14 @@
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_clone(&mut self) {
-        self.declare_trait(
-            "trait Clone[T] {
-                 def clone(v:T): T;
-             }",
-        );
-    }
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Trait {
+        aqua: "trait Clone[T] {
+             def clone(v:T): T;
+         }",
+    });
 }

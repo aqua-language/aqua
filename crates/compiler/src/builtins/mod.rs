@@ -1,15 +1,27 @@
-use crate::Compiler;
+use std::rc::Rc;
+use std::sync::Arc;
+
+use crate::ast::BuiltinDef;
+use crate::ast::BuiltinType;
+use crate::ast::Codegen;
+use crate::ast::Stmt;
+use crate::diag::Report;
+use crate::lexer::Lexer;
+use crate::parser::Parser;
+use crate::source::SourceId;
+use crate::span::Span;
+use crate::spanned::Spanned;
+use crate::token::Token;
+use linkme::distributed_slice;
+use value::Value;
 
 mod conv;
-pub mod decls;
 pub mod value;
-
 pub mod traits {
-    use crate::Compiler;
-
     mod add;
     mod clone;
     mod copy;
+    mod data;
     mod debug;
     mod deep_clone;
     mod default;
@@ -26,39 +38,12 @@ pub mod traits {
     mod ord;
     mod partial_eq;
     mod partial_ord;
-    mod serde;
+    pub mod serde;
     mod sub;
-
-    impl Compiler {
-        pub(super) fn declare_traits(&mut self) {
-            self.declare_add();
-            self.declare_sub();
-            self.declare_mul();
-            self.declare_div();
-            self.declare_neg();
-            self.declare_not();
-            self.declare_ord();
-            self.declare_clone();
-            self.declare_copy();
-            self.declare_debug();
-            self.declare_deep_clone();
-            self.declare_display();
-            self.declare_eq();
-            self.declare_into_iterator();
-            self.declare_iterator();
-            self.declare_partial_eq();
-            self.declare_partial_ord();
-            self.declare_serde();
-            self.declare_default();
-        }
-    }
 }
-
 pub mod types {
-    use crate::Compiler;
-
-    pub mod aggregator;
     pub mod array;
+    pub mod backend;
     pub mod blob;
     pub mod bool;
     pub mod char;
@@ -94,80 +79,138 @@ pub mod types {
     pub mod stream;
     pub mod string;
     pub mod time;
-    pub mod time_source;
     pub mod tuple;
     pub mod u128;
     pub mod u16;
     pub mod u32;
     pub mod u64;
     pub mod u8;
-    pub mod unit;
     pub mod url;
     pub mod usize;
     pub mod variant;
     pub mod vec;
     pub mod writer;
-    pub mod backend;
+}
+mod functions {
+    mod io;
+}
 
-    impl Compiler {
-        pub(super) fn declare_types(&mut self) {
-            // self.declare_aggregator();
-            // self.declare_array();
-            // self.declare_blob();
-            self.declare_bool();
-            self.declare_char();
-            // self.declare_dict();
-            self.declare_dataflow();
-            // self.declare_discretizer();
-            // self.declare_duration();
-            self.declare_encoding();
-            self.declare_f32();
-            self.declare_f64();
-            // self.declare_file();
-            // self.declare_function();
-            self.declare_i128();
-            // self.declare_i16();
-            self.declare_i32();
-            self.declare_i64();
-            // self.declare_i8();
-            // self.declare_image();
-            self.declare_instance();
-            // self.declare_keyed_stream();
-            // self.declare_matrix();
-            // self.declare_model();
-            // self.declare_never();
-            self.declare_option();
-            self.declare_path();
-            self.declare_reader();
-            // self.declare_record();
-            // self.declare_result();
-            // self.declare_set();
-            // self.declare_socket();
-            self.declare_stream();
-            self.declare_string();
-            self.declare_time();
-            // self.declare_time_source();
-            self.declare_traits();
-            // self.declare_tuple();
-            // self.declare_u128();
-            // self.declare_u16();
-            // self.declare_u32();
-            // self.declare_u64();
-            // self.declare_u8();
-            // self.declare_unit();
-            // self.declare_url();
-            self.declare_usize();
-            // self.declare_variant();
-            self.declare_vec();
-            self.declare_writer();
-            self.declare_ordering();
+#[distributed_slice]
+pub static DECLS: [fn(&mut Context)];
+
+pub struct Context {
+    pub stmts: Vec<Stmt>,
+    pub report: Report,
+}
+
+pub enum Decl {
+    Def {
+        aqua: &'static str,
+        fun: fn(&mut crate::interpret::Context, &[Value]) -> Value,
+        codegen: Option<Codegen>,
+    },
+    Type {
+        aqua: &'static str,
+        codegen: Option<Codegen>,
+    },
+    Impl {
+        aqua: &'static str,
+        decls: &'static [ImplDecl],
+    },
+    Trait {
+        aqua: &'static str,
+    },
+}
+
+pub enum ImplDecl {
+    Type {
+        aqua: &'static str,
+    },
+    Def {
+        aqua: &'static str,
+        fun: fn(&mut crate::interpret::Context, &[Value]) -> Value,
+        codegen: Option<Codegen>,
+    },
+}
+
+impl Context {
+    pub fn declare(&mut self, decl: Decl) {
+        let stmt = match decl {
+            Decl::Def { aqua, fun, codegen } => self
+                .try_parse(aqua, |parser, follow| {
+                    parser.stmt_def_builtin(follow, BuiltinDef { codegen, fun })
+                })
+                .map(|s| Stmt::Def(Rc::new(s))),
+            Decl::Type { aqua, codegen } => self
+                .try_parse(aqua, |parser, follow| {
+                    parser.stmt_type_builtin(follow, BuiltinType { codegen })
+                })
+                .map(|s| Stmt::Type(Rc::new(s))),
+            Decl::Impl { aqua, decls } => {
+                let mut aqua = aqua.to_string();
+                aqua.push_str(" {\n");
+                for v in decls.iter().map(|t| match t {
+                    ImplDecl::Type { aqua } => aqua,
+                    ImplDecl::Def { aqua, .. } => aqua,
+                }) {
+                    for line in v.lines() {
+                        aqua.push_str("    ");
+                        aqua.push_str(line);
+                        aqua.push_str("\n");
+                    }
+                }
+                aqua.push_str("}");
+                let defs = decls
+                    .iter()
+                    .filter_map(|d| match d {
+                        ImplDecl::Def { codegen, fun, .. } => Some(BuiltinDef {
+                            codegen: codegen.clone(),
+                            fun: *fun,
+                        }),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                self.try_parse(&aqua, |parser, follow| {
+                    parser.stmt_impl_builtin(follow, &defs)
+                })
+                .map(|s| Stmt::Impl(Rc::new(s)))
+            }
+            Decl::Trait { aqua } => self
+                .try_parse(aqua, |parser, follow| parser.stmt_trait(follow))
+                .map(|s| Stmt::Trait(Rc::new(s))),
+        };
+        if let Some(stmt) = stmt {
+            self.stmts.push(stmt)
+        }
+    }
+
+    fn try_parse<T>(
+        &mut self,
+        input: &str,
+        f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>, Token) -> Result<Spanned<T>, Span>,
+    ) -> Option<T> {
+        let input: Arc<str> = Arc::from(input);
+        let id = SourceId::new("builtin", input.clone());
+        let mut lexer = Lexer::new(id, input.as_ref());
+        let mut parser = Parser::new(&input, &mut lexer);
+        let result = parser.parse(f);
+        self.report.merge(&mut parser.report);
+        self.report.merge(&mut lexer.report);
+        result
+    }
+}
+
+impl Context {
+    fn new() -> Self {
+        Self {
+            stmts: Vec::new(),
+            report: Report::new(),
         }
     }
 }
 
-impl Compiler {
-    pub fn declare(&mut self) {
-        self.declare_types();
-        self.declare_traits();
-    }
+pub fn declare() -> Vec<Stmt> {
+    let mut ctx = Context::new();
+    DECLS.iter().for_each(|decl| decl(&mut ctx));
+    ctx.stmts
 }

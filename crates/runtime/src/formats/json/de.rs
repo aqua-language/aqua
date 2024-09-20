@@ -23,4 +23,18 @@ impl Decode for Reader {
         deserializer.end()?;
         Ok(value)
     }
+
+    fn decode_dyn<'de, T, Tag: Clone>(
+        &mut self,
+        input: &'de [u8],
+        tag: Tag,
+    ) -> Result<T, <Self as Decode>::Error>
+    where
+        Tag: serde::de::DeserializeSeed<'de, Value = T>,
+    {
+        let mut deserializer = Deserializer::from_slice(input);
+        let value = serde::de::DeserializeSeed::deserialize(tag, &mut deserializer)?;
+        deserializer.end()?;
+        Ok(value)
+    }
 }

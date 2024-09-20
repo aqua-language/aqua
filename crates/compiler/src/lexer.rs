@@ -1,4 +1,5 @@
 use crate::diag::Report;
+use crate::source::SourceId;
 use crate::span::Span;
 use crate::spanned::Spanned;
 use crate::token::Token;
@@ -7,12 +8,12 @@ pub struct Lexer<'a> {
     input: &'a str,
     pos: usize,
     eof: bool,
-    pub file: u16,
+    pub file: SourceId,
     pub report: Report,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(file: u16, input: &'a str) -> Lexer<'a> {
+    pub fn new(file: SourceId, input: &'a str) -> Lexer<'a> {
         Lexer {
             file,
             input,
@@ -71,7 +72,6 @@ impl<'a> Lexer<'a> {
                             "false" => Token::False,
                             "for" => Token::For,
                             "from" => Token::From,
-                            "fun" => Token::Fun,
                             "group" => Token::Group,
                             "if" => Token::If,
                             "impl" => Token::Impl,
@@ -86,6 +86,7 @@ impl<'a> Lexer<'a> {
                             "over" => Token::Over,
                             "return" => Token::Return,
                             "select" => Token::Select,
+                            "limit" => Token::Limit,
                             "struct" => Token::Struct,
                             "record" => Token::Record,
                             "trait" => Token::Trait,
@@ -95,6 +96,7 @@ impl<'a> Lexer<'a> {
                             "where" => Token::Where,
                             "while" => Token::While,
                             "with" => Token::With,
+                            "drop" => Token::Drop,
                             _ => Token::Name,
                         }
                     }

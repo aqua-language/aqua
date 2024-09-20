@@ -21,7 +21,7 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
     where
         O: Data,
     {
-        ctx.keyed_operator(|tx| async move {
+        ctx.keyed_operator(move |tx| async move {
             let mut slices: BTreeMap<Time, HashMap<K, Vec<T>>> = BTreeMap::new();
             loop {
                 match self.recv().await {
@@ -47,24 +47,25 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
                                 for (k, vs) in output.drain() {
                                     let output = compute(&k, Window::new(vs.as_slice()), wr);
                                     tx.send(KeyedEvent::Data(time, k, output.deep_clone()))
-                                        .await;
+                                        .await?;
                                 }
                                 slices.pop_first();
                             } else {
                                 break;
                             }
                         }
-                        tx.send(KeyedEvent::Watermark(time)).await;
+                        tx.send(KeyedEvent::Watermark(time)).await?;
                     }
                     KeyedEvent::Snapshot(i) => {
-                        tx.send(KeyedEvent::Snapshot(i)).await;
+                        tx.send(KeyedEvent::Snapshot(i)).await?;
                     }
                     KeyedEvent::Sentinel => {
-                        tx.send(KeyedEvent::Sentinel).await;
+                        tx.send(KeyedEvent::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

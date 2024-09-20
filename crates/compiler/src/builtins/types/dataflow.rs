@@ -1,14 +1,18 @@
 use std::rc::Rc;
 
+use linkme::distributed_slice;
 use runtime::builtins::encoding::Encoding;
 use runtime::builtins::writer::Writer;
 
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
 use crate::builtins::types::stream::Stream;
 use crate::builtins::value::Value;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
 use crate::codegen::Codegen;
-use crate::Compiler;
+
+use super::backend::Backend;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Dataflow {
@@ -25,35 +29,46 @@ impl std::fmt::Display for Dataflow {
     }
 }
 
-impl Compiler {
-    pub(super) fn declare_dataflow(&mut self) {
-        self.declare_type("type Dataflow;", BuiltinType { rust: "Dataflow" });
-        self.declare_def(
-            "def collocate(a:Dataflow, b:Dataflow): Dataflow;",
-            BuiltinDef {
-                rust: "Dataflow::collocate",
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Dataflow;",
+        codegen: None,
+    });
+    ctx.declare(Decl::Impl {
+        aqua: "impl Dataflow",
+        decls: &[
+            ImplDecl::Def {
+                aqua: "def collocate(a:Dataflow, b:Dataflow): Dataflow;",
+                codegen: None,
                 fun: |_ctx, v| {
                     let v0 = v[0].as_dataflow();
                     let v1 = v[1].as_dataflow();
                     Dataflow::Collocate(Rc::new(v0), Rc::new(v1)).into()
                 },
             },
-        );
-        self.declare_def(
-            "def run(df:Dataflow): Instance;",
-            BuiltinDef {
-                rust: "Dataflow::run",
+            ImplDecl::Def {
+                aqua: "def run(df:Dataflow, backend:Backend): Instance;",
+                codegen: None,
                 fun: |ctx, v| {
                     let v0 = v[0].as_dataflow();
-                    let package = ctx
-                        .workspace
-                        .new_package(Codegen::new(&ctx.decls, &v0).rust())
-                        .unwrap();
-                    let executable = package.compile().unwrap();
-                    let instance = executable.run_locally().unwrap();
-                    Value::Instance(instance).into()
+                    let v1 = v[1].as_backend();
+                    match v1 {
+                        Backend::Rust => {
+                            let package = ctx
+                                .workspace
+                                .new_package(Codegen::new(&ctx.decls, &v0).rust())
+                                .unwrap();
+                            let executable = package.compile().unwrap();
+                            let instance = executable.run_locally().unwrap();
+                            Value::Instance(instance).into()
+                        }
+                        Backend::Java => {
+                            todo!()
+                        }
+                    }
                 },
             },
-        );
-    }
+        ],
+    });
 }

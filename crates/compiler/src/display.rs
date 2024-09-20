@@ -2,6 +2,8 @@ use crate::ast::Aggr;
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
+use crate::ast::Impl;
+use crate::ast::ImplVar;
 use crate::ast::Index;
 use crate::ast::Name;
 use crate::ast::Pat;
@@ -24,6 +26,7 @@ use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
 use crate::ast::TypeVar;
+use crate::infer::Constraint;
 use crate::print::Print;
 
 impl std::fmt::Display for Expr {
@@ -86,9 +89,9 @@ impl std::fmt::Display for Pat {
     }
 }
 
-impl std::fmt::Display for Trait {
+impl std::fmt::Display for Impl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).bound(self)
+        Pretty::new(f).imp(self)
     }
 }
 
@@ -134,9 +137,27 @@ impl std::fmt::Display for TypeVar {
     }
 }
 
+impl std::fmt::Display for ImplVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl std::fmt::Display for StmtTrait {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Pretty::new(f).stmt_trait(self)
+    }
+}
+
+impl std::fmt::Display for Constraint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).constraint(self)
+    }
+}
+
+impl std::fmt::Display for Trait {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Pretty::new(f).tr(self)
     }
 }
 
@@ -258,7 +279,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.kw("impl")?;
         self.generics(&s.generics)?;
         self.space()?;
-        self.bound(&s.head)?;
+        self.imp(&s.head)?;
         self.where_clause(&s.where_clause)?;
         self.space()?;
         self.brace(|this| {
@@ -281,12 +302,12 @@ impl<'a, 'b> Pretty<'a, 'b> {
         })
     }
 
-    fn where_clause(&mut self, ts: &[Trait]) -> std::fmt::Result {
+    fn where_clause(&mut self, ts: &[Impl]) -> std::fmt::Result {
         self.if_nonempty(ts, |this, ts| {
             this.space()?;
             this.kw("where")?;
             this.space()?;
-            this.comma_sep(ts, Self::bound)
+            this.comma_sep(ts, Self::imp)
         })
     }
 
@@ -495,8 +516,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.type_args(ts)?;
                 self.paren(|this| this.comma_sep(es, Self::expr))?;
             }
-            Expr::TraitMethod(_, _, b, x1, ts1) => {
-                self.bound(b)?;
+            Expr::Assoc(_, _, b, x1, ts1) => {
+                self.imp(b)?;
                 self.punct("::")?;
                 self.name(x1)?;
                 self.type_args(ts1)?;
@@ -530,14 +551,14 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Expr::Break(_, _) => {
                 self.kw("break")?;
             }
-            Expr::Fun(_, _, ps, t, e) => {
-                self.kw("fun")?;
-                self.paren(|this| this.comma_sep(ps, Self::param))?;
-                self.punct(":")?;
+            Expr::Lambda(_, _, ps, _, e) => {
+                if ps.len() == 1 {
+                    self.param(&ps[0])?;
+                } else {
+                    self.paren(|this| this.comma_sep(ps, Self::param))?;
+                }
                 self.space()?;
-                self.ty(t)?;
-                self.space()?;
-                self.punct("=")?;
+                self.punct("=>")?;
                 self.space()?;
                 self.expr(e)?;
             }
@@ -559,9 +580,6 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.kw("record")?;
                 self.fields(xts.as_ref(), Self::assign)?;
             }
-            Expr::Value(_, _) => {
-                self.kw("<value>")?;
-            }
             Expr::For(_, _, x, e, b) => {
                 self.kw("for")?;
                 self.space()?;
@@ -575,10 +593,6 @@ impl<'a, 'b> Pretty<'a, 'b> {
             }
             Expr::Char(_, _, c) => {
                 self.char(*c)?;
-            }
-            Expr::Unresolved(_, _, x, ts) => {
-                self.name(x)?;
-                self.type_args(ts)?;
             }
             Expr::InfixBinaryOp(_, _, op, e0, e1) => {
                 self.expr(e0)?;
@@ -660,6 +674,25 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Expr::Anonymous(_, _) => {
                 self.punct("_")?;
             }
+            Expr::Closure(_, _, xts0, xts1, t, e) => {
+                self.paren(|this| {
+                    this.comma_sep(xts0, Self::param)?;
+                    if !xts1.is_empty() {
+                        this.punct("|")?;
+                        this.space()?;
+                        this.comma_sep(xts1, Self::param)?;
+                    }
+                    Ok(())
+                })?;
+                self.space()?;
+                self.punct(":")?;
+                self.space()?;
+                self.ty(t)?;
+                self.space()?;
+                self.punct("=>")?;
+                self.space()?;
+                self.expr(e)?;
+            }
         }
         Ok(())
     }
@@ -728,6 +761,16 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.name(x)?;
                 self.space()?;
                 self.kw("in")?;
+                self.space()?;
+                self.expr(e)?;
+            }
+            Query::Union(_, e) => {
+                self.kw("union")?;
+                self.space()?;
+                self.expr(e)?;
+            }
+            Query::Limit(_, e) => {
+                self.kw("limit")?;
                 self.space()?;
                 self.expr(e)?;
             }
@@ -811,6 +854,11 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Query::Err(_) => {
                 self.kw("<err>")?;
             }
+            Query::Drop(_, x) => {
+                self.kw("drop")?;
+                self.space()?;
+                self.name(x)?;
+            }
         }
         Ok(())
     }
@@ -822,41 +870,57 @@ impl<'a, 'b> Pretty<'a, 'b> {
         self.space()?;
         self.kw("of")?;
         self.space()?;
-        self.expr(&a.e1)
+        self.expr(&a.e1)?;
+        if let Some(e2) = &a.e2 {
+            self.space()?;
+            self.kw("if")?;
+            self.space()?;
+            self.expr(e2)?;
+        }
+        Ok(())
     }
 
-    fn bound(&mut self, b: &Trait) -> std::fmt::Result {
+    fn tr(&mut self, tr: &Trait) -> std::fmt::Result {
+        self.name(&tr.x)?;
+        if !tr.ts.is_empty() || !tr.xts.is_empty() {
+            self.brack(|this| {
+                this.if_nonempty(&tr.ts, |this, ts| this.comma_sep(ts, Self::ty))?;
+                this.if_nonempty(&tr.xts, |this, xts| {
+                    if !tr.ts.is_empty() {
+                        this.punct(",")?;
+                        this.space()?;
+                    }
+                    this.comma_sep(xts, |this, (x, t)| {
+                        this.name(x)?;
+                        this.punct("=")?;
+                        this.ty(t)
+                    })
+                })?;
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+
+    fn imp(&mut self, b: &Impl) -> std::fmt::Result {
         match b {
-            Trait::Path(_, path) => {
+            Impl::Path(_, path) => {
                 self.path(path)?;
             }
-            Trait::Cons(x, ts, xts) => {
-                self.name(x)?;
-                if !ts.is_empty() || !xts.is_empty() {
-                    self.brack(|this| {
-                        this.if_nonempty(ts, |this, ts| this.comma_sep(ts, Self::ty))?;
-                        this.if_nonempty(xts, |this, xts| {
-                            if !ts.is_empty() {
-                                this.punct(",")?;
-                                this.space()?;
-                            }
-                            this.comma_sep(xts, |this, (x, t)| {
-                                this.name(x)?;
-                                this.punct("=")?;
-                                this.ty(t)
-                            })
-                        })?;
-                        Ok(())
-                    })?;
-                }
+            Impl::Trait(tr) => {
+                self.tr(tr)?;
             }
-            Trait::Type(t) => {
+            Impl::Type(t) => {
                 self.ty(t)?;
             }
-            Trait::Err => {
+            Impl::Err => {
                 self.kw("<err>")?;
             }
-            Trait::Var(_) => todo!(),
+            Impl::Var(x) => {
+                self.punct("?")?;
+                self.lit(x)?;
+            }
+            Impl::Unknown => self.kw("_")?,
         }
         Ok(())
     }
@@ -868,7 +932,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.type_args(ts)?;
             }
             Type::Assoc(b, x1, ts1) => {
-                self.bound(b)?;
+                self.imp(b)?;
                 self.punct("::")?;
                 self.name(x1)?;
                 self.type_args(ts1)?;
@@ -886,10 +950,14 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Type::Generic(x) => {
                 self.name(x)?;
             }
-            Type::Fun(ts, t) => {
-                self.kw("fun")?;
-                self.paren(|this| this.comma_sep(ts, Self::ty))?;
-                self.punct(":")?;
+            Type::Lambda(ts, t) => {
+                if ts.len() == 1 {
+                    self.ty(&ts[0])?;
+                } else {
+                    self.paren(|this| this.comma_sep(ts, Self::ty))?;
+                }
+                self.space()?;
+                self.punct("=>")?;
                 self.space()?;
                 self.ty(t)?;
             }
@@ -1050,6 +1118,44 @@ impl<'a, 'b> Pretty<'a, 'b> {
         }
         Ok(())
     }
+
+    fn constraint(&mut self, c: &Constraint) -> std::fmt::Result {
+        match c {
+            Constraint::ExprAssoc(_, t, i, x, ts) => {
+                self.lit("function")?;
+                self.punct(":")?;
+                self.space()?;
+                self.imp(i)?;
+                self.punct("::")?;
+                self.name(x)?;
+                self.type_args(ts)?;
+                self.space()?;
+                self.punct(":")?;
+                self.space()?;
+                self.ty(t)?;
+            }
+            Constraint::TypeAssoc(_, t, i, x, ts) => {
+                self.lit("type")?;
+                self.punct(":")?;
+                self.space()?;
+                self.imp(i)?;
+                self.punct("::")?;
+                self.name(x)?;
+                self.type_args(ts)?;
+                self.space()?;
+                self.punct(":")?;
+                self.space()?;
+                self.ty(t)?;
+            }
+            Constraint::WhereClause(_, i) => {
+                self.lit("where")?;
+                self.punct(":")?;
+                self.space()?;
+                self.imp(i)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 pub trait IntoVerbose {
@@ -1148,7 +1254,7 @@ impl StmtImpl {
     }
 }
 
-impl Trait {
+impl Impl {
     pub fn verbose(&self) -> Verbose<&Self> {
         Verbose(self)
     }
@@ -1204,8 +1310,8 @@ impl std::fmt::Display for Verbose<&StmtTraitDef> {
     }
 }
 
-impl std::fmt::Display for Verbose<&Trait> {
+impl std::fmt::Display for Verbose<&Impl> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().bound(self.0)
+        Pretty::new(f).verbose().imp(self.0)
     }
 }

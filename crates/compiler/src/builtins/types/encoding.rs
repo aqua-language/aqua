@@ -1,30 +1,35 @@
+use linkme::distributed_slice;
 use runtime::builtins::encoding::Encoding;
 
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
 
-impl Compiler {
-    pub(super) fn declare_encoding(&mut self) {
-        self.declare_type("type Encoding;", BuiltinType { rust: "Encoding" });
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Encoding;",
+        codegen: None,
+    });
 
-        self.declare_def(
-            "def csv(sep: char): Encoding;",
-            BuiltinDef {
-                rust: "Encoding::csv",
-                fun: |_ctx, v| {
-                    let v0 = v[0].as_char();
-                    Encoding::csv(v0).into()
-                },
+    ctx.declare(Decl::Impl {
+        aqua: "impl Encoding",
+        decls: &[ImplDecl::Def {
+            aqua: "def csv(sep: char): Encoding;",
+            codegen: None,
+            fun: |_ctx, v| {
+                let v0 = v[0].as_char();
+                Encoding::csv(v0).into()
             },
-        );
+        }],
+    });
 
-        // self.declare_def(
-        //     "def json(): Encoding;",
-        //     BuiltinDef {
-        //         rust: "Encoding::json",
-        //         fun: |_ctx, _v| Encoding::Json.into(),
-        //     },
-        // );
-    }
+    // ctx.declare_def(
+    //     "def json(): Encoding;",
+    //     BuiltinDef {
+    //         rust: "Encoding::json",
+    //         fun: |_ctx, _v| Encoding::Json.into(),
+    //     },
+    // );
 }

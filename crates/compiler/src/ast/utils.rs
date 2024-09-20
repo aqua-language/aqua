@@ -8,17 +8,25 @@ use super::StmtTrait;
 use super::StmtTraitDef;
 use super::StmtTraitType;
 use super::StmtType;
+use super::Type;
 
 impl Expr {
     pub fn is_braced(&self) -> bool {
-        matches!(
-            self,
-            Expr::Block(..) | Expr::Match(..) | Expr::While(..) | Expr::For(..) | Expr::IfElse(..)
-        )
+        match self {
+            Expr::Block(..)
+            | Expr::Match(..)
+            | Expr::While(..)
+            | Expr::For(..)
+            | Expr::IfElse(..) => true,
+            _ => false,
+        }
     }
 
     pub fn is_unit(&self) -> bool {
-        matches!(self, Expr::Tuple(_, _, v) if v.is_empty())
+        match self {
+            Expr::Tuple(_, _, v) if v.is_empty() => true,
+            _ => false,
+        }
     }
 
     pub fn is_place(&self) -> bool {
@@ -32,21 +40,29 @@ impl Expr {
 }
 
 impl StmtImpl {
-    pub fn get_def(&self, x: Name) -> Option<&Rc<StmtDef>> {
-        self.defs.iter().find(|stmt| stmt.name == x)
+    pub fn get_def(&self, x: &Name) -> Option<&Rc<StmtDef>> {
+        self.defs.iter().find(|stmt| stmt.name == *x)
     }
 
-    pub fn get_type(&mut self, x: Name) -> Option<&Rc<StmtType>> {
-        self.types.iter().find(|stmt| stmt.name == x)
+    pub fn get_type(&mut self, x: &Name) -> Option<&Rc<StmtType>> {
+        self.types.iter().find(|stmt| stmt.name == *x)
     }
 }
 
 impl StmtTrait {
-    pub fn get_def(&self, x: Name) -> Option<&Rc<StmtTraitDef>> {
-        self.defs.iter().find(|stmt| stmt.name == x)
+    pub fn get_def(&self, x: &Name) -> Option<&Rc<StmtTraitDef>> {
+        self.defs.iter().find(|stmt| stmt.name == *x)
     }
 
-    pub fn get_type(&self, x: Name) -> Option<&Rc<StmtTraitType>> {
-        self.types.iter().find(|stmt| stmt.name == x)
+    pub fn get_type(&self, x: &Name) -> Option<&Rc<StmtTraitType>> {
+        self.types.iter().find(|stmt| stmt.name == *x)
+    }
+}
+
+impl StmtDef {
+    pub fn type_of(&self) -> Type {
+        let ts = self.params.values().cloned().collect();
+        let t = self.ty.clone();
+        Type::Lambda(ts, Rc::new(t))
     }
 }

@@ -34,6 +34,7 @@ use common::dsl::ty_gen;
 use common::dsl::ty_tuple;
 use common::dsl::type_bound;
 
+use compiler::aqua;
 use compiler::ast::Type;
 
 use crate::common::dsl::expr_assign;
@@ -52,12 +53,22 @@ fn test_resolve_var0() {
 
 #[test]
 fn test_resolve_var_err0() {
-    let a = resolve(aqua!("var x = 0; y;")).unwrap();
+    let a = resolve(aqua!("var x = 0; y;")).unwrap_err();
     let b = program([
         stmt_var("x", Type::Unknown, expr_int("0")),
-        stmt_expr(expr_unresolved("y", [])),
+        stmt_expr(expr_err()),
     ]);
-    check!(a, b);
+    check!(
+        a,
+        b,
+        "Error: Name `y` not found.
+            ╭─[test:1:12]
+            │
+          1 │ var x = 0; y;
+            │            ┬
+            │            ╰── Expected expression.
+         ───╯"
+    );
 }
 
 #[test]
@@ -162,16 +173,19 @@ fn test_resolve_def3() {
 
 #[test]
 fn test_resolve_def_param1() {
-    let a = resolve(aqua!("def f(): i32 = x;")).unwrap();
-    let b = program([stmt_def(
-        "f",
-        [],
-        [],
-        ty("i32"),
-        [],
-        expr_unresolved("x", []),
-    )]);
-    check!(a, b);
+    let a = resolve(aqua!("def f(): i32 = x;")).unwrap_err();
+    let b = program([stmt_def("f", [], [], ty("i32"), [], expr_err())]);
+    check!(
+        a,
+        b,
+        "Error: Name `x` not found.
+            ╭─[test:1:16]
+            │
+          1 │ def f(): i32 = x;
+            │                ┬
+            │                ╰── Expected expression.
+         ───╯"
+    );
 }
 
 #[test]
@@ -270,7 +284,7 @@ fn test_resolve_trait_assoc0() {
          }
          def g[T](x:T): T where Trait[T] = f(x);"
     ))
-    .unwrap();
+    .unwrap_err();
     let b = program([
         stmt_trait(
             "Trait",
@@ -285,10 +299,20 @@ fn test_resolve_trait_assoc0() {
             [("x", ty_gen("T"))],
             ty_gen("T"),
             [trait_bound("Trait", [ty_gen("T")], [])],
-            expr_call(expr_unresolved("f", []), [expr_var("x")]),
+            expr_call(expr_err(), [expr_var("x")]),
         ),
     ]);
-    check!(a, b);
+    check!(
+        a,
+        b,
+        "Error: Name `f` not found.
+            ╭─[test:4:35]
+            │
+          4 │ def g[T](x:T): T where Trait[T] = f(x);
+            │                                   ┬
+            │                                   ╰── Expected expression.
+         ───╯"
+    );
 }
 
 #[test]
@@ -588,7 +612,7 @@ fn test_resolve_expr_assoc1() {
          }
          f(0);"
     })
-    .unwrap();
+    .unwrap_err();
     let b = program([
         stmt_trait(
             "Trait",
@@ -597,9 +621,19 @@ fn test_resolve_expr_assoc1() {
             [tr_def("f", [], [("x", ty("i32"))], ty("i32"), [])],
             [],
         ),
-        stmt_expr(expr_call(expr_unresolved("f", []), [expr_int("0")])),
+        stmt_expr(expr_call(expr_err(), [expr_int("0")])),
     ]);
-    check!(a, b);
+    check!(
+        a,
+        b,
+        "Error: Name `f` not found.
+            ╭─[test:4:1]
+            │
+          4 │ f(0);
+            │ ┬
+            │ ╰── Expected expression.
+         ───╯"
+    );
 }
 
 #[test]

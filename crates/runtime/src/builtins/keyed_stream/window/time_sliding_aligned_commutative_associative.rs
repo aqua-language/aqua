@@ -28,7 +28,7 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
         P: Data,
     {
         assert!(duration % step == Duration::from_seconds(0));
-        ctx.keyed_operator(|tx| async move {
+        ctx.keyed_operator(move |tx| async move {
             let mut slices: BTreeMap<Time, HashMap<K, P>> = BTreeMap::new();
             let mut output: HashMap<K, P> = HashMap::default();
             loop {
@@ -60,24 +60,25 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
                                 for (k, v) in output.drain() {
                                     let output = lower(&k, &v, wr);
                                     tx.send(KeyedEvent::Data(time, k, output.deep_clone()))
-                                        .await;
+                                        .await?;
                                 }
                                 slices.pop_first();
                             } else {
                                 break;
                             }
                         }
-                        tx.send(KeyedEvent::Watermark(time)).await;
+                        tx.send(KeyedEvent::Watermark(time)).await?;
                     }
                     KeyedEvent::Snapshot(i) => {
-                        tx.send(KeyedEvent::Snapshot(i)).await;
+                        tx.send(KeyedEvent::Snapshot(i)).await?;
                     }
                     KeyedEvent::Sentinel => {
-                        tx.send(KeyedEvent::Sentinel).await;
+                        tx.send(KeyedEvent::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

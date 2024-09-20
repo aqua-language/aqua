@@ -1,21 +1,29 @@
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use std::rc::Rc;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_url(&mut self) {
-        self.declare_type("type Url;", BuiltinType { rust: "Url" });
-        self.declare_def(
-            "def url(s: String): Url;",
-            BuiltinDef {
-                rust: "Url::parse",
-                fun: |_ctx, _v| {
-                    todo!()
-                    // let v0 = v[0].as_string();
-                    // Url::parse(v0).map(Into::into).into()
-                },
+use linkme::distributed_slice;
+use runtime::builtins::url::Url;
+
+use crate::builtins::value::Value;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Url;",
+        codegen: None,
+    });
+    ctx.declare(Decl::Impl {
+        aqua: "impl Url",
+        decls: &[ImplDecl::Def {
+            aqua: "def parse(s: String): Result[Url];",
+            codegen: None,
+            fun: |_ctx, v| {
+                let v0 = v[0].as_string();
+                Url::parse(v0).map(|v| Rc::new(Value::from(v))).into()
             },
-        );
-    }
+        }],
+    });
 }

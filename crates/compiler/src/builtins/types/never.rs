@@ -1,36 +1,31 @@
-use crate::ast::BuiltinDef;
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_never(&mut self) {
-        self.declare_def(
-            "def unreachable(): !;",
-            BuiltinDef {
-                rust: "(|| unreachable!())",
-                fun: |_ctx, _v| unreachable!(),
-            },
-        );
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
 
-        self.declare_def(
-            "def panic(msg: String): !;",
-            BuiltinDef {
-                rust: r#"(|msg| panic!("{}", msg))"#,
-                fun: |_ctx, v| {
-                    let v0 = v[0].as_string();
-                    panic!("{}", v0);
-                },
-            },
-        );
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Def {
+        aqua: "def unreachable(): !;",
+        codegen: None,
+        fun: |_ctx, _v| unreachable!(),
+    });
 
-        self.declare_def(
-            "def exit(): !;",
-            BuiltinDef {
-                rust: "(|| std::process::exit(0))",
-                fun: |_ctx, _v| {
-                    std::process::exit(0);
-                },
-            },
-        );
-    }
+    ctx.declare(Decl::Def {
+        aqua: "def panic(msg: String): !;",
+        codegen: None,
+        fun: |_ctx, v| {
+            let v0 = v[0].as_string();
+            panic!("{}", v0);
+        },
+    });
+
+    ctx.declare(Decl::Def {
+        aqua: "def exit(): !;",
+        codegen: None,
+        fun: |_ctx, _v| {
+            std::process::exit(0);
+        },
+    });
 }

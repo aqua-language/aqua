@@ -53,7 +53,6 @@ pub mod prelude {
     pub use macros::Timestamp;
     pub use macros::Unpin;
 
-    pub use crate::builtins::aggregator::Aggregator;
     pub use crate::builtins::array::Array;
     pub use crate::builtins::assigner::Assigner;
     pub use crate::builtins::blob::Blob;

@@ -11,7 +11,11 @@ where
     K: Key,
     T: Data,
 {
-    pub fn flat_map<O>(mut self, ctx: &mut Context, f: fn(T) -> Vec<O>) -> KeyedStream<K, O>
+    pub fn flat_map<O>(
+        mut self,
+        ctx: &mut Context,
+        f: impl Fn(T) -> Vec<O> + Send + 'static,
+    ) -> KeyedStream<K, O>
     where
         O: Data,
     {
@@ -20,17 +24,18 @@ where
                 match self.recv().await {
                     KeyedEvent::Data(t, k, v) => {
                         for v in f(v).iter() {
-                            tx.send(KeyedEvent::Data(t, k.deep_clone(), v)).await;
+                            tx.send(KeyedEvent::Data(t, k.deep_clone(), v)).await?;
                         }
                     }
-                    KeyedEvent::Watermark(t) => tx.send(KeyedEvent::Watermark(t)).await,
-                    KeyedEvent::Snapshot(i) => tx.send(KeyedEvent::Snapshot(i)).await,
+                    KeyedEvent::Watermark(t) => tx.send(KeyedEvent::Watermark(t)).await?,
+                    KeyedEvent::Snapshot(i) => tx.send(KeyedEvent::Snapshot(i)).await?,
                     KeyedEvent::Sentinel => {
-                        tx.send(KeyedEvent::Sentinel).await;
+                        tx.send(KeyedEvent::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

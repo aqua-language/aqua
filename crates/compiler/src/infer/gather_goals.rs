@@ -6,33 +6,45 @@ use crate::span::Span;
 use crate::traversal::visitor::AcceptVisitor;
 use crate::traversal::visitor::Visitor;
 
+use super::Constraint;
 use super::Context;
-use super::Goal;
 
-pub struct GatherGoals<'a> {
+struct GatherConstraints<'a> {
     ctx: &'a mut Context,
     span: Span,
 }
 
-impl GatherGoals<'_> {
-    pub fn new<'a>(ctx: &'a mut Context, span: Span) -> GatherGoals<'a> {
-        GatherGoals { ctx, span }
+impl GatherConstraints<'_> {
+    pub fn new<'a>(ctx: &'a mut Context, span: Span) -> GatherConstraints<'a> {
+        GatherConstraints { ctx, span }
     }
 }
 
-impl Visitor for GatherGoals<'_> {
+impl Visitor for GatherConstraints<'_> {
     fn visit_type(&mut self, t: &Type) {
         self._visit_type(t);
-        if let Type::Assoc(b, _, _) = t {
-            self.ctx.add_goal(Goal::new(self.span, b.clone()));
+        if let Type::Assoc(i, x, ts) = t {
+            self.ctx.add_constraint(Constraint::TypeAssoc(
+                self.span,
+                t.clone(),
+                i.clone(),
+                *x,
+                ts.clone(),
+            ))
         }
     }
 
     fn visit_expr(&mut self, e: &Expr) {
         self.span = e.span_of();
         self._visit_expr(e);
-        if let Expr::TraitMethod(s, _, b, _, _) = e {
-            self.ctx.add_goal(Goal::new(*s, b.clone()));
+        if let Expr::Assoc(s, t, i, x, ts) = e {
+            self.ctx.add_constraint(Constraint::ExprAssoc(
+                *s,
+                t.clone(),
+                i.clone(),
+                *x,
+                ts.clone(),
+            ))
         }
     }
 
@@ -47,13 +59,13 @@ impl Visitor for GatherGoals<'_> {
 }
 
 impl Program {
-    pub fn gather_goals(&self, ctx: &mut Context) {
-        self.visit(&mut GatherGoals::new(ctx, self.span));
+    pub fn gather_constraints(&self, ctx: &mut Context) {
+        self.visit(&mut GatherConstraints::new(ctx, self.span));
     }
 }
 
 impl Type {
-    pub fn gather_goals(&self, ctx: &mut Context) {
-        self.visit(&mut GatherGoals::new(ctx, Span::default()));
+    pub fn gather_constraints(&self, ctx: &mut Context) {
+        self.visit(&mut GatherConstraints::new(ctx, Span::default()));
     }
 }

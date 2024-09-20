@@ -1,3 +1,5 @@
+use compiler::aqua;
+
 use crate::common::passes::flatten;
 use crate::common::passes::resolve;
 

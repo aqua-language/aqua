@@ -1,9 +1,18 @@
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_u128(&mut self) {
-        self.declare_type("type u128;", BuiltinType { rust: "u128" });
-    }
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type u128;",
+        codegen: Some(Codegen {
+            rust: "u128",
+            java: "BigInteger",
+            egglog: None,
+        }),
+    });
 }

@@ -18,7 +18,7 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
     where
         O: Data,
     {
-        ctx.keyed_operator(|tx| async move {
+        ctx.keyed_operator(move |tx| async move {
             let mut aggs: HashMap<K, VecDeque<T>> = HashMap::default();
             loop {
                 match self.recv().await {
@@ -30,21 +30,22 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
                             for _ in 0..step {
                                 agg.pop_front();
                             }
-                            tx.send(KeyedEvent::Data(time, key, result)).await;
+                            tx.send(KeyedEvent::Data(time, key, result)).await?;
                         }
                     }
                     KeyedEvent::Watermark(time) => {
-                        tx.send(KeyedEvent::Watermark(time)).await;
+                        tx.send(KeyedEvent::Watermark(time)).await?;
                     }
                     KeyedEvent::Snapshot(i) => {
-                        tx.send(KeyedEvent::Snapshot(i)).await;
+                        tx.send(KeyedEvent::Snapshot(i)).await?;
                     }
                     KeyedEvent::Sentinel => {
-                        tx.send(KeyedEvent::Sentinel).await;
+                        tx.send(KeyedEvent::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

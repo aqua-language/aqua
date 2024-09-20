@@ -61,7 +61,7 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
         P: Data,
         O: Data,
     {
-        ctx.keyed_operator(|tx1| async move {
+        ctx.keyed_operator(move |tx1| async move {
             let mut aggs: BTreeMap<Time, HashMap<K, P>> = BTreeMap::new();
             loop {
                 match self.recv().await {
@@ -84,24 +84,25 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
                             if t1 < time {
                                 for (key, p) in entry.remove() {
                                     let data = lower(key.clone(), &p, t0..t1);
-                                    tx1.send(KeyedEvent::Data(t1, key, data)).await;
+                                    tx1.send(KeyedEvent::Data(t1, key, data)).await?;
                                 }
-                                tx1.send(KeyedEvent::Watermark(time)).await;
+                                tx1.send(KeyedEvent::Watermark(time)).await?;
                             } else {
-                                tx1.send(KeyedEvent::Watermark(time)).await;
+                                tx1.send(KeyedEvent::Watermark(time)).await?;
                                 break;
                             }
                         }
                     }
                     KeyedEvent::Snapshot(i) => {
-                        tx1.send(KeyedEvent::Snapshot(i)).await;
+                        tx1.send(KeyedEvent::Snapshot(i)).await?;
                     }
                     KeyedEvent::Sentinel => {
-                        tx1.send(KeyedEvent::Sentinel).await;
+                        tx1.send(KeyedEvent::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

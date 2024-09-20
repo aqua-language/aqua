@@ -13,20 +13,21 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
             loop {
                 match self.recv().await {
                     KeyedEvent::Data(t, _, v) => {
-                        tx.send(Event::Data(t, v)).await;
+                        tx.send(Event::Data(t, v)).await?;
                     }
                     KeyedEvent::Watermark(t) => {
-                        tx.send(Event::Watermark(t)).await;
+                        tx.send(Event::Watermark(t)).await?;
                     }
                     KeyedEvent::Snapshot(i) => {
-                        tx.send(Event::Snapshot(i)).await;
+                        tx.send(Event::Snapshot(i)).await?;
                     }
                     KeyedEvent::Sentinel => {
-                        tx.send(Event::Sentinel).await;
+                        tx.send(Event::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

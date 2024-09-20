@@ -39,10 +39,23 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
+        Some(Command::Run) => {
+            let (name, source) = if let Some(path) = &compiler.config.file {
+                input::read_file(path)?
+            } else {
+                input::read_stdin()?
+            };
+            compiler.compile_and_run(name, &source)
+        }
         None => {
             if let Some(path) = &compiler.config.file {
-                let (_name, source) = input::read_file(path)?;
-                Repl::new(config.repl, compiler).run(Some(source))
+                let (name, source) = input::read_file(path)?;
+                if compiler.config.interactive {
+                    Repl::new(config.repl, compiler).run(Some(source))
+                } else {
+                    compiler.compile_and_run(name, &source)?;
+                    Repl::new(config.repl, compiler).run(None)
+                }
             } else {
                 Repl::new(config.repl, compiler).run(None)
             }

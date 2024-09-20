@@ -20,7 +20,10 @@ pub mod operator;
 pub mod scan;
 pub mod sink;
 pub mod source;
+pub mod take;
 pub mod window;
+pub mod collect;
+pub mod dyn_source;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Event<T> {
@@ -43,8 +46,8 @@ impl<T: Data> Stream<T> {
 }
 
 impl<T: Data> Collector<T> {
-    pub async fn send(&self, event: Event<T>) {
-        self.0.send(event).await.ok();
+    pub async fn send(&self, event: Event<T>) -> Result<(), SendError> {
+        self.0.send(event).await.map_err(|_| SendError::Closed)
     }
 }
 
@@ -53,6 +56,10 @@ impl<T> Stream<T> {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         (Collector(tx), Stream(rx))
     }
+}
+
+pub enum SendError {
+    Closed,
 }
 
 #[allow(unused)]

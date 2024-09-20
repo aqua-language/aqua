@@ -1,14 +1,17 @@
+//! Replace type variables with types in the AST.
 use std::rc::Rc;
 
+use crate::ast::Impl;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::Trait;
 use crate::ast::Type;
 use crate::traversal::mapper::AcceptMapper;
 use crate::traversal::mapper::Mapper;
 
+use super::impl_var::ImplVarValue;
 use super::type_var::TypeVarValue;
+use super::Constraint;
 use super::Context;
 
 pub struct Apply<'a>(&'a mut Context);
@@ -22,11 +25,21 @@ impl Apply<'_> {
 impl Mapper for Apply<'_> {
     fn map_type(&mut self, t: &Type) -> Type {
         match t {
-            Type::Var(x) => match self.0.get_value(*x) {
+            Type::Var(x) => match self.0.get_type_value(*x) {
                 TypeVarValue::Unknown(_) => t.clone(),
                 TypeVarValue::Known(t) => self.map_type(&t),
             },
             _ => self._map_type(t),
+        }
+    }
+
+    fn map_impl(&mut self, i: &Impl) -> Impl {
+        match i {
+            Impl::Var(x) => match self.0.get_impl_value(*x) {
+                ImplVarValue::Unknown => i.clone(),
+                ImplVarValue::Known(i1) => self.map_impl(&i1),
+            },
+            _ => self._map_impl(i),
         }
     }
 
@@ -39,8 +52,8 @@ impl Mapper for Apply<'_> {
     }
 }
 
-impl Trait {
-    pub fn apply(&self, ctx: &mut Context) -> Trait {
+impl Impl {
+    pub fn apply(&self, ctx: &mut Context) -> Impl {
         self.map(&mut Apply::new(ctx))
     }
 }
@@ -59,6 +72,12 @@ impl Type {
 
 impl StmtDef {
     pub fn apply(&self, ctx: &mut Context) -> StmtDef {
+        self.map(&mut Apply::new(ctx))
+    }
+}
+
+impl Constraint {
+    pub fn apply(&self, ctx: &mut Context) -> Constraint {
         self.map(&mut Apply::new(ctx))
     }
 }

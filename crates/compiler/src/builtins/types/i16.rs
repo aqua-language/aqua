@@ -1,9 +1,18 @@
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_i16(&mut self) {
-        self.declare_type("type i16;", BuiltinType { rust: "i16" });
-    }
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type i16;",
+        codegen: Some(Codegen {
+            rust: "i16",
+            java: "short",
+            egglog: None,
+        }),
+    });
 }

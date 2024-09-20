@@ -1,3 +1,4 @@
+use compiler::aqua;
 use compiler::ast::Expr;
 use compiler::ast::Stmt;
 use compiler::ast::Type;
@@ -10,7 +11,7 @@ use crate::common::dsl::program;
 use crate::common::dsl::stmt_def;
 use crate::common::dsl::stmt_expr;
 use crate::common::dsl::ty;
-use crate::common::dsl::ty_fun;
+use crate::common::dsl::ty_lambda;
 use crate::common::passes::infer;
 use crate::common::passes::monomorphise;
 
@@ -113,7 +114,7 @@ fn test_monomorphise4() {
 
 fn op(x: &'static str, t: Type, a: Expr, b: Expr) -> Expr {
     expr_call(
-        expr_def(x, []).with_type(ty_fun([t.clone(), t.clone()], t.clone())),
+        expr_def(x, []).with_type(ty_lambda([t.clone(), t.clone()], t.clone())),
         [a.with_type(t.clone()), b.with_type(t.clone())],
     )
     .with_type(t.clone())
@@ -184,4 +185,16 @@ fn test_monomorphise_add_sub() {
         )),
     ]);
     check!(a, b);
+}
+
+#[test]
+fn test_infer_vec_i32_display() {
+    let a = monomorphise(aqua!("Display[Vec[i32]]::toString(Vec[i32]::new());")).unwrap();
+    let b = monomorphise(aqua!("Display[Vec[i32]]::toString(Vec[i32]::new()):String;")).unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_infer_vec_i32_display2() {
+    monomorphise(aqua!("Display[_]::toString(Vec[i32]::new());")).unwrap();
 }

@@ -28,7 +28,7 @@ impl<T: Data> Stream<T> {
         P: Data,
     {
         assert!(duration % step == Duration::from_seconds(0));
-        ctx.operator(|tx| async move {
+        ctx.operator(move |tx| async move {
             let mut slices: BTreeMap<Time, P> = BTreeMap::new();
             loop {
                 match self.recv().await {
@@ -50,22 +50,23 @@ impl<T: Data> Stream<T> {
                                     agg = combine(&agg, v);
                                 }
                                 let output = lower(&agg, wr);
-                                tx.send(Event::Data(time, output.deep_clone())).await;
+                                tx.send(Event::Data(time, output.deep_clone())).await?;
                             } else {
                                 break;
                             }
                         }
-                        tx.send(Event::Watermark(time)).await;
+                        tx.send(Event::Watermark(time)).await?;
                     }
                     Event::Snapshot(i) => {
-                        tx.send(Event::Snapshot(i)).await;
+                        tx.send(Event::Snapshot(i)).await?;
                     }
                     Event::Sentinel => {
-                        tx.send(Event::Sentinel).await;
+                        tx.send(Event::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

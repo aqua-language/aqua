@@ -13,6 +13,7 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
                     break;
                 }
             }
+            Ok(())
         });
     }
 }

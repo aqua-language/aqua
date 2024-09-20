@@ -23,6 +23,19 @@ pub struct Workspace {
     pub pids: Vec<u32>,
 }
 
+impl Clone for Workspace {
+    fn clone(&self) -> Self {
+        Self {
+            path: self.path.clone(),
+            crates: self.crates.clone(),
+            target: self.target.clone(),
+            pids: self.pids.clone(),
+            ..Default::default()
+        }
+    }
+}
+
+
 impl std::fmt::Debug for Workspace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Context")
@@ -57,7 +70,7 @@ impl Workspace {
 
                    [workspace.package]
                    version = "0.0.0"
-                   edition = "2024"
+                   edition = "2021"
 
                    [workspace.dependencies]
                    runtime = {{ path = "{RUNTIME}" }}"#,
@@ -100,20 +113,20 @@ impl Workspace {
         let main = src.join("main.rs");
         let toml = path.join("Cargo.toml");
         std::fs::create_dir_all(&src)?;
-        std::fs::write(
-            &toml,
-            indoc::formatdoc!(
-                r#"[package]
-                   name = "{name}"
-                   version.workspace = true
-                   edition.workspace = true
+        tracing::info!("Created package {}", path.display());
+        let mut toml_file = File::create(&toml)?;
+        indoc::writedoc!(
+            toml_file,
+            r#"[package]
+               name = "{name}"
+               version.workspace = true
+               edition.workspace = true
 
-                   [dependencies]
-                   runtime.workspace = true"#,
-            ),
+               [dependencies]
+               runtime.workspace = true"#,
         )?;
-        let mut file = File::create("output.txt")?;
-        write!(file, "{source}")?;
+        let mut main_file = File::create(&main)?;
+        write!(main_file, "{source}")?;
         Ok(Package {
             workspace,
             target,
@@ -156,7 +169,7 @@ impl Package {
         if cmd.wait()?.success() {
             tracing::info!("Succeeded building crate {}", self.name);
             let path = self.workspace.join("target/release").join(&self.name);
-            Ok(Executable { path })
+            Ok(Executable(path))
         } else {
             tracing::error!("Failed building crate {}", self.name);
             Err(anyhow::anyhow!("Build failed"))
@@ -164,15 +177,13 @@ impl Package {
     }
 }
 
-pub struct Executable {
-    pub path: PathBuf,
-}
+pub struct Executable(PathBuf);
 
 impl Executable {
     pub fn debug(&self) -> Result<()> {
         tracing::info!(
             "Running `{}` from `{}`",
-            self.path.display(),
+            self.0.display(),
             std::env::current_dir()?.display()
         );
         Ok(())
@@ -181,7 +192,7 @@ impl Executable {
     // Run locally.
     pub fn run_locally(&self) -> Result<Instance> {
         self.debug()?;
-        let child = Command::new(&self.path)
+        let child = Command::new(&self.0)
             .current_dir(std::env::current_dir()?)
             .stderr(Stdio::piped())
             .spawn()?;
@@ -195,7 +206,7 @@ impl Executable {
         self.debug()?;
         let child = Command::new("ssh")
             .arg(ip.to_string())
-            .arg(self.path.display().to_string())
+            .arg(self.0.display().to_string())
             .stderr(Stdio::piped())
             .spawn()?;
         Ok(Instance {

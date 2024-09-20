@@ -1,8 +1,18 @@
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_usize(&mut self) {
-        self.declare_type("type usize;", BuiltinType { rust: "usize" });
-    }
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type usize;",
+        codegen: Some(Codegen {
+            rust: "usize",
+            java: "long",
+            egglog: None,
+        }),
+    });
 }

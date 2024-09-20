@@ -1,112 +1,167 @@
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_f64(&mut self) {
-        self.declare_type("type f64;", BuiltinType { rust: "f64" });
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
 
-        self.declare_impl(
-            "impl f64 {
-                def abs(a:f64): f64;
-            }",
-            [BuiltinDef {
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type f64;",
+        codegen: Some(Codegen {
+            rust: "f64",
+            java: "double",
+            egglog: None,
+        }),
+    });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl f64",
+        decls: &[ImplDecl::Def {
+            aqua: "def abs(a:f64): f64;",
+            codegen: Some(Codegen {
                 rust: "f64::abs",
-                fun: |_ctx, v| {
-                    let v0 = v[0].as_f64();
-                    v0.abs().into()
-                },
-            }],
-        );
+                java: "Math.abs",
+                egglog: None,
+            }),
+            fun: |_ctx, v| {
+                let v0 = v[0].as_f64();
+                v0.abs().into()
+            },
+        }],
+    });
 
-        self.declare_impl(
-            "impl Add[f64,f64] {
-                type Output = f64;
-                def add(a:f64, b:f64): f64;
-            }",
-            [BuiltinDef {
-                rust: "f64::add_f64",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Add[f64,f64]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = f64;",
+            },
+            ImplDecl::Def {
+                aqua: "def add(a:f64, b:f64): f64;",
+                codegen: Some(Codegen {
+                    rust: "f64::add_f64",
+                    java: "(a,b) -> a+b",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_f64();
                     let v1 = v[1].as_f64();
                     (v0 + v1).into()
                 },
-            }],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl Sub[f64,f64] {
-                type Output = f64;
-                def sub(a:f64, b:f64): f64;
-            }",
-            [BuiltinDef {
-                rust: "f64::sub_f64",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Sub[f64,f64]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = f64;",
+            },
+            ImplDecl::Def {
+                aqua: "def sub(a:f64, b:f64): f64;",
+                codegen: Some(Codegen {
+                    rust: "f64::sub_f64",
+                    java: "(a,b) -> a-b",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_f64();
                     let v1 = v[1].as_f64();
                     (v0 - v1).into()
                 },
-            }],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl Mul[f64,f64] {
-                type Output = f64;
-                def mul(a:f64, b:f64): f64;
-            }",
-            [BuiltinDef {
-                rust: "f64::mul_f64",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Mul[f64,f64]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = f64;",
+            },
+            ImplDecl::Def {
+                aqua: "def mul(a:f64, b:f64): f64; ",
+                codegen: Some(Codegen {
+                    rust: "f64::mul_f64",
+                    java: "(a,b) -> a*b",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_f64();
                     let v1 = v[1].as_f64();
                     (v0 * v1).into()
                 },
-            }],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl Div[f64,f64] {
-                type Output = f64;
-                def div(a:f64, b:f64): f64;
-            }",
-            [BuiltinDef {
-                rust: "f64::div_f64",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Div[f64,f64]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = f64;",
+            },
+            ImplDecl::Def {
+                aqua: "def div(a:f64, b:f64): f64;",
+                codegen: Some(Codegen {
+                    rust: "f64::div_f64",
+                    java: "(a,b) -> a/b",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_f64();
                     let v1 = v[1].as_f64();
                     (v0 / v1).into()
                 },
-            }],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl Add[f64,i32] {
-                type Output = f64;
-                def add(a:f64, b:i32): f64;
-            }",
-            [BuiltinDef {
-                rust: "f64::add_i32",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Add[f64,i32]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = f64;",
+            },
+            ImplDecl::Def {
+                aqua: "def add(a:f64, b:i32): f64;",
+                codegen: Some(Codegen {
+                    rust: "f64::add_i32",
+                    java: "(a,b) -> a+b",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_f64();
                     let v1 = v[1].as_i32();
                     (v0 + v1 as f64).into()
                 },
-            }],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl Add[i32,f64] {
-                type Output = f64;
-                def add(a:i32, b:f64): f64;
-            }",
-            [BuiltinDef {
-                rust: "f64::add_i32",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Add[i32,f64]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = f64;",
+            },
+            ImplDecl::Def {
+                aqua: "def add(a:i32, b:f64): f64;",
+                codegen: Some(Codegen {
+                    rust: "f64::add_i32",
+                    java: "(a,b) -> a+b",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_f64();
                     (v0 as f64 + v1).into()
                 },
-            }],
-        );
-    }
+            },
+        ],
+    });
 }

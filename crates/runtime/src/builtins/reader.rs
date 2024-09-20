@@ -1,22 +1,25 @@
-#![allow(unused)]
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::builtins::path::Path;
 use crate::builtins::socket::SocketAddr;
-use crate::builtins::stream::Stream;
 use crate::builtins::string::String;
-// use crate::builtins::url::Url;
-use crate::traits::Data;
+use crate::traits::DeepClone;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[repr(C)]
 pub enum Reader {
     Stdin,
     File { path: Path, watch: bool },
-    // Http { url: Url },
+    Http { addr: SocketAddr },
     Tcp { addr: SocketAddr },
     Kafka { addr: SocketAddr, topic: String },
+}
+
+impl DeepClone for Reader {
+    fn deep_clone(&self) -> Self {
+        self.clone()
+    }
 }
 
 impl std::fmt::Display for Reader {
@@ -24,7 +27,7 @@ impl std::fmt::Display for Reader {
         match self {
             Reader::Stdin => write!(f, "Stdin"),
             Reader::File { path, watch } => write!(f, "File(path={path}, watch={watch})"),
-            // Reader::Http { url } => write!(f, "Http(url={})", url),
+            Reader::Http { addr } => write!(f, "Http(addr={})", addr),
             Reader::Tcp { addr } => write!(f, "Tcp(addr={addr})"),
             Reader::Kafka { addr, topic } => write!(f, "Kafka(addr={addr}, topic={topic})"),
         }
@@ -41,9 +44,9 @@ impl Reader {
         }
         Self::File { path, watch }
     }
-    // pub fn http(url: Url) -> Self {
-    //     Self::Http { url }
-    // }
+    pub fn http(addr: SocketAddr) -> Self {
+        Self::Http { addr }
+    }
     pub fn tcp(addr: SocketAddr) -> Self {
         Self::Tcp { addr }
     }

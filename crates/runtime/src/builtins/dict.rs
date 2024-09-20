@@ -1,23 +1,22 @@
-// use std::borrow::Borrow;
 use std::hash::Hash;
 
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::builtins::unchecked_cell::UncheckedCell;
-use crate::traits::Data;
 use crate::traits::DeepClone;
-use crate::traits::Key;
 use crate::HashMap;
 
-#[derive(Default, Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+use super::cell::Cell;
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 #[repr(C)]
-pub struct Dict<K: Eq + Hash, V>(pub UncheckedCell<HashMap<K, V>>);
+pub struct Dict<K: Eq + Hash, V>(pub Cell<HashMap<K, V>>);
 
 impl<K: Eq + Hash + std::fmt::Display, V: std::fmt::Display> std::fmt::Display for Dict<K, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{{")?;
-        let mut iter = self.0.iter();
+        let x = self.0.as_ref();
+        let mut iter = x.iter();
         if let Some((k, v)) = iter.next() {
             write!(f, "{}: {}", k, v)?;
             for (k, v) in iter {
@@ -28,21 +27,21 @@ impl<K: Eq + Hash + std::fmt::Display, V: std::fmt::Display> std::fmt::Display f
     }
 }
 
-impl<K: Key, V: Data> DeepClone for Dict<K, V> {
+impl<K: Eq + Hash + DeepClone, V: DeepClone> DeepClone for Dict<K, V> {
     fn deep_clone(&self) -> Self {
-        todo!()
-        // let map = self
-        //     .0
-        //     .iter()
-        //     .map(|(k, v)| (k.deep_clone(), v.deep_clone()))
-        //     .collect();
-        // Dict(map)
+        let map = self
+            .0
+            .as_ref()
+            .iter()
+            .map(|(k, v)| (k.deep_clone(), v.deep_clone()))
+            .collect();
+        Dict(Cell::new(map))
     }
 }
 
 impl<K: Eq + Hash, V> Dict<K, V> {
     pub fn new() -> Dict<K, V> {
-        Dict(UncheckedCell::new(HashMap::default()))
+        Dict(Cell::new(HashMap::default()))
     }
 
     pub fn get(&self, key: impl std::borrow::Borrow<K>) -> Option<V>
@@ -50,7 +49,7 @@ impl<K: Eq + Hash, V> Dict<K, V> {
         K: Clone,
         V: Clone,
     {
-        self.0.get(key.borrow()).cloned()
+        self.0.as_ref().get(key.borrow()).cloned()
     }
 
     pub fn insert(&self, key: K, val: V)
@@ -58,30 +57,24 @@ impl<K: Eq + Hash, V> Dict<K, V> {
         K: Clone,
         V: Clone,
     {
-        // Safety: This is an atomic operation.
-        unsafe {
-            self.0.as_mut_unchecked().insert(key, val);
-        }
+        self.0.as_mut().insert(key, val);
     }
 
-    pub fn remove(&self, key: impl std::borrow::Borrow<K>)
+    pub fn remove(&self, key: impl std::borrow::Borrow<K>) -> Option<V>
     where
         K: Clone,
         V: Clone,
     {
-        // Safety: This is an atomic operation.
-        unsafe {
-            self.0.as_mut_unchecked().remove(key.borrow());
-        }
+        self.0.as_mut().remove(key.borrow())
     }
 
     pub fn contains_key(&self, key: impl std::borrow::Borrow<K>) -> bool {
-        self.0.contains_key(key.borrow())
+        self.0.as_ref().contains_key(key.borrow())
     }
 }
 
 impl<K: Eq + Hash, V> From<HashMap<K, V>> for Dict<K, V> {
     fn from(map: HashMap<K, V>) -> Self {
-        Dict(UncheckedCell::new(map))
+        Dict(Cell::new(map))
     }
 }

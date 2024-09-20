@@ -6,6 +6,8 @@ use crate::symbol::Symbol;
 use super::Aggr;
 use super::Block;
 use super::Expr;
+use super::ExprBody;
+use super::Impl;
 use super::Index;
 use super::Map;
 use super::Name;
@@ -14,7 +16,6 @@ use super::Program;
 use super::Segment;
 use super::Stmt;
 use super::StmtDef;
-use super::ExprBody;
 use super::StmtEnum;
 use super::StmtImpl;
 use super::StmtStruct;
@@ -22,10 +23,10 @@ use super::StmtTrait;
 use super::StmtTraitDef;
 use super::StmtTraitType;
 use super::StmtType;
-use super::TypeBody;
 use super::StmtVar;
 use super::Trait;
 use super::Type;
+use super::TypeBody;
 
 impl Program {
     pub fn new(span: Span, stmts: Vec<Stmt>) -> Program {
@@ -37,8 +38,8 @@ impl StmtImpl {
     pub fn new(
         span: Span,
         generics: Vec<Name>,
-        head: Trait,
-        where_clause: Vec<Trait>,
+        head: Impl,
+        where_clause: Vec<Impl>,
         defs: Vec<Rc<StmtDef>>,
         types: Vec<Rc<StmtType>>,
     ) -> StmtImpl {
@@ -69,7 +70,7 @@ impl StmtTrait {
         span: Span,
         name: Name,
         generics: Vec<Name>,
-        where_clause: Vec<Trait>,
+        where_clause: Vec<Impl>,
         defs: Vec<Rc<StmtTraitDef>>,
         types: Vec<Rc<StmtTraitType>>,
     ) -> StmtTrait {
@@ -83,8 +84,8 @@ impl StmtTrait {
         }
     }
 
-    pub fn bound(&self) -> Trait {
-        Trait::Cons(
+    pub fn bound(&self) -> Impl {
+        Impl::Trait(Trait::new(
             self.name,
             self.generics
                 .iter()
@@ -94,7 +95,7 @@ impl StmtTrait {
                 .iter()
                 .map(|s| (s.name, Type::Unknown))
                 .collect::<Map<_, _>>(),
-        )
+        ))
     }
 }
 
@@ -126,7 +127,7 @@ impl StmtDef {
         generics: Vec<Name>,
         params: Map<Name, Type>,
         ty: Type,
-        where_clause: Vec<Trait>,
+        where_clause: Vec<Impl>,
         body: ExprBody,
     ) -> StmtDef {
         StmtDef {
@@ -170,7 +171,7 @@ impl StmtTraitDef {
         generics: Vec<Name>,
         params: Map<Name, Type>,
         ty: Type,
-        where_clause: Vec<Trait>,
+        where_clause: Vec<Impl>,
     ) -> Self {
         Self {
             span,
@@ -236,11 +237,18 @@ impl Index {
 }
 
 impl Aggr {
-    pub fn new(x: Name, e0: Expr, e1: Expr) -> Aggr {
+    pub fn new(x: Name, e0: Expr, e1: Expr, e2: Option<Expr>) -> Aggr {
         Aggr {
             x,
             e0: Rc::new(e0),
             e1: Rc::new(e1),
+            e2: e2.map(Rc::new),
         }
+    }
+}
+
+impl Trait {
+    pub fn new(x: Name, ts: Vec<Type>, xts: Map<Name, Type>) -> Trait {
+        Trait { x, ts, xts }
     }
 }

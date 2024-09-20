@@ -100,3 +100,8 @@ pub struct Tuple3 {
 pub extern "C" fn tuple_i32_i64_i32(x: i32, y: i64, z: i32) -> Tuple3 {
     Tuple3 { x, y, z }
 }
+
+#[no_mangle]
+pub extern "C" fn boxed_i32(x: i32) -> Box<i32> {
+    Box::new(x)
+}

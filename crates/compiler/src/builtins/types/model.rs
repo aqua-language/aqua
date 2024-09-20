@@ -1,28 +1,45 @@
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_model(&mut self) {
-        self.declare_type("type Model;", BuiltinType { rust: "Model" });
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
 
-        self.declare_def(
-            "def load_model(): Model;",
-            BuiltinDef {
-                rust: "Model::load",
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Model;",
+        codegen: Some(Codegen {
+            rust: "Model",
+            java: "Model",
+            egglog: None,
+        }),
+    });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl Model",
+        decls: &[
+            ImplDecl::Def {
+                aqua: "def load_model(): Model;",
+                codegen: Some(Codegen {
+                    rust: "Model::load_model",
+                    java: "Model.load_model",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_blob();
                     // Model::new(v0).into()
                 },
             },
-        );
-
-        self.declare_def(
-            "def predict[I,O](model: Model, input: Matrix[I]): Matrix[O];",
-            BuiltinDef {
-                rust: "Model::predict",
+            ImplDecl::Def {
+                aqua: "def predict[I,O](model: Model, input: Matrix[I]): Matrix[O];",
+                codegen: Some(Codegen {
+                    rust: "Model::predict",
+                    java: "Model.predict",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_model();
@@ -49,6 +66,6 @@ impl Compiler {
                     // })
                 },
             },
-        );
-    }
+        ],
+    });
 }

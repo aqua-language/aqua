@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::traits::DeepClone;
+
 #[derive(Clone, Copy, Serialize, Deserialize, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(C)]
 pub struct Duration(pub time::Duration);
@@ -8,6 +10,12 @@ pub struct Duration(pub time::Duration);
 impl std::fmt::Display for Duration {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl DeepClone for Duration {
+    fn deep_clone(&self) -> Self {
+        Self(self.0)
     }
 }
 

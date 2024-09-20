@@ -1,21 +1,26 @@
+use crate::infer::Constraint;
+use crate::span::Span;
+
 use super::BuiltinDef;
 use super::BuiltinType;
 use super::Expr;
+use super::ExprBody;
+use super::Impl;
+use super::Map;
 use super::Name;
 use super::Pat;
 use super::Path;
 use super::Stmt;
 use super::StmtDef;
-use super::ExprBody;
 use super::StmtEnum;
 use super::StmtImpl;
 use super::StmtStruct;
 use super::StmtTrait;
 use super::StmtType;
-use super::TypeBody;
 use super::StmtVar;
 use super::Trait;
 use super::Type;
+use super::TypeBody;
 
 impl Stmt {
     pub fn as_var(&self) -> Option<&StmtVar> {
@@ -91,18 +96,28 @@ impl ExprBody {
     }
 }
 
-impl Trait {
-    pub fn as_type(&self, x: &Name) -> Option<&Type> {
+impl Impl {
+    pub fn as_type(&self) -> Option<&Type> {
         match self {
-            Trait::Path(_, _) => None,
-            Trait::Cons(_, _, xts) => xts.get(x),
-            Trait::Type(_) => None,
-            Trait::Err => None,
-            Trait::Var(..) => None,
+            Impl::Path(_, _) => None,
+            Impl::Trait(_) => None,
+            Impl::Type(t) => Some(t),
+            Impl::Err => None,
+            Impl::Var(..) => None,
+            Impl::Unknown => None,
+        }
+    }
+    pub fn as_trait(&self) -> Option<&Trait> {
+        match self {
+            Impl::Path(..) => None,
+            Impl::Trait(tr) => Some(tr),
+            Impl::Type(_) => None,
+            Impl::Err => None,
+            Impl::Var(..) => None,
+            Impl::Unknown => None,
         }
     }
 }
-
 
 impl Path {
     pub fn as_name(&self) -> Option<&Name> {
@@ -114,10 +129,65 @@ impl Path {
     }
 }
 
+impl Expr {
+    fn as_param(&self) -> Option<(Name, Type)> {
+        match self {
+            Expr::Path(_, _, p) => {
+                let Some(x) = p.as_name() else { return None };
+                Some((*x, Type::Unknown))
+            }
+            Expr::Annotate(_, t, e) => {
+                let Expr::Path(_, _, p) = e.as_ref() else {
+                    return None;
+                };
+                Some((*p.as_name()?, t.clone()))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn as_params(&self) -> Option<Map<Name, Type>> {
+        match self {
+            Expr::Tuple(_, _, es) => {
+                let mut map = Map::new();
+                for e in es {
+                    let (x, t) = e.as_param()?;
+                    map.insert(x, t);
+                }
+                Some(map)
+            }
+            Expr::Paren(_, _, e) => {
+                let xt = e.as_param()?;
+                Some(Map::from(vec![xt]))
+            }
+            _ => {
+                let xt = self.as_param()?;
+                Some(Map::from(vec![xt]))
+            }
+        }
+    }
+}
+
 impl Type {
     pub fn as_name(&self) -> Option<&Name> {
         if let Type::Path(p) = self {
             p.as_name()
+        } else {
+            None
+        }
+    }
+
+    pub fn as_params(&self) -> Vec<Type> {
+        if let Type::Tuple(ts) = self {
+            ts.clone()
+        } else {
+            vec![self.clone()]
+        }
+    }
+
+    pub fn as_path(&self) -> Option<&Path> {
+        if let Type::Path(p) = self {
+            Some(p)
         } else {
             None
         }
@@ -142,6 +212,24 @@ impl Expr {
             None
         }
     }
+
+    pub fn as_field(&self) -> Option<(&Name, &Expr)> {
+        match self {
+            // x = e
+            Expr::Assign(_, _, e0, e1) => {
+                let x = e0.as_name()?;
+                Some((x, e1))
+            }
+            // e.x
+            Expr::Field(_, _, _, x) => Some((x, self)),
+            // x
+            Expr::Path(_, _, p) => {
+                let x = p.as_name()?;
+                Some((x, self))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl TypeBody {
@@ -155,6 +243,24 @@ impl TypeBody {
         match self {
             TypeBody::UserDefined(_) => unreachable!(),
             TypeBody::Builtin(b) => Some(b),
+        }
+    }
+}
+
+impl Constraint {
+    pub fn impl_of(&self) -> &Impl {
+        match self {
+            Constraint::WhereClause(_, i) => i,
+            Constraint::ExprAssoc(_, _, i, ..) => i,
+            Constraint::TypeAssoc(_, _, i, ..) => i,
+        }
+    }
+
+    pub fn span_of(&self) -> &Span {
+        match self {
+            Constraint::WhereClause(s, _) => s,
+            Constraint::ExprAssoc(s, ..) => s,
+            Constraint::TypeAssoc(s, ..) => s,
         }
     }
 }

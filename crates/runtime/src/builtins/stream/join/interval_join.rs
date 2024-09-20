@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::builtins::duration::Duration;
 use crate::builtins::stream::Collector;
 use crate::builtins::stream::Event;
+use crate::builtins::stream::SendError;
 use crate::builtins::stream::Stream;
 use crate::builtins::time::Time;
 use crate::runner::context::Context;
@@ -27,7 +28,7 @@ impl<T: Data> Stream<T> {
         K: Data + Key,
         O: Data,
     {
-        ctx.operator(|tx| async move {
+        ctx.operator(move |tx| async move {
             let mut s: State<K, T, R> = State::new(lower_bound, upper_bound);
             let mut l_watermark = Time::zero();
             let mut r_watermark = Time::zero();
@@ -38,20 +39,20 @@ impl<T: Data> Stream<T> {
                     event = self.recv(), if !done_l => match event {
                         Event::Data(time, data) => {
                             let key = left_key(&data);
-                            s.incremental_join_left(key, time, data, &joiner, &tx).await;
+                            s.incremental_join_left(key, time, data, &joiner, &tx).await?;
                         }
                         Event::Watermark(t) => {
                             s.add_watermark_left(t);
                             if t < r_watermark {
-                                tx.send(Event::Watermark(t)).await;
+                                tx.send(Event::Watermark(t)).await?;
                             } else if l_watermark < r_watermark && r_watermark < t {
-                                tx.send(Event::Watermark(r_watermark)).await
+                                tx.send(Event::Watermark(r_watermark)).await?;
                             }
                             l_watermark = t;
                         }
                         Event::Sentinel => {
                             if done_r {
-                                tx.send(Event::Sentinel).await;
+                                tx.send(Event::Sentinel).await?;
                                 break;
                             }
                             done_l = true;
@@ -61,20 +62,20 @@ impl<T: Data> Stream<T> {
                     event = other.recv(), if !done_r => match event {
                         Event::Data(time, data) => {
                             let key = right_key(&data);
-                            s.incremental_join_right(key, time, data, &joiner, &tx).await;
+                            s.incremental_join_right(key, time, data, &joiner, &tx).await?;
                         }
                         Event::Watermark(t) => {
                             s.add_watermark_right(t);
                             if t < l_watermark {
-                                tx.send(Event::Watermark(t)).await;
+                                tx.send(Event::Watermark(t)).await?;
                             } else if r_watermark < l_watermark && l_watermark < t {
-                                tx.send(Event::Watermark(l_watermark)).await
+                                tx.send(Event::Watermark(l_watermark)).await?;
                             }
                             r_watermark = t;
                         }
                         Event::Sentinel => {
                             if done_l {
-                                tx.send(Event::Sentinel).await;
+                                tx.send(Event::Sentinel).await?;
                                 break;
                             }
                             done_r = true;
@@ -83,6 +84,7 @@ impl<T: Data> Stream<T> {
                     },
                 };
             }
+            Ok(())
         })
     }
 }
@@ -182,7 +184,7 @@ where
         upper_bound: Duration,
         joiner: impl Fn(&T, &R) -> O,
         tx: &Collector<O>,
-    ) {
+    ) -> Result<(), SendError> {
         self.push_data_or_create(time, key.clone(), data.clone());
         let earliest_possible = time - lower_bound;
         let latest_possible = time + upper_bound;
@@ -203,7 +205,7 @@ where
                 for (other_time, other_data) in vec {
                     let time = time.max(*other_time);
                     let data = joiner(&data, other_data);
-                    tx.send(Event::Data(time, data.deep_clone())).await;
+                    tx.send(Event::Data(time, data.deep_clone())).await?;
                 }
             } else {
                 for (other_time, other_data) in vec {
@@ -211,11 +213,12 @@ where
                         // If the data is in the interval, we can join it
                         let time = time.max(*other_time);
                         let data = joiner(&data, other_data);
-                        tx.send(Event::Data(time, data.deep_clone())).await;
+                        tx.send(Event::Data(time, data.deep_clone())).await?;
                     }
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -251,7 +254,7 @@ where
         ldata: L,
         joiner: impl Fn(&L, &R) -> O,
         tx: &Collector<O>,
-    ) {
+    ) -> Result<(), SendError> {
         SliceSeq::incremental_join(
             &mut self.lslices,
             &mut self.rslices,
@@ -263,7 +266,7 @@ where
             joiner,
             tx,
         )
-        .await;
+        .await
     }
 
     async fn incremental_join_right<O: Data>(
@@ -273,7 +276,7 @@ where
         rdata: R,
         joiner: impl Fn(&L, &R) -> O,
         tx: &Collector<O>,
-    ) {
+    ) -> Result<(), SendError> {
         SliceSeq::incremental_join(
             &mut self.rslices,
             &mut self.lslices,
@@ -286,6 +289,6 @@ where
             |r, l| joiner(l, r),
             tx,
         )
-        .await;
+        .await
     }
 }

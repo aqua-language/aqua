@@ -2,10 +2,12 @@ use std::rc::Rc;
 
 use crate::ast::Program;
 use crate::ast::Stmt;
-use crate::ast::Trait;
+use crate::ast::Impl;
 use crate::ast::Type;
 use crate::traversal::mapper::AcceptMapper;
 use crate::traversal::mapper::Mapper;
+
+use super::Constraint;
 
 pub struct Expand;
 
@@ -18,7 +20,7 @@ impl Expand {
 impl Mapper for Expand {
     fn map_type(&mut self, t0: &Type) -> Type {
         if let Type::Assoc(b, x, _) = t0 {
-            if let Some(t1) = b.as_type(x) {
+            if let Some(t1) = b.as_trait().unwrap().xts.get(x) {
                 t1.map(self)
             } else {
                 t0.clone()
@@ -37,9 +39,9 @@ impl Mapper for Expand {
     }
 }
 
-impl Trait {
+impl Impl {
     /// Expand all associated types in a trait.
-    pub fn expand(&self) -> Trait {
+    pub fn expand(&self) -> Impl {
         self.map(&mut Expand::new())
     }
 }
@@ -54,6 +56,13 @@ impl Program {
 impl Type {
     /// Expand all associated types in a type.
     pub fn expand(&self) -> Type {
+        self.map(&mut Expand::new())
+    }
+}
+
+impl Constraint {
+    /// Expand all associated types in a constraint.
+    pub fn expand(&self) -> Constraint {
         self.map(&mut Expand::new())
     }
 }

@@ -15,17 +15,22 @@ impl<T: Data> Stream<T> {
                 match self.recv().await {
                     Event::Data(t, v) => {
                         if f(&v) {
-                            tx.send(Event::Data(t, v)).await;
+                            tx.send(Event::Data(t, v)).await?;
                         }
                     }
-                    Event::Watermark(t) => tx.send(Event::Watermark(t)).await,
-                    Event::Snapshot(i) => tx.send(Event::Snapshot(i)).await,
+                    Event::Watermark(t) => {
+                        tx.send(Event::Watermark(t)).await?;
+                    }
+                    Event::Snapshot(i) => {
+                        tx.send(Event::Snapshot(i)).await?;
+                    }
                     Event::Sentinel => {
-                        tx.send(Event::Sentinel).await;
+                        tx.send(Event::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

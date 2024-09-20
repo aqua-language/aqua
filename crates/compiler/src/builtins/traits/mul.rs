@@ -1,15 +1,17 @@
 use crate::builtins::value::Value;
-use crate::Compiler;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_mul(&mut self) {
-        self.declare_trait(
-            "trait Mul[A,B] {
-                 type Output;
-                 def mul(a:A, b:B): Mul[A,B]::Output;
-             }",
-        );
-    }
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Trait {
+        aqua: "trait Mul[A,B] {
+             type Output;
+             def mul(a:A, b:B): Mul[A,B]::Output;
+         }",
+    });
 }
 
 impl std::ops::Mul for Value {

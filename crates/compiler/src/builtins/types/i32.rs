@@ -1,327 +1,324 @@
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_i32(&mut self) {
-        self.declare_type("type i32;", BuiltinType { rust: "i32" });
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
 
-        self.declare_impl(
-            "impl i32 {
-                def abs(a:i32): i32;
-             }",
-            [BuiltinDef {
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type i32;",
+        codegen: Some(Codegen {
+            rust: "i32",
+            java: "int",
+            egglog: None,
+        }),
+    });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl i32",
+        decls: &[ImplDecl::Def {
+            aqua: "def abs(a:i32): i32;",
+            codegen: Some(Codegen {
                 rust: "i32::abs",
-                fun: |_ctx, v| {
-                    let v0 = v[0].as_i32();
-                    v0.abs().into()
-                },
-            }],
-        );
+                java: "Math.abs",
+                egglog: None,
+            }),
+            fun: |_ctx, v| {
+                let v0 = v[0].as_i32();
+                v0.abs().into()
+            },
+        }],
+    });
 
-        self.declare_impl(
-            "impl Add[i32,i32] {
-                 type Output = i32;
-                 def add(a:i32, b:i32): i32;
-             }",
-            [BuiltinDef {
-                rust: "(|a,b| a+b)",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Add[i32,i32]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = i32;",
+            },
+            ImplDecl::Def {
+                aqua: "def add(a:i32, b:i32): i32;",
+                codegen: Some(Codegen {
+                    rust: "(|a,b| a+b)",
+                    java: "(a,b) -> a+b",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 + v1).into()
                 },
-            }],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl Sub[i32,i32] {
-                 type Output = i32;
-                 def sub(a:i32, b:i32): i32;
-             }",
-            [BuiltinDef {
-                rust: "(|a,b| a-b)",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Sub[i32,i32]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = i32;",
+            },
+            ImplDecl::Def {
+                aqua: "def sub(a:i32, b:i32): i32;",
+                codegen: Some(Codegen {
+                    rust: "(|a,b| a-b)",
+                    java: "(a,b) -> a-b",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 - v1).into()
                 },
-            }],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl Mul[i32,i32] {
-                 type Output = i32;
-                 def mul(a:i32, b:i32): i32;
-             }",
-            [BuiltinDef {
-                rust: "(|a,b| a*b)",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Mul[i32,i32]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = i32;",
+            },
+            ImplDecl::Def {
+                aqua: "def mul(a:i32, b:i32): i32;",
+                codegen: Some(Codegen {
+                    rust: "(|a,b| a*b)",
+                    java: "(a,b) -> a*b",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 * v1).into()
                 },
-            }],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl Div[i32,i32] {
-                 type Output = i32;
-                 def div(a:i32, b:i32): i32;
-             }",
-            [BuiltinDef {
-                rust: "(|a,b| a/b)",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Div[i32,i32]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = i32;",
+            },
+            ImplDecl::Def {
+                aqua: "def div(a:i32, b:i32): i32;",
+                codegen: Some(Codegen {
+                    rust: "(|a,b| a/b)",
+                    java: "(a,b) -> a/b",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 / v1).into()
                 },
-            }],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl Neg[i32] {
-                 type Output = i32;
-                 def neg(a:i32): Neg[i32]::Output;
-             }",
-            [BuiltinDef {
-                rust: "(|a| -a)",
+    ctx.declare(Decl::Impl {
+        aqua: "impl Neg[i32]",
+        decls: &[
+            ImplDecl::Type {
+                aqua: "type Output = i32;",
+            },
+            ImplDecl::Def {
+                aqua: "def neg(a:i32): Neg[i32]::Output;",
+                codegen: Some(Codegen {
+                    rust: "(|a| -a)",
+                    java: "(a) -> -a",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     (-v0).into()
                 },
-            }],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl Display[i32] {
-                def to_string(v: i32): String;
-             }",
-            [BuiltinDef {
+    ctx.declare(Decl::Impl {
+        aqua: "impl Display[i32]",
+        decls: &[ImplDecl::Def {
+            aqua: "def toString(v: i32): String;",
+            codegen: Some(Codegen {
                 rust: "(|v| v.to_string())",
+                java: "(v) -> v.toString()",
+                egglog: None,
+            }),
+            fun: |_ctx, v| {
+                let v0 = v[0].as_i32();
+                runtime::prelude::String::from(v0.to_string()).into()
+            },
+        }],
+    });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl Default[i32]",
+        decls: &[ImplDecl::Def {
+            aqua: "def default(): i32;",
+            codegen: Some(Codegen {
+                rust: "<i32 as Default>::default",
+                java: "Default::default",
+                egglog: None,
+            }),
+            fun: |_ctx, _v| 0i32.into(),
+        }],
+    });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl PartialEq[i32,i32]",
+        decls: &[
+            ImplDecl::Def {
+                aqua: "def eq(a:i32, b:i32): bool;",
+                codegen: Some(Codegen {
+                    rust: "(|a,b| a == b)",
+                    java: "(a,b) -> a == b",
+                    egglog: None,
+                }),
                 fun: |_ctx, v| {
                     let v0 = v[0].as_i32();
-                    runtime::prelude::String::from(v0.to_string()).into()
+                    let v1 = v[1].as_i32();
+                    (v0 == v1).into()
                 },
-            }],
-        );
-
-        self.declare_impl(
-            "impl Default[i32] {
-                 def default(): i32;
-             }",
-            [BuiltinDef {
-                rust: "<i32 as Default>::default",
-                fun: |_ctx, _v| 0i32.into(),
-            }],
-        );
-
-        self.declare_impl(
-            "impl PartialEq[i32,i32] {
-                 def eq(a:i32, b:i32): bool;
-                 def ne(a:i32, b:i32): bool;
-             }",
-            [
-                BuiltinDef {
-                    rust: "(|a,b| a == b)",
-                    fun: |_ctx, v| {
-                        let v0 = v[0].as_i32();
-                        let v1 = v[1].as_i32();
-                        (v0 == v1).into()
-                    },
-                },
-                BuiltinDef {
+            },
+            ImplDecl::Def {
+                aqua: "def ne(a:i32, b:i32): bool;",
+                codegen: Some(Codegen {
                     rust: "(|a,b| a != b)",
-                    fun: |_ctx, v| {
-                        let v0 = v[0].as_i32();
-                        let v1 = v[1].as_i32();
-                        (v0 != v1).into()
-                    },
+                    java: "(a,b) -> a != b",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    (v0 != v1).into()
                 },
-            ],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl Ord[i32] {
-                 def cmp(a:i32, b:i32): Ordering;
-                 def min(a:i32, b:i32): i32;
-                 def max(a:i32, b:i32): i32;
-             }",
-            [
-                BuiltinDef {
+    ctx.declare(Decl::Impl {
+        aqua: "impl Ord[i32]",
+        decls: &[
+            ImplDecl::Def {
+                aqua: "def cmp(a:i32, b:i32): Ordering;",
+                codegen: Some(Codegen {
                     rust: "(|a,b| a.cmp(&b))",
-                    fun: |_ctx, v| {
-                        let v0 = v[0].as_i32();
-                        let v1 = v[1].as_i32();
-                        v0.cmp(&v1).into()
-                    },
+                    java: "(a,b) -> a.compareTo(b)",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    v0.cmp(&v1).into()
                 },
-                BuiltinDef {
+            },
+            ImplDecl::Def {
+                aqua: "def min(a:i32, b:i32): i32;",
+                codegen: Some(Codegen {
                     rust: "(|a,b| a.min(b))",
-                    fun: |_ctx, v| {
-                        let v0 = v[0].as_i32();
-                        let v1 = v[1].as_i32();
-                        v0.min(v1).into()
-                    },
+                    java: "(a,b) -> Math.min(a,b)",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    v0.min(v1).into()
                 },
-                BuiltinDef {
+            },
+            ImplDecl::Def {
+                aqua: "def max(a:i32, b:i32): i32;",
+                codegen: Some(Codegen {
                     rust: "(|a,b| a.max(b))",
-                    fun: |_ctx, v| {
-                        let v0 = v[0].as_i32();
-                        let v1 = v[1].as_i32();
-                        v0.max(v1).into()
-                    },
+                    java: "Math.max",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    v0.max(v1).into()
                 },
-            ],
-        );
+            },
+        ],
+    });
 
-        self.declare_impl(
-            "impl PartialOrd[i32, i32] {
-                def partial_cmp(a: i32, b: i32): Option[Ordering];
-                def lt(a: i32, b: i32): bool;
-                def le(a: i32, b: i32): bool;
-                def gt(a: i32, b: i32): bool;
-                def ge(a: i32, b: i32): bool;
-            }",
-            [
-                BuiltinDef {
+    ctx.declare(Decl::Impl {
+        aqua: "impl PartialOrd[i32, i32]",
+        decls: &[
+            ImplDecl::Def {
+                aqua: "def partial_cmp(a: i32, b: i32): Option[Ordering];",
+                codegen: Some(Codegen {
                     rust: "(|a,b| a.partial_cmp(&b))",
-                    fun: |_ctx, v| {
-                        let v0 = v[0].as_i32();
-                        let v1 = v[1].as_i32();
-                        crate::builtins::value::Value::Option(runtime::builtins::option::Option(
-                            v0.partial_cmp(&v1).map(|o| {
-                                std::rc::Rc::new(crate::builtins::value::Value::Ordering(o))
-                            }),
-                        ))
-                    },
+                    java: "(a,b) -> a.compareTo(b)",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    crate::builtins::value::Value::Option(runtime::builtins::option::Option(
+                        v0.partial_cmp(&v1)
+                            .map(|o| std::rc::Rc::new(crate::builtins::value::Value::Ordering(o))),
+                    ))
                 },
-                BuiltinDef {
+            },
+            ImplDecl::Def {
+                aqua: "def lt(a: i32, b: i32): bool;",
+                codegen: Some(Codegen {
                     rust: "(|a,b| a < b)",
-                    fun: |_ctx, v| {
-                        let v0 = v[0].as_i32();
-                        let v1 = v[1].as_i32();
-                        (v0 < v1).into()
-                    },
+                    java: "(a,b) -> a < b",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    (v0 < v1).into()
                 },
-                BuiltinDef {
+            },
+            ImplDecl::Def {
+                aqua: "def le(a: i32, b: i32): bool;",
+                codegen: Some(Codegen {
                     rust: "(|a,b| a <= b)",
-                    fun: |_ctx, v| {
-                        let v0 = v[0].as_i32();
-                        let v1 = v[1].as_i32();
-                        (v0 <= v1).into()
-                    },
+                    java: "(a,b) -> a <= b",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    (v0 <= v1).into()
                 },
-                BuiltinDef {
+            },
+            ImplDecl::Def {
+                aqua: "def gt(a: i32, b: i32): bool;",
+                codegen: Some(Codegen {
                     rust: "(|a,b| a > b)",
-                    fun: |_ctx, v| {
-                        let v0 = v[0].as_i32();
-                        let v1 = v[1].as_i32();
-                        (v0 > v1).into()
-                    },
+                    java: "(a,b) -> a > b",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    (v0 > v1).into()
                 },
-                BuiltinDef {
+            },
+            ImplDecl::Def {
+                aqua: "def ge(a: i32, b: i32): bool;",
+                codegen: Some(Codegen {
                     rust: "(|a,b| a >= b)",
-                    fun: |_ctx, v| {
-                        let v0 = v[0].as_i32();
-                        let v1 = v[1].as_i32();
-                        (v0 >= v1).into()
-                    },
+                    java: "(a,b) -> a >= b",
+                    egglog: None,
+                }),
+                fun: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    let v1 = v[1].as_i32();
+                    (v0 >= v1).into()
                 },
-            ],
-        );
-
-        // self.declare_def(
-        //     "def i32_ge(a: i32, b: i32): bool;",
-        //     BuiltinDef {
-        //         rust: "(|a,b| a<=b)",
-        //         fun: |_ctx, v| {
-        //             let v0 = v[0].as_i32();
-        //             let v1 = v[1].as_i32();
-        //             (v0 <= v1).into()
-        //         },
-        //     },
-        // );
-        //
-        // self.declare_def(
-        //     "def i32_le(a: i32, b: i32): bool;",
-        //     BuiltinDef {
-        //         rust: "(|a,b| a<=b)",
-        //         fun: |_ctx, v| {
-        //             let v0 = v[0].as_i32();
-        //             let v1 = v[1].as_i32();
-        //             (v0 <= v1).into()
-        //         },
-        //     },
-        // );
-        //
-        // self.declare_def(
-        //     "def i32_eq(a: i32, b: i32): bool;",
-        //     BuiltinDef {
-        //         rust: "(|a,b| a == b)",
-        //         fun: |_ctx, v| {
-        //             let v0 = v[0].as_i32();
-        //             let v1 = v[1].as_i32();
-        //             (v0 > v1).into()
-        //         },
-        //     },
-        // );
-        //
-        // self.declare_def(
-        //     "def i32_ne(a: i32, b: i32): bool;",
-        //     BuiltinDef {
-        //         rust: "(|a,b| a != b)",
-        //         fun: |_ctx, v| {
-        //             let v0 = v[0].as_i32();
-        //             let v1 = v[1].as_i32();
-        //             (v0 != v1).into()
-        //         },
-        //     },
-        // );
-        //
-        // self.declare_def(
-        //     "def i32_to_usize(a: i32): usize;",
-        //     BuiltinDef {
-        //         rust: "(|a,b| a > b)",
-        //         fun: |_ctx, v| {
-        //             let v0 = v[0].as_i32();
-        //             let v1 = v[1].as_i32();
-        //             (v0 > v1).into()
-        //         },
-        //     },
-        // );
-        //
-        // self.declare_def(
-        //     "def u32_to_i32(a: u32): i32;",
-        //     BuiltinDef {
-        //         rust: "(|a| a as i32)",
-        //         fun: |_ctx, v| {
-        //             let v0 = v[0].as_u32();
-        //             (v0 as i32).into()
-        //         },
-        //     },
-        // );
-        //
-        // self.declare_def(
-        //     "def i32_to_u32(a: i32): u32;",
-        //     BuiltinDef {
-        //         rust: "(|a| a as u32)",
-        //         fun: |_ctx, v| {
-        //             let v0 = v[0].as_i32();
-        //             (v0 as u32).into()
-        //         },
-        //     },
-        // );
-        //
-        // self.declare_def(
-        //     "def i32_to_usize(a: i32): usize;",
-        //     BuiltinDef {
-        //         rust: "(|a| a as usize)",
-        //         fun: |_ctx, v| {
-        //             let v0 = v[0].as_i32();
-        //             (v0 as usize).into()
-        //         },
-        //     },
-        // );
-    }
+            },
+        ],
+    });
 }

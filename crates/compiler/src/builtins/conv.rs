@@ -8,7 +8,7 @@ use crate::builtins::types::record::Record;
 use crate::builtins::types::stream::Stream;
 use crate::builtins::types::tuple::Tuple;
 use crate::builtins::types::variant::Variant;
-use runtime::builtins::aggregator::Aggregator;
+use runtime::builtins::url::Url;
 use runtime::builtins::assigner::Assigner;
 use runtime::builtins::blob::Blob;
 use runtime::builtins::dict::Dict;
@@ -20,7 +20,6 @@ use runtime::builtins::reader::Reader;
 use runtime::builtins::set::Set;
 use runtime::builtins::socket::SocketAddr;
 use runtime::builtins::time::Time;
-use runtime::builtins::time_source::TimeSource;
 use runtime::builtins::writer::Writer;
 use std::cmp::Ordering;
 use std::rc::Rc;
@@ -53,14 +52,9 @@ conv!(Record, Record, as_record);
 conv!(Stream, Stream, as_stream);
 conv!(Variant, Variant, as_variant);
 conv!(bool, Bool, as_bool);
-conv!(
-    Aggregator<Rc<Value>, Rc<Value>, Rc<Value>, Rc<Value>>,
-    Aggregator,
-    as_aggregator
-);
 conv!(Blob, Blob, as_blob);
 conv!(Dict<Value, Value>, Dict, as_dict);
-conv!(Assigner, Assigner, as_discretizer);
+conv!(Assigner, Assigner, as_assigner);
 conv!(Duration, Duration, as_duration);
 conv!(Dataflow, Dataflow, as_dataflow);
 conv!(Encoding, Encoding, as_encoding);
@@ -81,7 +75,6 @@ conv!(Set<Value>, Set, as_set);
 conv!(SocketAddr, SocketAddr, as_socket_addr);
 conv!(runtime::builtins::im_string::String, String, as_string);
 conv!(Time, Time, as_time);
-conv!(TimeSource<Rc<Value>>, TimeSource, as_time_source);
 conv!(runtime::builtins::vec::Vec<Value>, Vec, as_vec);
 conv!(Writer, Writer, as_writer);
 conv!(char, Char, as_char);
@@ -101,3 +94,4 @@ conv!(usize, Usize, as_usize);
 conv!(Instance, Instance, as_instance);
 conv!(Ordering, Ordering, as_ordering);
 conv!(Backend, Backend, as_backend);
+conv!(Url, Url, as_url);

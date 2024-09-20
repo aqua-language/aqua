@@ -1,15 +1,17 @@
 use crate::builtins::value::Value;
-use crate::Compiler;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_neg(&mut self) {
-        self.declare_trait(
-            "trait Neg[T] {
-                 type Output;
-                 def neg(v:T): Neg[T]::Output;
-             }",
-        );
-    }
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Trait {
+        aqua: "trait Neg[T] {
+             type Output;
+             def neg(v:T): Neg[T]::Output;
+         }",
+    });
 }
 
 impl std::ops::Neg for Value {

@@ -3,6 +3,7 @@ use std::future::Future;
 use crate::builtins::keyed_stream::KeyedCollector;
 use crate::builtins::keyed_stream::KeyedStream;
 use crate::builtins::stream::Collector;
+use crate::builtins::stream::SendError;
 use crate::builtins::stream::Stream;
 use crate::traits::Data;
 
@@ -23,6 +24,14 @@ impl Default for Context {
             rx,
         }
     }
+}
+
+#[macro_export]
+macro_rules! try_pair {
+    ($e:expr) => {
+        let (a, b) = $e;
+        (a?, b?)
+    };
 }
 
 impl Context {
@@ -54,20 +63,22 @@ impl Context {
         }
     }
 
-    pub fn spawn<F>(&mut self, f: F)
+    pub fn spawn<Fut>(&mut self, f: Fut)
     where
-        F: Future<Output = ()> + Send + 'static,
+        Fut: Future<Output = Result<(), SendError>> + Send + 'static,
     {
         let mut rx = self.rx.resubscribe();
         self.join_set.spawn(async move {
             rx.recv().await.expect("Channel should not be closed.");
-            f.await
+            f.await.ok();
         });
     }
 
-    pub fn operator<T, F>(&mut self, f: impl FnOnce(Collector<T>) -> F) -> Stream<T>
+    /// An operator with one input and one output.
+    pub fn operator<T, F, Fut>(&mut self, f: F) -> Stream<T>
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: FnOnce(Collector<T>) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<(), SendError>> + Send + 'static,
         T: Data,
     {
         let (tx, rx) = Stream::new();
@@ -75,12 +86,11 @@ impl Context {
         rx
     }
 
-    pub fn keyed_operator<K, T, F>(
-        &mut self,
-        f: impl FnOnce(KeyedCollector<K, T>) -> F,
-    ) -> KeyedStream<K, T>
+    /// A keyed operator with one input and one output.
+    pub fn keyed_operator<K, T, F, Fut>(&mut self, f: F) -> KeyedStream<K, T>
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: FnOnce(KeyedCollector<K, T>) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<(), SendError>> + Send + 'static,
         K: Data,
         T: Data,
     {
@@ -89,12 +99,11 @@ impl Context {
         rx
     }
 
-    pub fn co_operator<T0, T1, F>(
-        &mut self,
-        f: impl FnOnce(Collector<T0>, Collector<T1>) -> F,
-    ) -> (Stream<T0>, Stream<T1>)
+    /// An operator with two inputs and one output.
+    pub fn co_operator<T0, T1, F, Fut>(&mut self, f: F) -> (Stream<T0>, Stream<T1>)
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: FnOnce(Collector<T0>, Collector<T1>) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<(), SendError>> + Send + 'static,
         T0: Data,
         T1: Data,
     {
@@ -104,12 +113,13 @@ impl Context {
         (rx0, rx1)
     }
 
+    /// A keyed operator with two inputs and two outputs.
     pub fn keyed_co_operator<K0, K1, T0, T1, F>(
         &mut self,
         f: impl FnOnce(KeyedCollector<K0, T0>, KeyedCollector<K1, T1>) -> F,
     ) -> (KeyedStream<K0, T0>, KeyedStream<K1, T1>)
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: Future<Output = Result<(), SendError>> + Send + 'static,
         T0: Data,
         T1: Data,
         K0: Data,
@@ -121,29 +131,11 @@ impl Context {
         (rx0, rx1)
     }
 
+    /// An operator with one input and zero outputs.
     pub fn sink<F>(&mut self, f: impl FnOnce() -> F)
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: Future<Output = Result<(), SendError>> + Send + 'static,
     {
         self.spawn(f());
     }
-}
-
-pub fn array_unzip<const N: usize, A, B>(f: impl Fn() -> (A, B)) -> ([A; N], [B; N]) {
-    let mut a0: [std::mem::MaybeUninit<A>; N] =
-        unsafe { std::mem::MaybeUninit::uninit().assume_init() };
-    let mut a1: [std::mem::MaybeUninit<B>; N] =
-        unsafe { std::mem::MaybeUninit::uninit().assume_init() };
-
-    for (l, r) in a0[..].iter_mut().zip(a1.iter_mut()) {
-        let (tx, rx) = f();
-        unsafe {
-            std::ptr::write(l.as_mut_ptr(), tx);
-            std::ptr::write(r.as_mut_ptr(), rx);
-        }
-    }
-
-    let a0 = unsafe { std::mem::transmute_copy::<[std::mem::MaybeUninit<A>; N], [A; N]>(&a0) };
-    let a1 = unsafe { std::mem::transmute_copy::<[std::mem::MaybeUninit<B>; N], [B; N]>(&a1) };
-    (a0, a1)
 }

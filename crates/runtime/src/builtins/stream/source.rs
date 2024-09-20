@@ -14,7 +14,6 @@ use crate::builtins::reader::Reader;
 use crate::builtins::socket::SocketAddr;
 use crate::builtins::stream::Event;
 use crate::builtins::time::Time;
-use crate::builtins::time_source::TimeSource;
 // use crate::builtins::url::Url;
 use crate::traits::Data;
 
@@ -25,32 +24,77 @@ impl<T: Data> Stream<T> {
         ctx: &mut Context,
         reader: Reader,
         encoding: Encoding,
-        time_source: TimeSource<impl Fn(&T) -> Time + Send + 'static>,
-    ) -> Stream<T> {
-        Self::source_encoding(ctx, reader, encoding, time_source)
-    }
-
-    fn source_encoding(
-        ctx: &mut Context,
-        reader: Reader,
-        encoding: Encoding,
-        time_source: TimeSource<impl Fn(&T) -> Time + Send + 'static>,
+        extractor: impl FnMut(T, Time) -> Time + Send + 'static,
+        slack: Duration,
+        watermark_interval: Duration,
     ) -> Stream<T> {
         match encoding {
             Encoding::Csv { sep } => {
-                let decoder = crate::formats::csv::de::Reader::<1024>::new(sep);
-                Self::sink_reader(ctx, reader, decoder, time_source)
+                let mut decoder = crate::formats::csv::de::Reader::<1024>::new(sep);
+                Self::_source1(
+                    ctx,
+                    reader,
+                    move |s| decoder.decode(s),
+                    extractor,
+                    slack,
+                    watermark_interval,
+                )
             }
             Encoding::Json => {
-                let decoder = crate::formats::json::de::Reader::new();
-                Self::sink_reader(ctx, reader, decoder, time_source)
+                let mut decoder = crate::formats::json::de::Reader::new();
+                Self::_source1(
+                    ctx,
+                    reader,
+                    move |s| decoder.decode(s),
+                    extractor,
+                    slack,
+                    watermark_interval,
+                )
             }
         }
     }
 
-    async fn read_pipe(
+    pub fn dyn_source<Seed>(
+        ctx: &mut Context,
+        reader: Reader,
+        encoding: Encoding,
+        extractor: impl FnMut(T, Time) -> Time + Send + 'static,
+        slack: Duration,
+        watermark_interval: Duration,
+        type_tag: Seed,
+    ) -> Stream<T>
+    where
+        Seed: Clone + Send + Sync + for<'a> serde::de::DeserializeSeed<'a, Value = T> + 'static,
+    {
+        match encoding {
+            Encoding::Csv { sep } => {
+                let mut decoder = crate::formats::csv::de::Reader::<1024>::new(sep);
+                Self::_source1(
+                    ctx,
+                    reader,
+                    move |s| decoder.decode_dyn(s, type_tag.clone()),
+                    extractor,
+                    slack,
+                    watermark_interval,
+                )
+            }
+            Encoding::Json => {
+                let mut decoder = crate::formats::json::de::Reader::new();
+                Self::_source1(
+                    ctx,
+                    reader,
+                    move |s| decoder.decode_dyn(s, type_tag.clone()),
+                    extractor,
+                    slack,
+                    watermark_interval,
+                )
+            }
+        }
+    }
+
+    async fn read_pipe<E: std::error::Error>(
         rx: impl AsyncReadExt + Unpin,
-        mut decoder: impl Decode + 'static,
+        mut decoder: impl for<'a> FnMut(&'a [u8]) -> Result<T, E> + Send + 'static,
         watch: bool,
         tx: tokio::sync::mpsc::Sender<T>,
     ) {
@@ -60,16 +104,20 @@ impl<T: Data> Stream<T> {
             match rx.read_until(b'\n', &mut buf).await {
                 Ok(0) => {
                     tracing::info!("EOF");
+                    println!("EOF");
                     if watch {
+                        println!("Waiting for more data...");
                         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     } else {
                         break;
                     }
                 }
-                Ok(n) => match decoder.decode(&buf[0..n]) {
+                Ok(n) => match decoder(&buf[0..n]) {
                     Ok(data) => {
                         tracing::info!("Decoded: {:?}", data);
-                        tx.send(data).await.unwrap();
+                        if tx.send(data).await.is_err() {
+                            break;
+                        }
                         buf.clear();
                     }
                     Err(e) => tracing::info!("Failed to decode: {}", e),
@@ -79,9 +127,9 @@ impl<T: Data> Stream<T> {
         }
     }
 
-    async fn read_file(
+    async fn read_file<E: std::error::Error>(
         path: Path,
-        decoder: impl Decode + 'static,
+        decoder: impl for<'a> FnMut(&'a [u8]) -> Result<T, E> + Send + 'static,
         watch: bool,
         tx2: tokio::sync::mpsc::Sender<T>,
     ) {
@@ -91,9 +139,9 @@ impl<T: Data> Stream<T> {
         }
     }
 
-    async fn read_socket(
+    async fn read_socket<E: std::error::Error>(
         addr: SocketAddr,
-        mut decoder: impl Decode + 'static,
+        mut decoder: impl for<'a> FnMut(&'a [u8]) -> Result<T, E> + Send + 'static,
         tx: tokio::sync::mpsc::Sender<T>,
     ) {
         tracing::info!("Trying to listen on {}", addr.0);
@@ -104,10 +152,12 @@ impl<T: Data> Stream<T> {
         let mut rx = tokio_util::codec::Framed::new(socket, tokio_util::codec::LinesCodec::new());
         loop {
             match rx.next().await {
-                Some(Ok(line)) => match decoder.decode(line.as_bytes()) {
+                Some(Ok(line)) => match decoder(line.as_bytes()) {
                     Ok(data) => {
                         tracing::info!("Decoded: {:?}", data);
-                        tx.send(data).await.unwrap()
+                        if tx.send(data).await.is_err() {
+                            break;
+                        }
                     }
                     Err(e) => tracing::info!("Failed to decode: {}", e),
                 },
@@ -117,97 +167,71 @@ impl<T: Data> Stream<T> {
         }
     }
 
-    // #[allow(unused)]
-    // async fn read_http(url: Url, decoder: impl Decode + 'static, tx: tokio::sync::mpsc::Sender<T>) {
-    //     todo!()
-    // let uri: Uri = url.0.to_string().parse().unwrap();
-    // let client = hyper::Client::new();
-    // let mut resp = client.get(uri).await.unwrap();
-    // loop {
-    //     match resp.body_mut().data().await {
-    //         Some(Ok(chunk)) => match decoder.decode(&chunk) {
-    //             Ok(data) => {
-    //                 tracing::info!("Decoded: {:?}", data);
-    //                 tx.send(data).await.unwrap();
-    //             }
-    //             Err(e) => tracing::info!("Failed to decode: {}", e),
-    //         },
-    //         Some(Err(e)) => tracing::info!("Failed to read: {}", e),
-    //         None => break,
-    //     }
-    // }
-    // }
+    async fn read_http<E: std::error::Error>(
+        _addr: SocketAddr,
+        _decoder: impl for<'a> FnMut(&'a [u8]) -> Result<T, E> + Send + 'static,
+        _tx: tokio::sync::mpsc::Sender<T>,
+    ) {
+        todo!()
+    }
 
-    fn sink_reader(
+    fn _source1<E: std::error::Error + Send>(
         ctx: &mut Context,
         reader: Reader,
-        decoder: impl Decode + Send + 'static,
-        time_source: TimeSource<impl Fn(&T) -> Time + Send + 'static>,
+        decoder: impl for<'a> FnMut(&'a [u8]) -> Result<T, E> + Send + 'static,
+        extractor: impl FnMut(T, Time) -> Time + Send + 'static,
+        slack: Duration,
+        watermark_interval: Duration,
     ) -> Stream<T> {
         let (tx2, rx2) = tokio::sync::mpsc::channel(10);
         ctx.spawn(async move {
             match reader {
                 Reader::Stdin => Self::read_pipe(tokio::io::stdin(), decoder, false, tx2).await,
                 Reader::File { path, watch } => Self::read_file(path, decoder, watch, tx2).await,
-                // Reader::Http { url } => Self::read_http(url, decoder, tx2).await,
+                Reader::Http { addr } => Self::read_http(addr, decoder, tx2).await,
                 Reader::Tcp { addr } => Self::read_socket(addr, decoder, tx2).await,
                 Reader::Kafka { addr: _, topic: _ } => todo!(),
             }
+            Ok(())
         });
-        Self::source_event_time(ctx, rx2, time_source)
+        Self::_source4(ctx, rx2, extractor, watermark_interval, slack)
     }
 
-    fn source_event_time(
-        ctx: &mut Context,
-        rx: tokio::sync::mpsc::Receiver<T>,
-        time_source: TimeSource<impl Fn(&T) -> Time + Send + 'static>,
-    ) -> Stream<T> {
-        match time_source {
-            TimeSource::Ingestion { watermark_interval } => {
-                Self::source_ingestion_time(ctx, rx, watermark_interval)
-            }
-            TimeSource::Event {
-                extractor,
-                watermark_interval,
-                slack,
-            } => Self::_source_event_time(ctx, rx, extractor, watermark_interval, slack),
-        }
-    }
-
-    fn source_ingestion_time(
+    fn _source3(
         ctx: &mut Context,
         mut rx: tokio::sync::mpsc::Receiver<T>,
         watermark_interval: Duration,
     ) -> Stream<T> {
-        ctx.operator(|tx1| async move {
+        ctx.operator(move |tx1| async move {
             let mut watermark_interval = tokio::time::interval(watermark_interval.to_std());
             loop {
                 tokio::select! {
                     _ = watermark_interval.tick() => {
-                        tx1.send(Event::Watermark(Time::now())).await;
+                        tx1.send(Event::Watermark(Time::now())).await?;
                     },
                     data = rx.recv() => {
                         match data {
-                            Some(data) => tx1.send(Event::Data(Time::now(), data)).await,
+                            Some(data) => tx1.send(Event::Data(Time::now(), data)).await?,
                             None => {
-                                tx1.send(Event::Sentinel).await;
+                                tx1.send(Event::Sentinel).await?;
                                 break;
                             },
                         }
                     }
                 }
             }
+            Ok(())
         })
     }
 
-    fn _source_event_time(
+    fn _source4(
         ctx: &mut Context,
         mut rx: tokio::sync::mpsc::Receiver<T>,
-        extractor: impl Fn(&T) -> Time + Send + 'static,
+        mut extractor: impl FnMut(T, Time) -> Time + Send + 'static,
         watermark_interval: Duration,
         slack: Duration,
     ) -> Stream<T> {
-        ctx.operator(|tx| async move {
+        ctx.operator(move |tx| async move {
             let mut latest_time = OffsetDateTime::UNIX_EPOCH;
             let slack = slack.to_std();
             let mut watermark_interval = tokio::time::interval(watermark_interval.to_std());
@@ -217,29 +241,30 @@ impl<T: Data> Stream<T> {
                     _ = watermark_interval.tick() => {
                         if latest_time > OffsetDateTime::UNIX_EPOCH {
                             watermark = latest_time - slack;
-                            tx.send(Event::Watermark(Time(watermark))).await;
+                            tx.send(Event::Watermark(Time(watermark))).await?;
                         }
                     },
                     data = rx.recv() => {
                         match data {
                             Some(data) => {
-                                let time = extractor(&data);
+                                let time = extractor(data.clone(), Time::now());
                                 if time.0 < watermark {
                                     continue;
                                 }
                                 if time.0 > latest_time {
                                     latest_time = time.0;
                                 }
-                                tx.send(Event::Data(time, data)).await;
+                                tx.send(Event::Data(time, data)).await?;
                             }
                             None => {
-                                tx.send(Event::Sentinel).await;
+                                tx.send(Event::Sentinel).await?;
                                 break;
                             },
                         }
                     }
                 }
             }
+            Ok(())
         })
     }
 }

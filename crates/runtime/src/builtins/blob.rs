@@ -1,9 +1,11 @@
+use macros::DeepClone;
 use serde::Deserialize;
 use serde::Serialize;
 
 use crate::builtins::unchecked_cell::UncheckedCell;
+use crate::traits::DeepClone;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, DeepClone)]
 #[repr(C)]
 pub struct Blob(pub(crate) UncheckedCell<std::vec::Vec<u8>>);
 

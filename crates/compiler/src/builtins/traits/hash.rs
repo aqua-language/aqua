@@ -1,11 +1,21 @@
 use std::hash::Hash;
 
 use crate::builtins::value::Value;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Trait {
+        aqua: "trait Hash[T] {}",
+    });
+}
 
 impl Hash for Value {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
-            Value::Aggregator(_) => unreachable!(),
             Value::Array(v) => v.hash(state),
             Value::Blob(_) => unreachable!(),
             Value::Bool(v) => v.hash(state),
@@ -29,10 +39,9 @@ impl Hash for Value {
             Value::Stream(_) => unreachable!(),
             Value::String(v) => v.hash(state),
             Value::Time(v) => v.hash(state),
-            Value::TimeSource(_) => unreachable!(),
             Value::Tuple(v) => v.hash(state),
             Value::Usize(v) => v.hash(state),
-            // Value::Url(v) => v.hash(state),
+            Value::Url(v) => v.hash(state),
             Value::Vec(v) => v.hash(state),
             Value::Writer(_) => unreachable!(),
             Value::Dict(_) => unreachable!(),

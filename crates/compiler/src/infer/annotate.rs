@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use crate::ast::Expr;
+use crate::ast::Impl;
 use crate::ast::Pat;
 use crate::ast::Program;
 use crate::ast::Stmt;
@@ -22,9 +23,17 @@ impl Annotate<'_> {
 impl<'a> Mapper for Annotate<'a> {
     fn map_type(&mut self, t: &Type) -> Type {
         if let Type::Unknown = t {
-            self.0.fresh(TypeVarKind::General)
+            self.0.fresh_tv(TypeVarKind::General)
         } else {
             self._map_type(t)
+        }
+    }
+
+    fn map_impl(&mut self, i: &Impl) -> Impl {
+        if let Impl::Unknown = i {
+            self.0.fresh_iv()
+        } else {
+            self._map_impl(i)
         }
     }
 
@@ -39,11 +48,11 @@ impl<'a> Mapper for Annotate<'a> {
     fn map_expr(&mut self, e: &Expr) -> Expr {
         match e {
             Expr::Int(s, Type::Unknown, e) => {
-                let t = self.0.fresh(TypeVarKind::Int);
+                let t = self.0.fresh_tv(TypeVarKind::Int);
                 Expr::Int(*s, t, e.clone())
             }
             Expr::Float(s, Type::Unknown, e) => {
-                let t = self.0.fresh(TypeVarKind::Float);
+                let t = self.0.fresh_tv(TypeVarKind::Float);
                 Expr::Float(*s, t, e.clone())
             }
             _ => self._map_expr(e),
@@ -52,7 +61,7 @@ impl<'a> Mapper for Annotate<'a> {
 
     fn map_pattern(&mut self, p: &Pat) -> Pat {
         if let Pat::Int(s, Type::Unknown, e) = p {
-            let t = self.0.fresh(TypeVarKind::Int);
+            let t = self.0.fresh_tv(TypeVarKind::Int);
             Pat::Int(*s, t, e.clone())
         } else {
             self._map_pattern(p)

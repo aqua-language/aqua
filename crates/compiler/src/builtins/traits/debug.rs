@@ -1,11 +1,14 @@
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_debug(&mut self) {
-        self.declare_trait(
-            "trait Debug[T] {
-                 def to_string(v:T): String;
-             }",
-        );
-    }
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn decl(ctx: &mut Context) {
+    ctx.declare(Decl::Trait {
+        aqua: "trait Debug[T] {
+                def debug(v: T): String;
+            }",
+    });
 }

@@ -1,7 +1,10 @@
+use crate::ast::Impl;
 use crate::ast::Map;
 use crate::ast::Name;
+use crate::ast::StmtDef;
+use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
-use crate::ast::Trait;
+use crate::ast::StmtStruct;
 use crate::ast::Type;
 use crate::traversal::mapper::Mapper;
 
@@ -17,10 +20,16 @@ impl<'a> Instantiate<'a> {
 }
 
 impl<'a> Mapper for Instantiate<'a> {
-    fn map_type(&mut self, ty: &Type) -> Type {
-        match ty {
-            Type::Generic(x) => self.0.get(x).unwrap().clone(),
-            _ => self._map_type(ty),
+    fn map_type(&mut self, t0: &Type) -> Type {
+        match t0 {
+            Type::Generic(x) => {
+                if let Some(t1) = self.0.get(x) {
+                    t1.clone()
+                } else {
+                    t0.clone()
+                }
+            }
+            _ => self._map_type(t0),
         }
     }
 }
@@ -34,14 +43,48 @@ impl Type {
     }
 }
 
-impl Trait {
-    pub fn instantiate(&self, sub: &Map<Name, Type>) -> Trait {
-        Instantiate::new(sub).map_trait(self)
+impl Impl {
+    pub fn instantiate(&self, sub: &Map<Name, Type>) -> Impl {
+        Instantiate::new(sub).map_impl(self)
     }
 }
 
 impl StmtImpl {
-    pub fn instantiate(&self, sub: &Map<Name, Type>) -> StmtImpl {
-        Instantiate::new(sub).map_stmt_impl(self)
+    pub fn instantiate(&self, ts: &[Type]) -> StmtImpl {
+        let sub = gsub(&self.generics, ts);
+        let mut this = Instantiate::new(&sub).map_stmt_impl(self);
+        this.generics.clear();
+        this
     }
+}
+
+impl StmtDef {
+    pub fn instantiate(&self, ts: &[Type]) -> StmtDef {
+        let sub = gsub(&self.generics, ts);
+        let mut this = Instantiate::new(&sub).map_stmt_def(self);
+        this.generics.clear();
+        this
+    }
+}
+
+impl StmtEnum {
+    pub fn instantiate(&self, ts: &[Type]) -> StmtEnum {
+        let sub = gsub(&self.generics, ts);
+        let mut this = Instantiate::new(&sub).map_stmt_enum(self);
+        this.generics.clear();
+        this
+    }
+}
+
+impl StmtStruct {
+    pub fn instantiate(&self, ts: &[Type]) -> StmtStruct {
+        let sub = gsub(&self.generics, ts);
+        let mut this = Instantiate::new(&sub).map_stmt_struct(self);
+        this.generics.clear();
+        this
+    }
+}
+
+fn gsub(gs: &[Name], ts: &[Type]) -> Map<Name, Type> {
+    gs.iter().cloned().zip(ts.iter().cloned()).collect()
 }

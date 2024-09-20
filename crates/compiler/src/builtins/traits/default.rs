@@ -1,11 +1,14 @@
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_default(&mut self) {
-        self.declare_trait(
-            "trait Default[T] {
-                 def default(): T;
-             }",
-        );
-    }
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Trait {
+        aqua: "trait Default[T] {
+             def default(): T;
+         }",
+    });
 }

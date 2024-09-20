@@ -1,9 +1,17 @@
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_blob(&mut self) {
-        self.declare_type("type Blob;", BuiltinType { rust: "Blob" });
-    }
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Blob;",
+        codegen: Some(Codegen {
+            rust: "Blob",
+            java: "Blob",
+            egglog: None,
+        }),
+    });
 }

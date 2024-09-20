@@ -10,6 +10,9 @@ mod with_type;
 
 use std::rc::Rc;
 
+use runtime::prelude::Send;
+use runtime::prelude::Sync;
+
 use crate::builtins::value::Value;
 use crate::interpret::Context;
 use crate::span::Span;
@@ -62,8 +65,8 @@ pub struct Name {
 pub struct StmtImpl {
     pub span: Span,
     pub generics: Vec<Name>,
-    pub head: Trait,
-    pub where_clause: Vec<Trait>,
+    pub head: Impl,
+    pub where_clause: Vec<Impl>,
     pub defs: Vec<Rc<StmtDef>>,
     pub types: Vec<Rc<StmtType>>,
 }
@@ -73,34 +76,42 @@ pub struct StmtTrait {
     pub span: Span,
     pub name: Name,
     pub generics: Vec<Name>,
-    pub where_clause: Vec<Trait>,
+    pub where_clause: Vec<Impl>,
     pub defs: Vec<Rc<StmtTraitDef>>,
     pub types: Vec<Rc<StmtTraitType>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Trait {
+pub enum Impl {
     Path(Span, Path),
     // Trait bound. For example: impl Clone[i32] { ... } and Clone[T]::clone();
-    Cons(Name, Vec<Type>, Map<Name, Type>),
-    Var(TraitVar),
+    Trait(Trait),
+    Var(ImplVar),
     // Type bound. For example: impl[T] Vec[T] { ... } and Vec[T]::new();
     Type(Rc<Type>),
+    Unknown,
     Err,
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct TraitVar(u32);
-
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Trait {
+    pub x: Name,
+    pub ts: Vec<Type>,
+    pub xts: Map<Name, Type>,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct ImplVar(pub u32);
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Send, Sync)]
 pub enum Type {
     Path(Path),
     Cons(Name, Vec<Type>),
     Alias(Name, Vec<Type>),
-    Assoc(Trait, Name, Vec<Type>),
+    Assoc(Impl, Name, Vec<Type>),
     Var(TypeVar),
     Generic(Name),
-    Fun(Vec<Type>, Rc<Type>),
+    Lambda(Vec<Type>, Rc<Type>),
     Tuple(Vec<Type>),
     Record(Map<Name, Type>),
     Array(Rc<Type>, Option<usize>),
@@ -113,23 +124,6 @@ pub enum Type {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TypeVar(pub u32);
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Candidate {
-    // An implementation of a trait for a type.
-    Impl(StmtImpl),
-    // A bound in a where clause
-    Bound(Trait),
-}
-
-impl std::fmt::Display for Candidate {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Candidate::Impl(stmt) => write!(f, "{}", stmt),
-            Candidate::Bound(bound) => write!(f, "{}", bound),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Stmt {
@@ -158,7 +152,7 @@ pub struct StmtTraitDef {
     pub generics: Vec<Name>,
     pub params: Map<Name, Type>,
     pub ty: Type,
-    pub where_clause: Vec<Trait>,
+    pub where_clause: Vec<Impl>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -176,7 +170,7 @@ pub struct StmtDef {
     pub generics: Vec<Name>,
     pub params: Map<Name, Type>,
     pub ty: Type,
-    pub where_clause: Vec<Trait>,
+    pub where_clause: Vec<Impl>,
     pub body: ExprBody,
 }
 
@@ -218,9 +212,15 @@ pub enum TypeBody {
 
 #[derive(Debug, Clone, Eq)]
 pub struct BuiltinDef {
-    // pub codegen: fn(&mut Formatter, &[Value]) -> Value,
     pub fun: fn(&mut Context, &[Value]) -> Value,
+    pub codegen: Option<Codegen>,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct Codegen {
     pub rust: &'static str,
+    pub java: &'static str,
+    pub egglog: Option<&'static str>,
 }
 
 impl PartialEq for BuiltinDef {
@@ -231,7 +231,7 @@ impl PartialEq for BuiltinDef {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct BuiltinType {
-    pub rust: &'static str,
+    pub codegen: Option<Codegen>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -243,7 +243,6 @@ pub struct Index {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Expr {
     Path(Span, Type, Path),
-    Unresolved(Span, Type, Name, Vec<Type>),
     Int(Span, Type, Symbol),
     Float(Span, Type, Symbol),
     IntSuffix(Span, Type, Symbol, Symbol),
@@ -262,6 +261,7 @@ pub enum Expr {
     Def(Span, Type, Name, Vec<Type>),
     Call(Span, Type, Rc<Expr>, Vec<Expr>),
     Block(Span, Type, Block),
+    Closure(Span, Type, Map<Name, Type>, Map<Name, Type>, Type, Rc<Expr>),
     Query(Span, Type, Name, Type, Rc<Expr>, Vec<Query>),
     QueryInto(
         Span,
@@ -274,7 +274,7 @@ pub enum Expr {
         Vec<Type>,
         Vec<Expr>,
     ),
-    TraitMethod(Span, Type, Trait, Name, Vec<Type>),
+    Assoc(Span, Type, Impl, Name, Vec<Type>),
     Match(Span, Type, Rc<Expr>, Map<Pat, Expr>),
     IfElse(Span, Type, Rc<Expr>, Block, Block),
     Array(Span, Type, Vec<Expr>),
@@ -283,10 +283,9 @@ pub enum Expr {
     Continue(Span, Type),
     Break(Span, Type),
     While(Span, Type, Rc<Expr>, Block),
-    Fun(Span, Type, Map<Name, Type>, Type, Rc<Expr>),
+    Lambda(Span, Type, Map<Name, Type>, Type, Rc<Expr>),
     For(Span, Type, Name, Rc<Expr>, Block),
     Err(Span, Type),
-    Value(Type, Value),
     InfixBinaryOp(Span, Type, Token, Rc<Expr>, Rc<Expr>),
     PrefixUnaryOp(Span, Type, Token, Rc<Expr>),
     PostfixUnaryOp(Span, Type, Token, Rc<Expr>),
@@ -334,20 +333,25 @@ pub enum Pat {
 pub enum Query {
     From(Span, Name, Rc<Expr>),
     Var(Span, Name, Rc<Expr>),
+    Drop(Span, Name),
+    Union(Span, Rc<Expr>),
     Where(Span, Rc<Expr>),
     Select(Span, Map<Name, Expr>),
+    Limit(Span, Rc<Expr>),
     OverCompute(Span, Rc<Expr>, Vec<Aggr>),
     GroupOverCompute(Span, Name, Rc<Expr>, Rc<Expr>, Vec<Aggr>),
     JoinOn(Span, Name, Rc<Expr>, Rc<Expr>),
     JoinOverOn(Span, Name, Rc<Expr>, Rc<Expr>, Rc<Expr>),
-    // Into(Span, Name, Vec<Type>, Vec<Expr>),
     // Compute(Span, Name, Rc<Expr>, Rc<Expr>),
     Err(Span),
 }
 
+/// An aggregation function.
+/// x = e0 of e1
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Aggr {
     pub x: Name,
     pub e0: Rc<Expr>,
     pub e1: Rc<Expr>,
+    pub e2: Option<Rc<Expr>>,
 }

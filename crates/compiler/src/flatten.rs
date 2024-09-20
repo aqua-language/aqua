@@ -88,7 +88,7 @@ impl Context {
 }
 
 impl Visitor for Context {
-    fn visit_top_stmt(&mut self, s: &Stmt) {
+    fn visit_stmt(&mut self, s: &Stmt) {
         match s {
             Stmt::Var(s) => self.visit_stmt_var(s),
             Stmt::Expr(e) => {

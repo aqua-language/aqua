@@ -2,6 +2,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::builtins::duration::Duration;
+use crate::traits::DeepClone;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(C)]
@@ -11,6 +12,12 @@ pub enum Assigner {
     Session { gap: Duration },
     Counting { length: i32 },
     Moving { length: i32, step: i32 },
+}
+
+impl DeepClone for Assigner {
+    fn deep_clone(&self) -> Self {
+        self.clone()
+    }
 }
 
 impl std::fmt::Display for Assigner {

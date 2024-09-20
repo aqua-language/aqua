@@ -22,7 +22,7 @@ impl<T: Data> Stream<T> {
         O: Data,
     {
         assert!(size % step == 0);
-        ctx.operator(|tx| async move {
+        ctx.operator(move |tx| async move {
             let mut s: VecDeque<P> = VecDeque::new();
             let mut n = 0;
             loop {
@@ -41,24 +41,21 @@ impl<T: Data> Stream<T> {
                                 .range(0..(size / step) - 1)
                                 .fold(agg, |agg, data| combine(&agg, data));
                             let data = lower(&agg);
-                            tx.send(Event::Data(time, data)).await;
+                            tx.send(Event::Data(time, data)).await?;
                             n -= step;
                         } else {
                             n += 1;
                         }
                     }
-                    Event::Watermark(time) => {
-                        tx.send(Event::Watermark(time)).await;
-                    }
-                    Event::Snapshot(i) => {
-                        tx.send(Event::Snapshot(i)).await;
-                    }
+                    Event::Watermark(time) => tx.send(Event::Watermark(time)).await?,
+                    Event::Snapshot(i) => tx.send(Event::Snapshot(i)).await?,
                     Event::Sentinel => {
-                        tx.send(Event::Sentinel).await;
+                        tx.send(Event::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

@@ -7,14 +7,16 @@ use common::dsl::expr_var;
 use common::dsl::params;
 use common::dsl::ty;
 use common::passes::interpret;
+use compiler::aqua;
 use compiler::ast::Map;
 use compiler::builtins::types::dataflow::Dataflow;
 use compiler::builtins::types::function::Fun;
 use compiler::builtins::types::record::Record;
-use compiler::builtins::types::stream::Stream;
+use compiler::builtins::types::stream::StreamKind;
 use compiler::builtins::types::tuple::Tuple;
 use compiler::builtins::types::variant::Variant;
 use compiler::builtins::value::Value;
+use runtime::builtins::duration::Duration;
 use runtime::builtins::path::Path;
 use runtime::builtins::writer::Writer;
 use runtime::prelude::Encoding;
@@ -117,12 +119,12 @@ fn test_interpret_while1() {
 fn test_interpret_dataflow0() {
     let a = interpret(aqua!(
         r#"struct Item(price:i32, ts:Time);
-           source(file_reader(path("file.csv"), false), csv(','), fun(i:Item):Time = i.ts)
+           source(file_reader(path("file.csv"), false), csv(','), fun(i:Item, _):Time = i.ts, 0s, 1s)
                .sink(file_writer(path("file.csv")), csv(','));"#
     ))
     .unwrap();
     let b = Dataflow::Sink(
-        Stream::Source(
+        StreamKind::Source(
             Reader::file(Path::new("file.csv"), false),
             Encoding::csv(','),
             Fun::new(
@@ -131,7 +133,10 @@ fn test_interpret_dataflow0() {
                     expr_field(expr_var("i").with_type(ty("Item")), "ts").with_type(ty("Time")),
                 ),
             ),
-        ),
+            Duration::from_seconds(0),
+            Duration::from_seconds(1),
+        )
+        .to_stream(),
         Writer::file(Path::new("file.csv")),
         Encoding::csv(','),
     )
@@ -143,18 +148,29 @@ fn test_interpret_dataflow0() {
 fn test_interpret_dataflow1() {
     let a = interpret(aqua!(
         r#"struct Item(price: i32, ts:Time);
-           def extract_time(item:Item):Time = item.ts;
-           from item in source(file_reader(path("file.csv"), false), csv(','), extract_time)
+           def extract_time(item:Item,_):Time = item.ts;
+           from item in source(file_reader(path("file.csv"), false), csv(','), extract_time, 0s, 1s)
            into sink(file_writer(path("file.csv")), csv(','));"#
     ))
     .unwrap();
     let b = interpret(aqua!(
         r#"struct Item(price:i32, ts:Time);
-           def extract_time(item:Item):Time = item.ts;
-           source(file_reader(path("file.csv"), false), csv(','), extract_time)
+           def extract_time(item:Item,_):Time = item.ts;
+           source(file_reader(path("file.csv"), false), csv(','), extract_time, 0s, 1s)
                .map(fun(item:Item) = record(item=item))
                .sink(file_writer(path("file.csv")), csv(','));"#
     ))
     .unwrap();
-    check!(@value, a, b);
+    check!(@value; a, b);
+}
+
+#[test]
+fn test_interpret_dataflow2() {
+    let _ = interpret(aqua!(
+        r#"struct Item(price: i32, ts:Time);
+           def extract_time(item:Item,_):Time = item.ts;
+           from item in source(file_reader(path("file.csv"), false), csv(','), extract_time, 0s, 1s)
+           into sink(file_writer(path("file.csv")), csv(','));"#
+    ))
+    .unwrap();
 }

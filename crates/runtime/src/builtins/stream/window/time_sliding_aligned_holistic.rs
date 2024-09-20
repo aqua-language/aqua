@@ -24,7 +24,7 @@ impl<T: Data> Stream<T> {
     where
         O: Data,
     {
-        ctx.operator(|tx| async move {
+        ctx.operator(move |tx| async move {
             let mut s: WindowState<T> = WindowState::new();
             loop {
                 match self.recv().await {
@@ -42,19 +42,20 @@ impl<T: Data> Stream<T> {
                             let win = Window::new(&s.0, wr.t1);
                             let data = compute(win, wr);
                             s.0.pop_first();
-                            tx.send(Event::Data(wr.t1, data.deep_clone())).await;
+                            tx.send(Event::Data(wr.t1, data.deep_clone())).await?;
                         }
-                        tx.send(Event::Watermark(time)).await;
+                        tx.send(Event::Watermark(time)).await?;
                     }
                     Event::Snapshot(i) => {
-                        tx.send(Event::Snapshot(i)).await;
+                        tx.send(Event::Snapshot(i)).await?;
                     }
                     Event::Sentinel => {
-                        tx.send(Event::Sentinel).await;
+                        tx.send(Event::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

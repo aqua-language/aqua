@@ -26,20 +26,19 @@ impl Expr {
                 Expr::QueryInto(span, t, x0, t0, e, qs, x1, ts, es)
             }
             Expr::Field(_, t, e, x) => Expr::Field(span, t, e, x),
-            Expr::TraitMethod(_, t, b, x1, ts1) => Expr::TraitMethod(span, t, b, x1, ts1),
+            Expr::Assoc(_, t, b, x1, ts1) => Expr::Assoc(span, t, b, x1, ts1),
             Expr::Index(_, t, e, i) => Expr::Index(span, t, e, i),
             Expr::Array(_, t, es) => Expr::Array(span, t, es),
             Expr::Assign(_, t, e0, e1) => Expr::Assign(span, t, e0, e1),
             Expr::Return(_, t, e) => Expr::Return(span, t, e),
             Expr::Continue(_, t) => Expr::Continue(span, t),
             Expr::Break(_, t) => Expr::Break(span, t),
-            Expr::Fun(_, t, ps, t1, e) => Expr::Fun(span, t, ps, t1, e),
+            Expr::Lambda(_, t, ps, t1, e) => Expr::Lambda(span, t, ps, t1, e),
             Expr::Match(_, t, e, pes) => Expr::Match(span, t, e, pes),
             Expr::Err(_, t) => Expr::Err(span, t),
-            Expr::Value(t, v) => Expr::Value(t, v),
+            Expr::Closure(_, t, xts0, xts1, t1, e) => Expr::Closure(span, t, xts0, xts1, t1, e),
             Expr::For(_, t, x, e, b) => Expr::For(span, t, x, e, b),
             Expr::Char(_, t, v) => Expr::Char(span, t, v),
-            Expr::Unresolved(_, t, x, ts) => Expr::Unresolved(span, t, x, ts),
             Expr::InfixBinaryOp(_, t, op, e0, e1) => Expr::InfixBinaryOp(span, t, op, e0, e1),
             Expr::PrefixUnaryOp(_, t, op, e) => Expr::PrefixUnaryOp(span, t, op, e),
             Expr::PostfixUnaryOp(_, t, op, e) => Expr::PostfixUnaryOp(span, t, op, e),
@@ -83,6 +82,8 @@ impl Query {
     pub fn with_span(self, s: Span) -> Query {
         match self {
             Query::From(_, x, e) => Query::From(s, x, e),
+            Query::Limit(_, e) => Query::Limit(s, e),
+            Query::Union(_, e1) => Query::Union(s, e1),
             Query::Where(_, e) => Query::Where(s, e),
             Query::Select(_, xes) => Query::Select(s, xes),
             Query::JoinOn(_, x, e0, e1) => Query::JoinOn(s, x, e0, e1),
@@ -93,6 +94,7 @@ impl Query {
             Query::Var(_, x, e) => Query::Var(s, x, e),
             Query::Err(_) => Query::Err(s),
             Query::JoinOverOn(_, x, e0, e1, e2) => Query::JoinOverOn(s, x, e0, e1, e2),
+            Query::Drop(_, x) => Query::Drop(s, x),
         }
     }
 }

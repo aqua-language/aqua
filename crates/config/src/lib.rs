@@ -46,6 +46,7 @@ pub enum Command {
     /// Format program.
     #[cfg_attr(feature = "clap", clap(name = "fmt"))]
     Format,
+    Run
 }
 
 #[cfg(feature = "clap")]

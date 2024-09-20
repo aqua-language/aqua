@@ -1,9 +1,17 @@
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_range(&mut self) {
-        self.declare_type("type Range[T];", BuiltinType { rust: "Range" });
-    }
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Range[T];",
+        codegen: Some(Codegen {
+            rust: "Range",
+            java: "Range",
+            egglog: None,
+        }),
+    });
 }

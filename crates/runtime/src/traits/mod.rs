@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde::Serialize;
+use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::hash::Hash;
 
@@ -87,6 +88,12 @@ impl<T: DeepClone> DeepClone for std::option::Option<T> {
 impl<T: DeepClone> DeepClone for std::cell::RefCell<T> {
     fn deep_clone(&self) -> Self {
         std::cell::RefCell::new(self.borrow().deep_clone())
+    }
+}
+
+impl DeepClone for Ordering {
+    fn deep_clone(&self) -> Self {
+        *self
     }
 }
 

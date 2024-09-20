@@ -21,6 +21,8 @@ use crate::traits::Key;
 use serde::Deserialize;
 use serde::Serialize;
 
+use super::stream::SendError;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum KeyedEvent<K, T> {
     Data(Time, K, T),
@@ -40,8 +42,8 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
 }
 
 impl<K: Data, T: Data> KeyedCollector<K, T> {
-    pub async fn send(&self, event: KeyedEvent<K, T>) {
-        self.0.send(event).await.ok();
+    pub async fn send(&self, event: KeyedEvent<K, T>) -> Result<(), SendError> {
+        self.0.send(event).await.map_err(|_| SendError::Closed)
     }
 }
 

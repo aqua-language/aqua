@@ -1,20 +1,33 @@
 use runtime::builtins::set::Set;
 
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_set(&mut self) {
-        self.declare_type("type Set[T];", BuiltinType { rust: "Set" });
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Set[T];",
+        codegen: Some(Codegen {
+            rust: "Set",
+            java: "Set",
+            egglog: None,
+        }),
+    });
 
-        self.declare_def(
-            "def set_new[T](): Set[T];",
-            BuiltinDef {
+    ctx.declare(Decl::Impl {
+        aqua: "impl Set",
+        decls: &[ImplDecl::Def {
+            aqua: "def new[T](): Set[T];",
+            codegen: Some(Codegen {
                 rust: "Set::new",
-                fun: |_ctx, _v| Set::new().into(),
-            },
-        );
-    }
+                java: "Set.new",
+                egglog: None,
+            }),
+            fun: |_ctx, _v| Set::new().into(),
+        }],
+    });
 }

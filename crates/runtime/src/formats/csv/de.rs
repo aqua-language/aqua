@@ -27,6 +27,7 @@ impl<const N: usize> Reader<N> {
         }
     }
 }
+
 impl<const N: usize> Decode for Reader<N> {
     type Error = Error;
     fn decode<'de, T>(&mut self, input: &'de [u8]) -> Result<T>
@@ -35,6 +36,14 @@ impl<const N: usize> Decode for Reader<N> {
     {
         let mut deserializer = Deserializer::new(self, input);
         T::deserialize(&mut deserializer)
+    }
+
+    fn decode_dyn<'de, T, Tag: Clone>(&mut self, input: &'de [u8], tag: Tag) -> Result<T>
+    where
+        Tag: serde::de::DeserializeSeed<'de, Value = T>,
+    {
+        let mut deserializer = Deserializer::new(self, input);
+        serde::de::DeserializeSeed::deserialize(tag, &mut deserializer)
     }
 }
 

@@ -1,9 +1,18 @@
-use crate::Compiler;
-use crate::ast::BuiltinType;
+use linkme::distributed_slice;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_u64(&mut self) {
-        self.declare_type("type u64;", BuiltinType { rust: "u64" });
-    }
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type u64;",
+        codegen: Some(Codegen {
+            rust: "u64",
+            java: "long",
+            egglog: None,
+        }),
+    });
 }

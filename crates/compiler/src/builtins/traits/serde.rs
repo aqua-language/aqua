@@ -1,12 +1,18 @@
+use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Type;
 use crate::builtins::types::array::Array;
 use crate::builtins::types::record::Record;
 use crate::builtins::types::tuple::Tuple;
 use crate::builtins::value::Value;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
 use crate::span::Span;
 use crate::symbol::Symbol;
-use crate::Compiler;
+use linkme::distributed_slice;
+use runtime::prelude::Send;
+use runtime::prelude::Sync;
 use serde::de::DeserializeSeed;
 use serde::de::MapAccess;
 use serde::de::VariantAccess;
@@ -14,13 +20,13 @@ use serde::de::Visitor;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::Serialize;
-use std::collections::HashMap;
 use std::rc::Rc;
 
-impl Compiler {
-    pub(super) fn declare_serde(&mut self) {
-        self.declare_trait("trait Serde[T] { }");
-    }
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Trait {
+        aqua: "trait Serde[T] { }",
+    });
 }
 
 impl Serialize for Value {
@@ -29,7 +35,6 @@ impl Serialize for Value {
         S: serde::Serializer,
     {
         match self {
-            Value::Aggregator(_) => unreachable!(),
             Value::Array(v) => v.serialize(serializer),
             Value::Blob(v) => v.serialize(serializer),
             Value::Bool(v) => v.serialize(serializer),
@@ -59,7 +64,6 @@ impl Serialize for Value {
             Value::Stream(_) => unreachable!(),
             Value::String(v) => v.serialize(serializer),
             Value::Time(v) => v.serialize(serializer),
-            Value::TimeSource(_) => unreachable!(),
             Value::Tuple(v) => v.serialize(serializer),
             Value::U128(v) => v.serialize(serializer),
             Value::U16(v) => v.serialize(serializer),
@@ -67,6 +71,7 @@ impl Serialize for Value {
             Value::U64(v) => v.serialize(serializer),
             Value::U8(v) => v.serialize(serializer),
             Value::Usize(v) => v.serialize(serializer),
+            Value::Url(v) => v.serialize(serializer),
             Value::Variant(v) => v.serialize(serializer),
             Value::Vec(v) => v.serialize(serializer),
             Value::Writer(v) => v.serialize(serializer),
@@ -79,65 +84,221 @@ impl Serialize for Value {
     }
 }
 
-impl<'de> DeserializeSeed<'de> for Type {
+impl<'de> Deserialize<'de> for Value {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        unreachable!()
+    }
+}
+
+#[derive(Send, Sync, Clone)]
+pub struct Seed(Type, Rc<crate::declare::Context>);
+
+impl Seed {
+    pub fn new(type_tag: Type, decls: crate::declare::Context) -> Self {
+        Self(type_tag, Rc::new(decls))
+    }
+}
+
+struct TupleVisitor(Vec<Type>, Rc<crate::declare::Context>);
+
+impl<'de> Visitor<'de> for TupleVisitor {
+    type Value = Value;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a tuple of length {}", self.0.len())
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'de>,
+    {
+        let mut v = Vec::new();
+        for t in self.0 {
+            v.push(seq.next_element_seed(Seed(t, self.1.clone()))?.unwrap());
+        }
+        Ok(Value::from(Tuple::new(v)))
+    }
+}
+
+struct RecordVisitor(Map<Name, Type>, Rc<crate::declare::Context>);
+
+impl<'de> Visitor<'de> for RecordVisitor {
+    type Value = Value;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a record with fields {:?}", self.0)
+    }
+
+    fn visit_map<A>(mut self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        let mut result = Map::new();
+        while !self.0.is_empty() {
+            let k = map.next_key()?.unwrap();
+            if let Some(t) = self.0.remove(&k) {
+                let seed = Seed(t, self.1.clone());
+                result.insert(k, map.next_value_seed(seed)?);
+            } else {
+                return Err(serde::de::Error::custom("Found unexpected field"));
+            }
+        }
+        Ok(Value::from(Record::new(result)))
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'de>,
+    {
+        let mut result = Map::new();
+        for (k, t) in self.0 {
+            if let Some(v) = seq.next_element_seed(Seed(t, self.1.clone()))? {
+                result.insert(k, v);
+            } else {
+                return Err(serde::de::Error::custom("Found unexpected field"));
+            }
+        }
+        Ok(Value::from(Record::new(result)))
+    }
+}
+
+struct DictVisitor(Type, Type, Rc<crate::declare::Context>);
+impl<'de> Visitor<'de> for DictVisitor {
+    type Value = Value;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a dict")
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        #[allow(clippy::mutable_key_type)]
+        let mut result = std::collections::HashMap::default();
+        while let Some((k, v)) = map.next_entry_seed(
+            Seed(self.0.clone(), self.2.clone()),
+            Seed(self.1.clone(), self.2.clone()),
+        )? {
+            result.insert(k, v);
+        }
+        Ok(Value::from(runtime::builtins::dict::Dict::from(result)))
+    }
+}
+
+struct SetVisitor(Type, Rc<crate::declare::Context>);
+impl<'de> Visitor<'de> for SetVisitor {
+    type Value = Value;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a set")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'de>,
+    {
+        #[allow(clippy::mutable_key_type)]
+        let mut result = std::collections::HashSet::new();
+        while let Some(v) = seq.next_element_seed(Seed(self.0.clone(), self.1.clone()))? {
+            result.insert(v);
+        }
+        Ok(Value::from(runtime::builtins::set::Set::from(result)))
+    }
+}
+
+struct OptionVisitor(Type, Rc<crate::declare::Context>);
+impl<'de> Visitor<'de> for OptionVisitor {
+    type Value = Value;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "an option")
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let v = Seed(self.0, self.1).deserialize(deserializer)?;
+        Ok(Value::from(runtime::builtins::option::Option::some(
+            Rc::new(v),
+        )))
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E> {
+        Ok(Value::from(runtime::builtins::option::Option::none()))
+    }
+}
+
+struct ResultVisitor(Type, Rc<crate::declare::Context>);
+impl<'de> Visitor<'de> for ResultVisitor {
+    type Value = Value;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a result")
+    }
+
+    fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::EnumAccess<'de>,
+    {
+        let (v, variant) = data.variant()?;
+        match v {
+            "Ok" => {
+                let seed = Seed(self.0.clone(), self.1.clone());
+                let v = variant.newtype_variant_seed(seed)?;
+                Ok(Value::from(runtime::builtins::result::Result::ok(Rc::new(
+                    v,
+                ))))
+            }
+            "Err" => {
+                let v = variant.newtype_variant()?;
+                Ok(Value::from(runtime::builtins::result::Result::error(v)))
+            }
+            _ => unreachable!(),
+        }
+    }
+}
+
+struct VecVisitor(Type, Rc<crate::declare::Context>);
+impl<'de> Visitor<'de> for VecVisitor {
+    type Value = Value;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a vec")
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'de>,
+    {
+        let mut result = Vec::new();
+        while let Some(v) = seq.next_element_seed(Seed(self.0.clone(), self.1.clone()))? {
+            result.push(v);
+        }
+        Ok(Value::from(runtime::builtins::vec::Vec::from(result)))
+    }
+}
+
+impl<'de> DeserializeSeed<'de> for Seed {
     type Value = Value;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
     {
-        match self {
-            Type::Fun(_, _) => unreachable!(),
+        match self.0 {
+            Type::Lambda(_, _) => unreachable!(),
             Type::Tuple(ts) if ts.is_empty() => <() as Deserialize>::deserialize(deserializer)
                 .map(|()| Value::from(Tuple::new(vec![]))),
             Type::Tuple(ts) => {
-                struct TupleVisitor(Vec<Type>);
-                impl<'de> Visitor<'de> for TupleVisitor {
-                    type Value = Value;
-
-                    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                        write!(formatter, "a tuple of length {}", self.0.len())
-                    }
-
-                    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-                    where
-                        A: serde::de::SeqAccess<'de>,
-                    {
-                        let mut v = Vec::new();
-                        for t in self.0 {
-                            v.push(seq.next_element_seed(t)?.unwrap());
-                        }
-                        Ok(Value::from(Tuple::new(v)))
-                    }
-                }
-                deserializer.deserialize_tuple(ts.len(), TupleVisitor(ts.clone()))
+                deserializer.deserialize_tuple(ts.len(), TupleVisitor(ts.clone(), self.1.clone()))
             }
             Type::Record(xts) => {
-                struct RecordVisitor(HashMap<Name, Type>);
-                impl<'de> Visitor<'de> for RecordVisitor {
-                    type Value = Value;
-
-                    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                        write!(formatter, "a record with fields {:?}", self.0)
-                    }
-
-                    fn visit_map<A>(mut self, mut map: A) -> Result<Self::Value, A::Error>
-                    where
-                        A: MapAccess<'de>,
-                    {
-                        let mut result = HashMap::new();
-                        while !self.0.is_empty() {
-                            let k = map.next_key()?.unwrap();
-                            if let Some(t) = self.0.remove(&k) {
-                                result.insert(k, map.next_value_seed(t)?);
-                            } else {
-                                return Err(serde::de::Error::custom("Found unexpected field"));
-                            }
-                        }
-                        Ok(Value::from(Record::new(result.into_iter().collect())))
-                    }
-                }
-                deserializer.deserialize_map(RecordVisitor(xts.into_iter().collect()))
+                deserializer.deserialize_map(RecordVisitor(xts.into_iter().collect(), self.1))
             }
             Type::Cons(x, ts) => match x.data.as_str() {
                 "i8" => i8::deserialize(deserializer).map(Value::from),
@@ -157,61 +318,13 @@ impl<'de> DeserializeSeed<'de> for Type {
                     .map(runtime::builtins::im_string::String::from)
                     .map(Value::from),
                 "Dict" => {
-                    struct DictVisitor(Type, Type);
-                    impl<'de> Visitor<'de> for DictVisitor {
-                        type Value = Value;
-
-                        fn expecting(
-                            &self,
-                            formatter: &mut std::fmt::Formatter,
-                        ) -> std::fmt::Result {
-                            write!(formatter, "a dict")
-                        }
-
-                        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
-                        where
-                            A: MapAccess<'de>,
-                        {
-                            #[allow(clippy::mutable_key_type)]
-                            let mut result = std::collections::HashMap::default();
-                            while let Some((k, v)) =
-                                map.next_entry_seed(self.0.clone(), self.1.clone())?
-                            {
-                                result.insert(k, v);
-                            }
-                            Ok(Value::from(runtime::builtins::dict::Dict::from(result)))
-                        }
-                    }
                     let k = ts[0].clone();
                     let v = ts[1].clone();
-                    deserializer.deserialize_map(DictVisitor(k, v))
+                    deserializer.deserialize_map(DictVisitor(k, v, self.1.clone()))
                 }
                 "Set" => {
-                    struct SetVisitor(Type);
-                    impl<'de> Visitor<'de> for SetVisitor {
-                        type Value = Value;
-
-                        fn expecting(
-                            &self,
-                            formatter: &mut std::fmt::Formatter,
-                        ) -> std::fmt::Result {
-                            write!(formatter, "a set")
-                        }
-
-                        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-                        where
-                            A: serde::de::SeqAccess<'de>,
-                        {
-                            #[allow(clippy::mutable_key_type)]
-                            let mut result = std::collections::HashSet::new();
-                            while let Some(v) = seq.next_element_seed(self.0.clone())? {
-                                result.insert(v);
-                            }
-                            Ok(Value::from(runtime::builtins::set::Set::from(result)))
-                        }
-                    }
                     let t = ts[0].clone();
-                    deserializer.deserialize_seq(SetVisitor(t))
+                    deserializer.deserialize_seq(SetVisitor(t, self.1))
                 }
                 "Time" => runtime::builtins::time::Time::deserialize(deserializer).map(Value::from),
                 "Duration" => runtime::builtins::duration::Duration::deserialize(deserializer)
@@ -220,139 +333,35 @@ impl<'de> DeserializeSeed<'de> for Type {
                 "Path" => runtime::builtins::path::Path::deserialize(deserializer).map(Value::from),
                 "Blob" => runtime::builtins::blob::Blob::deserialize(deserializer).map(Value::from),
                 "Option" => {
-                    struct OptionVisitor(Type);
-                    impl<'de> Visitor<'de> for OptionVisitor {
-                        type Value = Value;
-
-                        fn expecting(
-                            &self,
-                            formatter: &mut std::fmt::Formatter,
-                        ) -> std::fmt::Result {
-                            write!(formatter, "an option")
-                        }
-
-                        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-                        where
-                            D: Deserializer<'de>,
-                        {
-                            let v = self.0.deserialize(deserializer)?;
-                            Ok(Value::from(runtime::builtins::option::Option::some(
-                                Rc::new(v),
-                            )))
-                        }
-
-                        fn visit_none<E>(self) -> Result<Self::Value, E> {
-                            Ok(Value::from(runtime::builtins::option::Option::none()))
-                        }
-                    }
                     let t = ts[0].clone();
-                    deserializer.deserialize_option(OptionVisitor(t))
+                    deserializer.deserialize_option(OptionVisitor(t, self.1.clone()))
                 }
                 "Result" => {
-                    struct ResultVisitor(Type);
-                    impl<'de> Visitor<'de> for ResultVisitor {
-                        type Value = Value;
-
-                        fn expecting(
-                            &self,
-                            formatter: &mut std::fmt::Formatter,
-                        ) -> std::fmt::Result {
-                            write!(formatter, "a result")
-                        }
-
-                        fn visit_enum<A>(self, data: A) -> Result<Self::Value, A::Error>
-                        where
-                            A: serde::de::EnumAccess<'de>,
-                        {
-                            let (v, variant) = data.variant()?;
-                            match v {
-                                "Ok" => {
-                                    let v = variant.newtype_variant_seed(self.0.clone())?;
-                                    Ok(Value::from(runtime::builtins::result::Result::ok(Rc::new(
-                                        v,
-                                    ))))
-                                }
-                                "Err" => {
-                                    let v = variant.newtype_variant()?;
-                                    Ok(Value::from(runtime::builtins::result::Result::error(v)))
-                                }
-                                _ => unreachable!(),
-                            }
-                        }
-                    }
                     let t = ts[0].clone();
-                    deserializer.deserialize_enum("Result", &["Ok", "Err"], ResultVisitor(t))
+                    deserializer.deserialize_enum(
+                        "Result",
+                        &["Ok", "Err"],
+                        ResultVisitor(t, self.1.clone()),
+                    )
                 }
                 "Vec" => {
-                    struct VecVisitor(Type);
-                    impl<'de> Visitor<'de> for VecVisitor {
-                        type Value = Value;
-
-                        fn expecting(
-                            &self,
-                            formatter: &mut std::fmt::Formatter,
-                        ) -> std::fmt::Result {
-                            write!(formatter, "a vec")
-                        }
-
-                        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-                        where
-                            A: serde::de::SeqAccess<'de>,
-                        {
-                            let mut result = Vec::new();
-                            while let Some(v) = seq.next_element_seed(self.0.clone())? {
-                                result.push(v);
-                            }
-                            Ok(Value::from(runtime::builtins::vec::Vec::from(result)))
-                        }
-                    }
                     let t = ts[0].clone();
-                    deserializer.deserialize_seq(VecVisitor(t))
+                    deserializer.deserialize_seq(VecVisitor(t, self.1.clone()))
                 }
-                // "Matrix" => {
-                //     let Type::Cons(x, _) = &ts[0] else {
-                //         unreachable!()
-                //     };
-                //     let m = match x.data.as_str() {
-                //         "i8" => Matrix::I8(runtime::builtins::matrix::Matrix::<i8>::deserialize(
-                //             deserializer,
-                //         )?),
-                //         "i16" => Matrix::I16(
-                //             runtime::builtins::matrix::Matrix::<i16>::deserialize(deserializer)?,
-                //         ),
-                //         "i32" => Matrix::I32(
-                //             runtime::builtins::matrix::Matrix::<i32>::deserialize(deserializer)?,
-                //         ),
-                //         "i64" => Matrix::I64(
-                //             runtime::builtins::matrix::Matrix::<i64>::deserialize(deserializer)?,
-                //         ),
-                //         "u8" => Matrix::U8(runtime::builtins::matrix::Matrix::<u8>::deserialize(
-                //             deserializer,
-                //         )?),
-                //         "u16" => Matrix::U16(
-                //             runtime::builtins::matrix::Matrix::<u16>::deserialize(deserializer)?,
-                //         ),
-                //         "u32" => Matrix::U32(
-                //             runtime::builtins::matrix::Matrix::<u32>::deserialize(deserializer)?,
-                //         ),
-                //         "u64" => Matrix::U64(
-                //             runtime::builtins::matrix::Matrix::<u64>::deserialize(deserializer)?,
-                //         ),
-                //         "f32" => Matrix::F32(
-                //             runtime::builtins::matrix::Matrix::<f32>::deserialize(deserializer)?,
-                //         ),
-                //         "f64" => Matrix::F64(
-                //             runtime::builtins::matrix::Matrix::<f64>::deserialize(deserializer)?,
-                //         ),
-                //         _ => unreachable!(),
-                //     };
-                //     Ok(Value::from(m))
-                // }
-                _ => unreachable!("Attempted to deserialize undeserializable type {:?}", x),
+                _ => {
+                    if let Some(stmt) = self.1.structs.get(&x) {
+                        return deserializer
+                            .deserialize_map(RecordVisitor(stmt.fields.clone(), self.1.clone()));
+                    }
+                    if let Some(_stmt) = self.1.enums.get(&x) {
+                        todo!();
+                    }
+                    unreachable!()
+                }
             },
             Type::Generic(_) => unreachable!(),
             Type::Array(t, n) => {
-                struct ArrayVisitor(Type);
+                struct ArrayVisitor(Type, Rc<crate::declare::Context>);
                 impl<'de> Visitor<'de> for ArrayVisitor {
                     type Value = Value;
 
@@ -365,14 +374,16 @@ impl<'de> DeserializeSeed<'de> for Type {
                         A: serde::de::SeqAccess<'de>,
                     {
                         let mut result = Vec::new();
-                        while let Some(v) = seq.next_element_seed(self.0.clone())? {
+                        while let Some(v) =
+                            seq.next_element_seed(Seed(self.0.clone(), self.1.clone()))?
+                        {
                             result.push(v);
                         }
                         Ok(Value::from(Array(result)))
                     }
                 }
                 let n = n.unwrap();
-                deserializer.deserialize_tuple(n, ArrayVisitor(t.as_ref().clone()))
+                deserializer.deserialize_tuple(n, ArrayVisitor(t.as_ref().clone(), self.1.clone()))
             }
             Type::Never => unreachable!(),
             Type::Var(_) => Err(serde::de::Error::custom(

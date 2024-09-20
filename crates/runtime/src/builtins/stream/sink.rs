@@ -5,7 +5,6 @@ use tokio::io::BufWriter;
 use crate::builtins::encoding::Encoding;
 use crate::builtins::path::Path;
 use crate::builtins::socket::SocketAddr;
-// use crate::builtins::url::Url;
 use crate::builtins::writer::Writer;
 use crate::formats::Encode;
 use crate::runner::context::Context;
@@ -28,6 +27,7 @@ impl<T: Data> Stream<T> {
                     Event::Sentinel => break,
                 }
             }
+            Ok(())
         });
         Self::sink_encoding(ctx, rx, writer, encoding);
     }
@@ -155,6 +155,7 @@ impl<T: Data> Stream<T> {
                 Writer::Tcp { addr } => Self::write_socket(rx, addr, encoder).await,
                 Writer::Kafka { addr: _, topic: _ } => todo!(),
             }
+            Ok(())
         });
     }
 }

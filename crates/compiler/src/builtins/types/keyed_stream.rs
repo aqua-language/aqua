@@ -1,20 +1,24 @@
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_keyed_stream(&mut self) {
-        self.declare_type(
-            "type KeyedStream[K, T];",
-            BuiltinType {
-                rust: "KeyedStream",
-            },
-        );
-        self.declare_def(
-            "def keyed_source[K, T](r: Reader, e: Encoding, t: TimeSource[T]): KeyedStream[K, T];",
-            BuiltinDef {
-                rust: "KeyedStream::source",
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type KeyedStream[K, T];",
+        codegen: None,
+    });
+
+    ctx.declare(
+        Decl::Impl {
+            aqua: "impl[K, T] KeyedStream[K, T]",
+            decls: &[
+            ImplDecl::Def {
+                aqua: "def source[K, T](r: Reader, e: Encoding, t: (T, Time) => Time): KeyedStream[K, T];",
+                codegen: None,
                 fun: |_ctx, _v| {
                     // let v0 = v[0].as_reader();
                     // let v1 = v[1].as_encoding();
@@ -22,12 +26,9 @@ impl Compiler {
                     todo!()
                 },
             },
-        );
-
-        self.declare_def(
-            "def keyed_sink[K, T](s: KeyedStream[K, T], w: Writer, e: Encoding): Dataflow;",
-            BuiltinDef {
-                rust: "KeyedStream::sink",
+            ImplDecl::Def {
+                aqua: "def sink[K, T](s: KeyedStream[K, T], w: Writer, e: Encoding): Dataflow;",
+                codegen: None,
                 fun: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_writer();
@@ -35,61 +36,56 @@ impl Compiler {
                     todo!()
                 },
             },
-        );
-
-        self.declare_def(
-            "def keyed_map[K, A, B](s: KeyedStream[K, A], f: fun(A):B): KeyedStream[K, B];",
-            BuiltinDef {
-                rust: "KeyedStream::map",
+            ImplDecl::Def {
+                aqua: "def map[K, A, B](s: KeyedStream[K, A], f: A=>B): KeyedStream[K, B];",
+                codegen: None,
                 fun: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_function();
                     todo!()
                 },
             },
-        );
-
-        self.declare_def(
-            "def keyed_filter[K, T](s: KeyedStream[K, T], f: fun(T): bool): KeyedStream[K, T];",
-            BuiltinDef {
-                rust: "KeyedStream::filter",
+            ImplDecl::Def {
+                aqua: "def filter[K, T](s: KeyedStream[K, T], f: T=>bool): KeyedStream[K, T];",
+                codegen: None,
                 fun: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_function();
                     todo!()
                 },
             },
-        );
-
-        self.declare_def(
-            "def keyed_flatmap[K, A, B, I](s: KeyedStream[K, A], f: fun(A):I): KeyedStream[K, B]
-             where Iterator[I, Item=B];",
-            BuiltinDef {
-                rust: "KeyedStream::flatmap",
+            ImplDecl::Def {
+                aqua: indoc::indoc! {
+                    "def flatmap[K, A, B, I](s: KeyedStream[K, A], f: A=>I): KeyedStream[K, B]
+                     where Iterator[I, Item=B];"
+                },
+                codegen: None,
                 fun: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_function();
                     todo!()
                 },
             },
-        );
-
-        self.declare_def(
-            "def keyed_flatten[K, T, I](s: KeyedStream[K, I]): KeyedStream[K, T]
-             where IntoIterator[I, Item=T];",
-            BuiltinDef {
-                rust: "KeyedStream::flatten",
+            ImplDecl::Def {
+                aqua:"def flatten[K, T, I](s: KeyedStream[K, I]): KeyedStream[K, T]
+                    where IntoIterator[I, Item=T];",
+                codegen: None,
                 fun: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     todo!()
                 },
             },
-        );
-
-        self.declare_def(
-            "def keyed_window[K, I, P, O](s: KeyedStream[K, I], d: Discretizer, a: Aggregator[I, P, O]): KeyedStream[K, O];",
-            BuiltinDef {
-                rust: "KeyedStream::window",
+            ImplDecl::Def {
+                aqua:indoc::indoc! {
+                    "def incrWindow[K, I, P, O](
+                        stream: KeyedStream[K, I],
+                        assigner: Assigner,
+                        lift: I=>P,
+                        combine: (P,P)=>P,
+                        lower: (P)=>O
+                    ): KeyedStream[K, O];"
+                },
+                codegen: None,
                 fun: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_discretizer();
@@ -97,29 +93,23 @@ impl Compiler {
                     todo!()
                 },
             },
-        );
-
-        self.declare_def(
-            "def keyed_keyby[K0, K1, T](s: Stream[T], f: fun(T):K0): KeyedStream[K1, T];",
-            BuiltinDef {
-                rust: "KeyedStream::keyby",
+            ImplDecl::Def {
+                aqua: "def keyby[K0, K1, T](s: Stream[T], f: (T)=>K0): KeyedStream[K1, T];",
+                codegen: None,
                 fun: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_function();
                     todo!()
                 },
             },
-        );
-
-        self.declare_def(
-            "def unkey[K, T](s: KeyedStream[K, T]): Stream[T];",
-            BuiltinDef {
-                rust: "KeyedStream::unkey",
+            ImplDecl::Def {
+                aqua: "def unkey[K, T](s: KeyedStream[K, T]): Stream[T];",
+                codegen: None,
                 fun: |_ctx, v| {
                     let _v0 = v[0].as_stream();
                     todo!()
                 },
-            },
-        );
-    }
+            }]
+        }
+    );
 }

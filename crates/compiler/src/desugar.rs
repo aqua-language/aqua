@@ -3,11 +3,11 @@ use std::rc::Rc;
 use smol_str::format_smolstr;
 
 use crate::ast::Expr;
+use crate::ast::Impl;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Program;
-use crate::ast::Segment;
 use crate::ast::Type;
 use crate::token::Token;
 use crate::traversal::mapper::Mapper;
@@ -46,7 +46,7 @@ impl Context {
                 e
             } else {
                 let xts = xs.into_iter().map(|x| (x, Type::Unknown)).collect();
-                Expr::Fun(e.span_of(), Type::Unknown, xts, Type::Unknown, Rc::new(e))
+                Expr::Lambda(e.span_of(), Type::Unknown, xts, Type::Unknown, Rc::new(e))
             }
         }
     }
@@ -102,16 +102,15 @@ impl Mapper for Context {
                     _ => unreachable!(),
                 }
             }
-            // a.b(c) => b(a, c)
+            // a.b(c) => _::b(a, c)
             Expr::Dot(s, _, e, x, ts, es) => {
                 let e = self.map_expr(e);
                 let es = self.map_iter(es, Self::arg);
                 let es = std::iter::once(e).chain(es).collect::<Vec<_>>();
-                let path = Path::new(vec![Segment::new(*s, *x, ts.clone(), vec![].into())]);
-                let e = Expr::Path(*s, Type::Unknown, path);
-                Expr::Call(*s, t.clone(), Rc::new(e), es)
+                let efun = Expr::Assoc(*s, Type::Unknown, Impl::Unknown, *x, ts.clone());
+                Expr::Call(*s, t, Rc::new(efun), es)
             }
-            // e(...,_+_,...) => foo(fun(x) = x.f)
+            // e(...,_+_,...) => foo(x => x.f)
             Expr::Call(s, _, e, es) => {
                 let e = self.map_expr(e);
                 let es = self.map_iter(es, Self::arg);
@@ -137,18 +136,18 @@ impl Mapper for Context {
                     _ => unreachable!(),
                 }
             }
-            // 1s => postfix_s(1)
+            // 1s => _::postfix_s(1)
             Expr::IntSuffix(s, _, l, r) => {
                 let e0 = Expr::Int(*s, Type::Unknown, *l);
-                let path = Path::new_name(Name::new(*s, format_smolstr!("postfix_{r}")));
-                let e1 = Expr::Path(*s, Type::Unknown, path);
+                let x = Name::new(*s, format_smolstr!("postfix_{r}"));
+                let e1 = Expr::Assoc(*s, Type::Unknown, Impl::Unknown, x, vec![]);
                 Expr::Call(*s, Type::Unknown, Rc::new(e1), vec![e0])
             }
-            // 1.0s => postfix_s(1.0)
+            // 1.0s => _::postfix_s(1.0)
             Expr::FloatSuffix(s, _, l, r) => {
                 let e0 = Expr::Float(*s, Type::Unknown, *l);
-                let path = Path::new_name(Name::new(*s, format_smolstr!("postfix_{r}")));
-                let e1 = Expr::Path(*s, Type::Unknown, path);
+                let x = Name::new(*s, format_smolstr!("postfix_{r}"));
+                let e1 = Expr::Assoc(*s, Type::Unknown, Impl::Unknown, x, vec![]);
                 Expr::Call(*s, Type::Unknown, Rc::new(e1), vec![e0])
             }
             // (a) => a

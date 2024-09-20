@@ -1,0 +1,8 @@
+struct Data(time:Time, key:String, value:i32);
+
+from x in source[Data](http_server(8080), csv(','), (x, t) => x.time, 0s, 1s)
+where x.value < 50
+limit 100
+into sink(stdout_writer(), csv(',')).run(rust());
+
+

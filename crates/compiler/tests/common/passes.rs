@@ -51,18 +51,11 @@ macro_rules! check {
             common::passes::diff($a.msg, msg.to_string())
         );
     }};
-    (@value, $a:expr, $b:expr) => {{
+    (@value; $a:expr, $b:expr) => {{
         let a_str = format!("{:#?}", $a);
         let b_str = format!("{:#?}", $b);
         assert!($a == $b, "{}", common::passes::diff(a_str, b_str));
     }};
-}
-
-#[macro_export]
-macro_rules! aqua {
-    ($($code:tt)*) => {
-        indoc::indoc!($($code)*)
-    };
 }
 
 trait TestUtils {

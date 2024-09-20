@@ -21,23 +21,24 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
             loop {
                 match self.recv().await {
                     KeyedEvent::Data(t, k, v0) => {
-                        if let Some(v1) = index.0.get(&k) {
-                            let v2 = merge(&v0, v1);
-                            tx.send(KeyedEvent::Data(t, k, v2)).await;
+                        if let Some(v1) = index.get(&k) {
+                            let v2 = merge(&v0, &v1);
+                            tx.send(KeyedEvent::Data(t, k, v2)).await?;
                         }
                     }
                     KeyedEvent::Watermark(t) => {
-                        tx.send(KeyedEvent::Watermark(t)).await;
+                        tx.send(KeyedEvent::Watermark(t)).await?;
                     }
                     KeyedEvent::Snapshot(i) => {
-                        tx.send(KeyedEvent::Snapshot(i)).await;
+                        tx.send(KeyedEvent::Snapshot(i)).await?;
                     }
                     KeyedEvent::Sentinel => {
-                        tx.send(KeyedEvent::Sentinel).await;
+                        tx.send(KeyedEvent::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

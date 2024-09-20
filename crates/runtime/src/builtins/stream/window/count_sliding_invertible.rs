@@ -22,7 +22,7 @@ impl<T: Data> Stream<T> {
         P: Data,
         O: Data,
     {
-        ctx.operator(|tx| async move {
+        ctx.operator(move |tx| async move {
             let mut s: P = init;
             let mut vec: VecDeque<P> = VecDeque::new();
             let mut n = 0;
@@ -33,7 +33,7 @@ impl<T: Data> Stream<T> {
                         s = combine(&s, &data);
                         vec.push_back(data);
                         if n == size {
-                            tx.send(Event::Data(time, lower(&s).deep_clone())).await;
+                            tx.send(Event::Data(time, lower(&s).deep_clone())).await?;
                             for _ in 0..step {
                                 let data = vec.pop_front().unwrap();
                                 s = inverse(&s, &data);
@@ -44,17 +44,18 @@ impl<T: Data> Stream<T> {
                         }
                     }
                     Event::Watermark(time) => {
-                        tx.send(Event::Watermark(time)).await;
+                        tx.send(Event::Watermark(time)).await?;
                     }
                     Event::Snapshot(i) => {
-                        tx.send(Event::Snapshot(i)).await;
+                        tx.send(Event::Snapshot(i)).await?;
                     }
                     Event::Sentinel => {
-                        tx.send(Event::Sentinel).await;
+                        tx.send(Event::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

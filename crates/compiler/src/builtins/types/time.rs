@@ -1,75 +1,103 @@
+use linkme::distributed_slice;
 use runtime::builtins::time::Time;
 
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
 
-impl Compiler {
-    pub(super) fn declare_time(&mut self) {
-        self.declare_type("type Time;", BuiltinType { rust: "Time" });
-        self.declare_def(
-            "def now(): Time;",
-            BuiltinDef {
-                rust: "Time::now",
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type Time;",
+        codegen: Some(Codegen {
+            rust: "Time",
+            java: "Time",
+            egglog: None,
+        }),
+    });
+    ctx.declare(Decl::Impl {
+        aqua: "impl Time",
+        decls: &[
+            ImplDecl::Def {
+                aqua: "def now(): Time;",
+                codegen: Some(Codegen {
+                    rust: "Time::now",
+                    java: "Time.now",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| Time::now().into(),
             },
-        );
-        self.declare_def(
-            "def from_seconds(v0: i64): Time;",
-            BuiltinDef {
-                rust: "Time::from_seconds",
+            ImplDecl::Def {
+                aqua: "def from_seconds(v0: i64): Time;",
+                codegen: Some(Codegen {
+                    rust: "Time::from_seconds",
+                    java: "Time.fromSeconds",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_i64();
                     // Time::from_seconds(v0)
                 },
             },
-        );
-        self.declare_def(
-            "def from_nanoseconds(v0: i128): Time;",
-            BuiltinDef {
-                rust: "Time::from_nanoseconds",
+            ImplDecl::Def {
+                aqua: "def from_nanoseconds(v0: i128): Time;",
+                codegen: Some(Codegen {
+                    rust: "Time::from_nanoseconds",
+                    java: "Time.fromNanoseconds",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_i128().0;
                     // Time::from_nanoseconds(v0)
                 },
             },
-        );
-        self.declare_def(
-            "def seconds(v0: Time): i64;",
-            BuiltinDef {
-                rust: "Time::seconds",
+            ImplDecl::Def {
+                aqua: "def seconds(v0: Time): i64;",
+                codegen: Some(Codegen {
+                    rust: "Time::seconds",
+                    java: "Time.seconds",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     // let _v0 = v[0].as_time();
                     todo!()
                 },
             },
-        );
-        self.declare_def(
-            "def nanoseconds(v0: Time): i128;",
-            BuiltinDef {
-                rust: "Time::nanoseconds",
+            ImplDecl::Def {
+                aqua: "def nanoseconds(v0: Time): i128;",
+                codegen: Some(Codegen {
+                    rust: "Time::nanoseconds",
+                    java: "Time.nanoseconds",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     // let _v0 = v[0].as_time();
                     todo!()
                 },
             },
-        );
-        self.declare_def(
-            "def year(v0: Time): i32;",
-            BuiltinDef {
-                rust: "Time::year",
+            ImplDecl::Def {
+                aqua: "def year(v0: Time): i32;",
+                codegen: Some(Codegen {
+                    rust: "Time::year",
+                    java: "Time.year",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     // let v0 = v[0].as_time();
                     todo!()
                 },
             },
-        );
-        self.declare_def(
-            "def from_string(v0: String, v1: String): Time;",
-            BuiltinDef {
-                rust: "Time::from_string",
+            ImplDecl::Def {
+                aqua: "def from_string(v0: String, v1: String): Time;",
+                codegen: Some(Codegen {
+                    rust: "Time::from_string",
+                    java: "Time.fromString",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_string();
@@ -77,11 +105,13 @@ impl Compiler {
                     // Time::from_string(v0, v1).into()
                 },
             },
-        );
-        self.declare_def(
-            "def into_string(v0: Time, v1: String): String;",
-            BuiltinDef {
-                rust: "Time::to_string",
+            ImplDecl::Def {
+                aqua: "def into_string(v0: Time, v1: String): String;",
+                codegen: Some(Codegen {
+                    rust: "Time::to_string",
+                    java: "Time.toString",
+                    egglog: None,
+                }),
                 fun: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_time();
@@ -89,6 +119,6 @@ impl Compiler {
                     // todo!()
                 },
             },
-        );
-    }
+        ],
+    });
 }

@@ -5,10 +5,9 @@ use std::rc::Rc;
 
 use ena::unify::InPlaceUnificationTable;
 
-use mangle::Mangler;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
-use crate::ast::Map;
+use crate::ast::Impl;
 use crate::ast::Name;
 use crate::ast::Program;
 use crate::ast::Stmt;
@@ -20,19 +19,20 @@ use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeVar;
 use crate::declare;
-use crate::infer::instantiate::Instantiate;
 use crate::infer::type_var::TypeVarKind;
 use crate::infer::type_var::TypeVarValue;
+use crate::span::Span;
 use crate::traversal::mapper::AcceptMapper;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::AcceptVisitor;
+use mangle::Mangler;
 
 #[derive(Debug, Default)]
 pub struct Context {
     unique: HashSet<Name>,
     decls: declare::Context,
     stmts: Vec<Stmt>,
-    table: InPlaceUnificationTable<TypeVar>,
+    type_table: InPlaceUnificationTable<TypeVar>,
 }
 
 impl Context {
@@ -52,8 +52,14 @@ impl Context {
         Program::new(p.span, stmts0)
     }
 
-    pub fn fresh(&mut self, kind: TypeVarKind) -> Type {
-        Type::Var(self.table.new_key(TypeVarValue::Unknown(kind)))
+    pub fn fresh_tv(&mut self, kind: TypeVarKind) -> Type {
+        Type::Var(self.type_table.new_key(TypeVarValue::Unknown(kind)))
+    }
+
+    pub fn fresh_tvs(&mut self, n: usize) -> Vec<Type> {
+        (0..n)
+            .map(|_| self.fresh_tv(TypeVarKind::General))
+            .collect()
     }
 
     fn top_stmt(&mut self, s: &Stmt) -> Option<Stmt> {
@@ -77,13 +83,7 @@ impl Context {
         } else {
             self.unique.insert(x);
         }
-        let gsub = stmt
-            .generics
-            .clone()
-            .into_iter()
-            .zip(ts.to_vec())
-            .collect::<Map<Name, Type>>();
-        let stmt = stmt.map(&mut Instantiate::new(&gsub));
+        let stmt = stmt.instantiate(ts);
         let ps = stmt.params.mapv(|t| self.map_type(t));
         let t = stmt.ty.map(self);
         let b = ExprBody::UserDefined(Rc::new(stmt.body.as_expr().map(self)));
@@ -99,13 +99,7 @@ impl Context {
         } else {
             self.unique.insert(x);
         }
-        let gsub = stmt
-            .generics
-            .clone()
-            .into_iter()
-            .zip(ts.to_vec())
-            .collect::<Map<Name, Type>>();
-        let stmt = Instantiate::new(&gsub).map_stmt_struct(stmt);
+        let stmt = stmt.instantiate(ts);
         let span = stmt.span;
         let fields = stmt
             .fields
@@ -124,118 +118,166 @@ impl Context {
         } else {
             self.unique.insert(x);
         }
-        let gsub = stmt
-            .generics
-            .clone()
-            .into_iter()
-            .zip(ts.to_vec())
-            .collect::<Map<Name, Type>>();
-        let stmt = Instantiate::new(&gsub).map_stmt_enum(stmt);
+        let stmt = stmt.instantiate(ts);
         let variants = stmt.variants.mapv(|t| self.map_type(t));
         let stmt = StmtEnum::new(stmt.span, x, vec![], variants);
         self.stmts.push(Stmt::Enum(Rc::new(stmt)));
         x
     }
 
-    fn monomorphise_stmt_impl_def(
+    fn monomorphise_stmt_trait_impl_def(
         &mut self,
         stmt: &StmtImpl,
-        x0: Name,
-        ts0: &[Type],
-        x1: Name,
-        ts1: &[Type],
+        impl_trait: &Trait,
+        def_name0: &Name,
+        def_type_args: &[Type],
     ) -> Name {
-        let x = Mangler::mangle_impl_def(x0, ts0, x1, ts1);
-        if self.unique.contains(&x) {
-            return x;
+        let def_name1 = Mangler::mangle_trait_impl_def(impl_trait, def_name0, def_type_args);
+        if self.unique.contains(&def_name1) {
+            return def_name1;
         } else {
-            self.unique.insert(x);
+            self.unique.insert(def_name1);
         }
-        let stmt_def = stmt.get_def(x1).unwrap();
-        let gsub = stmt_def
-            .generics
-            .clone()
-            .into_iter()
-            .zip(ts0.to_vec())
-            .collect::<Map<Name, Type>>();
-        let stmt = Instantiate::new(&gsub).map_stmt_def(stmt_def);
+        let stmt_def = stmt.get_def(def_name0).unwrap();
+        let stmt = stmt_def.instantiate(&def_type_args);
         let ps = self.map_params(&stmt_def.params).into();
         let t = self.map_type(&stmt_def.ty);
         let b = self.map_stmt_def_body(&stmt_def.body);
-        let stmt = StmtDef::new(stmt.span, x, vec![], ps, t, vec![], b);
+        let stmt = StmtDef::new(stmt.span, def_name1, vec![], ps, t, vec![], b);
         self.stmts.push(Stmt::Def(Rc::new(stmt)));
-        x
+        def_name1
     }
 
-    fn solve(&mut self, goal: &Trait) -> Option<StmtImpl> {
-        let snapshot = self.table.snapshot();
-        let Trait::Cons(x, _, _) = goal else {
-            todo!();
-        };
-        if let Some(impls) = self.decls.trait_impls.get(x).cloned() {
-            for stmt in impls {
-                let gsub = stmt
-                    .generics
-                    .iter()
-                    .map(|x| (*x, self.fresh(TypeVarKind::General)))
-                    .collect::<Map<_, _>>();
-                let stmt = Instantiate::new(&gsub).map_stmt_impl(stmt.as_ref());
-                if self.matches(goal, &stmt.head)
-                    && stmt
-                        .where_clause
-                        .iter()
-                        .all(|subgoal| self.solve(subgoal).is_some())
-                {
-                    self.table.commit(snapshot);
-                    return Some(stmt);
-                }
+    fn monomorphise_stmt_type_impl_def(
+        &mut self,
+        stmt: &StmtImpl,
+        impl_type: &Type,
+        def_name0: &Name,
+        def_type_args: &[Type],
+    ) -> Name {
+        let def_name1 = Mangler::mangle_type_impl_def(impl_type, def_name0, def_type_args);
+        if self.unique.contains(&def_name1) {
+            return def_name1;
+        } else {
+            self.unique.insert(def_name1);
+        }
+        let stmt_def = stmt.get_def(def_name0).unwrap();
+        let stmt = stmt_def.instantiate(&def_type_args);
+        let ps = self.map_params(&stmt_def.params).into();
+        let t = self.map_type(&stmt_def.ty);
+        let b = self.map_stmt_def_body(&stmt_def.body);
+        let stmt = StmtDef::new(stmt.span, def_name1, vec![], ps, t, vec![], b);
+        self.stmts.push(Stmt::Def(Rc::new(stmt)));
+        def_name1
+    }
+
+    fn solve_type_impl_def(
+        &mut self,
+        impl_type0: &Type,
+        def_type: &Type,
+        def_name: &Name,
+        def_type_args: &[Type],
+    ) -> Option<StmtImpl> {
+        for impl_stmt in self.decls.type_impls.clone() {
+            let Some(def_stmt) = impl_stmt.get_def(def_name) else {
+                continue;
+            };
+            if def_stmt.generics.len() != def_type_args.len() {
+                continue;
+            }
+            let snapshot = self.type_table.snapshot();
+            let ts = self.fresh_tvs(impl_stmt.generics.len());
+            let impl_stmt = impl_stmt.instantiate(&ts);
+            let def_stmt = impl_stmt
+                .get_def(def_name)
+                .unwrap()
+                .instantiate(&def_type_args);
+            let impl_type1 = impl_stmt.head.as_type().unwrap();
+            if self.try_unify(impl_type0, impl_type1).is_ok()
+                && self.solve_where_clauses(&impl_stmt.where_clause)
+                && self.try_unify(def_type, &def_stmt.type_of()).is_ok()
+                && self.solve_where_clauses(&def_stmt.where_clause)
+            {
+                self.type_table.commit(snapshot);
+                return Some(impl_stmt);
+            } else {
+                self.type_table.rollback_to(snapshot);
             }
         }
-        self.table.rollback_to(snapshot);
         None
     }
 
-    fn matches(&mut self, b0: &Trait, b1: &Trait) -> bool {
-        match (b0, b1) {
-            (Trait::Path(..), Trait::Path(..)) => unreachable!(),
-            (Trait::Cons(x0, ts0, xts0), Trait::Cons(x1, ts1, xts1)) => {
-                x0 == x1
-                    && ts0.len() == ts1.len()
-                    && ts1
+    fn solve_trait_impl(&mut self, tr0: &Trait) -> Option<StmtImpl> {
+        if let Some(impls) = self.decls.trait_impls.get(&tr0.x).cloned() {
+            for stmt in impls {
+                let ts = self.fresh_tvs(stmt.generics.len());
+                let stmt = stmt.instantiate(&ts);
+                let snapshot = self.type_table.snapshot();
+                let tr1 = stmt.head.as_trait().unwrap();
+                if self.traits_match(tr0, tr1)
+                    && stmt
+                        .where_clause
                         .iter()
-                        .zip(ts0.iter())
-                        .all(|(t0, t1)| self.try_unify(t0, t1).is_ok())
-                    && xts1.iter().zip(xts0.iter()).all(|((x0, t0), (x1, t1))| {
-                        assert_eq!(x0, x1);
-                        self.try_unify(t0, t1).is_ok()
-                    })
+                        .all(|i| self.solve_trait_impl(i.as_trait().unwrap()).is_some())
+                {
+                    self.type_table.commit(snapshot);
+                    return Some(stmt);
+                } else {
+                    self.type_table.rollback_to(snapshot);
+                }
             }
-            (Trait::Type(..), Trait::Type(..)) => todo!(),
-            (Trait::Err, Trait::Err) => unreachable!(),
-            _ => unreachable!(),
         }
+        None
+    }
+
+    fn solve_where_clauses(&mut self, where_clause: &[Impl]) -> bool {
+        where_clause.iter().all(|i| {
+            let tr = i.as_trait().unwrap();
+            self.solve_trait_impl(tr).is_some()
+        })
+    }
+
+    fn traits_match(&mut self, tr0: &Trait, tr1: &Trait) -> bool {
+        tr0.x == tr1.x
+            && tr0.ts.len() == tr1.ts.len()
+            && tr1
+                .ts
+                .iter()
+                .zip(tr0.ts.iter())
+                .all(|(t0, t1)| self.try_unify(t0, t1).is_ok())
+            && tr1
+                .xts
+                .iter()
+                .zip(tr0.xts.iter())
+                .all(|((x0, t0), (x1, t1))| {
+                    assert_eq!(x0, x1);
+                    self.try_unify(t0, t1).is_ok()
+                })
     }
 
     pub fn try_unify(&mut self, t0: &Type, t1: &Type) -> Result<(), (Type, Type)> {
         match (t0, t1) {
-            (Type::Var(x0), t) | (t, Type::Var(x0)) => {
-                let k0 = self.table.probe_value(*x0).unknown().unwrap();
-                match t {
-                    Type::Var(x1) => {
-                        let k1 = self.table.probe_value(*x1).unknown().unwrap();
-                        if k0.is_compatible(k1) {
-                            self.table.union(*x0, *x1);
-                            Ok(())
-                        } else {
-                            Err((t0.clone(), t1.clone()))
+            (Type::Var(x0), t) | (t, Type::Var(x0)) => match self.type_table.probe_value(*x0) {
+                TypeVarValue::Known(t0) => return self.try_unify(&t0, t),
+                TypeVarValue::Unknown(k0) => match t {
+                    Type::Var(x1) => match self.type_table.probe_value(*x1) {
+                        TypeVarValue::Known(t1) => return self.try_unify(t0, &t1),
+                        TypeVarValue::Unknown(k1) => {
+                            if k0.is_compatible(k1) {
+                                self.type_table.union(*x0, *x1);
+                                Ok(())
+                            } else {
+                                Err((t0.clone(), t1.clone()))
+                            }
                         }
-                    }
+                    },
                     _ => {
-                        self.table.union_value(*x0, TypeVarValue::Known(t.clone()));
+                        self.type_table
+                            .union_value(*x0, TypeVarValue::Known(t.clone()));
                         Ok(())
                     }
-                }
-            }
+                },
+            },
             (Type::Cons(x0, ts0), Type::Cons(x1, ts1)) if x0 == x1 && ts0.len() == ts1.len() => ts0
                 .iter()
                 .zip(ts1.iter())
@@ -244,7 +286,7 @@ impl Context {
                 .iter()
                 .zip(ts1.iter())
                 .try_for_each(|(t0, t1)| self.try_unify(t0, t1)),
-            (Type::Fun(ts0, t0), Type::Fun(ts1, t1)) if ts0.len() == ts1.len() => ts0
+            (Type::Lambda(ts0, t0), Type::Lambda(ts1, t1)) if ts0.len() == ts1.len() => ts0
                 .iter()
                 .chain([t0.as_ref()])
                 .zip(ts1.iter().chain([t1.as_ref()]))
@@ -260,18 +302,17 @@ impl Context {
                     Err((t0.clone(), t1.clone()))
                 }
             }
-            (Type::Generic(..), Type::Generic(..)) => unreachable!(),
-            (Type::Assoc(..), Type::Assoc(..)) => unreachable!(),
             (Type::Assoc(b, x, _), t0) | (t0, Type::Assoc(b, x, _)) => {
-                if let Some(t1) = b.as_type(x) {
+                if let Some(t1) = b.as_trait().unwrap().xts.get(x) {
                     self.try_unify(t0, t1)
                 } else {
                     Err((t0.clone(), t1.clone()))
                 }
             }
-            (Type::Err, _) | (_, Type::Err) => unreachable!(),
             (Type::Never, _) | (_, Type::Never) => Ok(()),
-            (Type::Unknown, Type::Unknown) => unreachable!(),
+            (Type::Generic(..), Type::Generic(..)) => unreachable!(),
+            (Type::Err, _) | (_, Type::Err) => unreachable!(),
+            (Type::Unknown, _) | (_, Type::Unknown) => unreachable!(),
             _ => Err((t0.clone(), t1.clone())),
         }
     }
@@ -294,14 +335,22 @@ impl Mapper for Context {
                 let e = self.map_expr(e);
                 Expr::Enum(s, t, x, vec![], *x1, Rc::new(e))
             }
-            Expr::TraitMethod(_, _, b, x1, ts1) => {
-                let stmt = self.solve(b).unwrap();
-                let Trait::Cons(x0, ts0, _) = b else {
-                    unreachable!()
-                };
-                let x = self.monomorphise_stmt_impl_def(&stmt, *x0, &ts0, *x1, ts1);
-                Expr::Def(s, t, x, vec![])
-            }
+            Expr::Assoc(_, _, i, x1, ts1) => match i {
+                Impl::Trait(tr) => {
+                    let stmt = self.solve_trait_impl(tr).unwrap();
+                    let x = self.monomorphise_stmt_trait_impl_def(&stmt, tr, x1, ts1);
+                    Expr::Def(s, t, x, vec![])
+                }
+                Impl::Type(t1) => {
+                    let stmt = self.solve_type_impl_def(t1, &t, x1, ts1).unwrap();
+                    let x = self.monomorphise_stmt_type_impl_def(&stmt, t1, x1, ts1);
+                    Expr::Def(s, t, x, vec![])
+                }
+                Impl::Var(..) => unreachable!(),
+                Impl::Path(..) => unreachable!(),
+                Impl::Unknown => unreachable!(),
+                Impl::Err => unreachable!(),
+            },
             Expr::Def(_, _, x, ts) => {
                 let ts = self.map_types(ts);
                 let stmt = self.decls.defs.get(x).unwrap();
@@ -312,6 +361,11 @@ impl Mapper for Context {
                     }
                     ExprBody::Builtin(_) => Expr::Def(s, t, *x, ts),
                 }
+            }
+            Expr::Record(_, _, xes) => {
+                let xes = self.map_expr_fields(xes).into();
+                let Type::Cons(x, _) = t else { unreachable!() };
+                Expr::Struct(s, t.clone(), x, vec![], xes)
             }
             _ => self._map_expr(e),
         }
@@ -333,6 +387,18 @@ impl Mapper for Context {
                     unreachable!()
                 }
             }
+            Type::Record(xts) => {
+                let xts = xts.mapv(|t| self.map_type(t));
+                let s = Span::default();
+                let x = Name::new(s, "Record");
+                let stmt = StmtStruct::new(s, x, vec![], xts);
+                let x = self.monomorphise_stmt_struct(&stmt, &[]);
+                Type::Cons(x, vec![])
+            }
+            Type::Var(x) => match self.type_table.probe_value(*x) {
+                TypeVarValue::Known(t) => self.map_type(&t),
+                TypeVarValue::Unknown(_) => unreachable!("Unsolved type variable"),
+            },
             _ => self._map_type(t),
         }
     }

@@ -1,70 +1,46 @@
 mod standard;
 use smol_str::SmolStr;
-use std::collections::HashMap;
-use std::sync::Mutex;
-use std::sync::OnceLock;
 
-use append_only_vec::AppendOnlyVec;
 use serde::Deserialize;
 use serde::Serialize;
 
-static SYMBOLS_READONLY: AppendOnlyVec<SmolStr> = AppendOnlyVec::<SmolStr>::new();
-static SYMBOLS: SymbolMap = SymbolMap::new();
+use crate::collections::concurrent::ConcurrentMap;
+use crate::collections::concurrent::Uid;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Symbol(usize);
+pub struct Symbol(Uid);
 
 impl Symbol {
     pub fn as_str(self) -> &'static str {
-        &SYMBOLS_READONLY[self.0]
+        MAP.get(self.0)
     }
 
     pub fn suffix(self, suffix: impl std::fmt::Display) -> Symbol {
-        SymbolMap::intern(smol_str::format_smolstr!("{}_{}", self.as_str(), suffix))
+        intern(smol_str::format_smolstr!("{}_{}", self.as_str(), suffix))
     }
+}
+
+static MAP: ConcurrentMap<SmolStr, SmolStr> = ConcurrentMap::new();
+
+fn intern(key: SmolStr) -> Symbol {
+    Symbol(MAP.insert(key.clone(), key))
 }
 
 impl<'a> From<&'a str> for Symbol {
     fn from(name: &'a str) -> Symbol {
-        SymbolMap::intern(SmolStr::from(name))
+        intern(SmolStr::from(name))
     }
 }
 
 impl From<SmolStr> for Symbol {
     fn from(name: SmolStr) -> Symbol {
-        SymbolMap::intern(name)
+        intern(name)
     }
 }
 
 impl From<String> for Symbol {
     fn from(name: String) -> Symbol {
-        SymbolMap::intern(SmolStr::from(name))
-    }
-}
-
-pub struct SymbolMap(OnceLock<Mutex<HashMap<SmolStr, Symbol>>>);
-
-impl SymbolMap {
-    const fn new() -> SymbolMap {
-        SymbolMap(OnceLock::new())
-    }
-
-    fn intern(name: SmolStr) -> Symbol {
-        let mut state = SYMBOLS
-            .0
-            .get_or_init(|| Mutex::new(HashMap::new()))
-            .lock()
-            .unwrap();
-        state.get(&name).copied().unwrap_or_else(|| {
-            let sym = Symbol(SYMBOLS_READONLY.push(name.clone()));
-            let prev = state.insert(name, sym);
-            debug_assert!(prev.is_none());
-            sym
-        })
-    }
-
-    fn resolve(name: Symbol) -> &'static str {
-        &SYMBOLS_READONLY[name.0]
+        intern(SmolStr::from(name))
     }
 }
 
@@ -76,20 +52,18 @@ impl std::fmt::Debug for Symbol {
 
 impl std::fmt::Display for Symbol {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", SymbolMap::resolve(*self))
+        write!(f, "{}", MAP.get(self.0))
     }
 }
 
 impl Serialize for Symbol {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(SymbolMap::resolve(*self))
+        serializer.serialize_str(MAP.get(self.0))
     }
 }
 
 impl<'de> Deserialize<'de> for Symbol {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Ok(SymbolMap::intern(SmolStr::from(String::deserialize(
-            deserializer,
-        )?)))
+        Ok(intern(SmolStr::from(String::deserialize(deserializer)?)))
     }
 }

@@ -1,21 +1,22 @@
 use crate::builtins::value::Value;
-use crate::Compiler;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_eq(&mut self) {
-        self.declare_trait(
-            "trait Eq[T] {
-                 def eq(a:T, b:T): bool;
-                 def ne(a:T, b:T): bool;
-             }",
-        );
-    }
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Trait {
+        aqua: "trait Eq[T] {
+             def eq(a:T, b:T): bool;
+             def ne(a:T, b:T): bool;
+         }",
+    });
 }
 
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Value::Aggregator(a), Value::Aggregator(b)) => a == b,
             (Value::Array(a), Value::Array(b)) => a == b,
             (Value::Blob(_), Value::Blob(_)) => unreachable!(),
             (Value::Bool(a), Value::Bool(b)) => a == b,
@@ -45,7 +46,6 @@ impl PartialEq for Value {
             (Value::Stream(a), Value::Stream(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Time(a), Value::Time(b)) => a == b,
-            (Value::TimeSource(_), Value::TimeSource(_)) => unreachable!(),
             (Value::Tuple(a), Value::Tuple(b)) => a == b,
             (Value::Usize(a), Value::Usize(b)) => a == b,
             // (Value::Url(a), Value::Url(b)) => a == b,

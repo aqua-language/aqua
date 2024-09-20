@@ -1,13 +1,13 @@
-use std::rc::Rc;
+use anyhow::Result;
+use std::sync::Arc;
 
 use ast::Program;
-use ast::Stmt;
 use builtins::value::Value;
 use config::CompilerConfig;
 use diag::Report;
 use lexer::Lexer;
 use parser::Parser;
-use sources::Sources;
+use source::SourceId;
 use span::Span;
 
 pub mod ast;
@@ -29,17 +29,18 @@ pub mod package;
 pub mod parser;
 pub mod print;
 pub mod query;
+pub mod reachable;
 pub mod resolve;
-pub mod sources;
+pub mod source;
 pub mod span;
 pub mod spanned;
 pub mod token;
-pub mod reachable;
 pub mod traversal {
     pub mod mapper;
     pub mod visitor;
 }
 pub mod collections {
+    pub mod concurrent;
     pub mod map;
     pub mod ordmap;
     pub mod set;
@@ -49,10 +50,15 @@ pub mod monomorphise;
 pub mod opt;
 pub mod symbol;
 
+#[macro_export]
+macro_rules! aqua {
+    ($($code:tt)*) => {
+        indoc::indoc!($($code)*)
+    };
+}
+
 #[derive(Debug)]
 pub struct Compiler {
-    pub sources: Sources,
-    pub declarations: Vec<Stmt>,
     pub desugar: desugar::Context,
     pub query: query::Context,
     pub resolve: resolve::Context,
@@ -76,7 +82,7 @@ impl Default for Compiler {
 impl Drop for Compiler {
     fn drop(&mut self) {
         if !self.report.is_empty() {
-            self.report.print(&mut self.sources).unwrap();
+            self.report.print().unwrap();
         }
     }
 }
@@ -84,8 +90,6 @@ impl Drop for Compiler {
 impl Compiler {
     pub fn new(config: CompilerConfig) -> Self {
         Compiler {
-            declarations: Vec::new(),
-            sources: Sources::new(),
             desugar: desugar::Context::new(),
             query: query::Context::new(),
             resolve: resolve::Context::new(),
@@ -100,8 +104,8 @@ impl Compiler {
     }
 
     pub fn init(&mut self) -> &mut Self {
-        self.declare();
-        let stmts: Vec<Stmt> = self.declarations.drain(..).collect();
+        let stmts = crate::builtins::declare();
+        // self.declare();
         let program = Program::new(Span::default(), stmts);
         // let program = self.desugar.desugar(&program);
         // let program = self.query.querycomp(&program);
@@ -114,7 +118,9 @@ impl Compiler {
         self.report.merge(&mut self.infer.report);
         let _program = self.monomorphise.monomorphise(&program);
         self.interpret.interpret(&program);
-        self.report.merge(&mut self.interpret.report);
+        if !self.report.is_empty() {
+            self.report.print().unwrap();
+        }
         self
         // let result = self.inferrer.infer(&result);
         // let result = self.inferrer.infer(&result);
@@ -123,9 +129,9 @@ impl Compiler {
         // assert!(self.interpreter.report.is_empty());
     }
 
-    pub fn compile_and_run(&mut self, name: impl ToString, input: &str) -> Result<(), ()> {
-        let input: Rc<str> = Rc::from(input);
-        let id = self.sources.add(name, input.clone());
+    pub fn compile_and_run(&mut self, name: impl ToString, input: &str) -> Result<()> {
+        let input: Arc<str> = Arc::from(input);
+        let id = SourceId::new(name, input.clone());
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
         let program = parser.parse(Parser::program).unwrap();
@@ -142,7 +148,7 @@ impl Compiler {
             self.interpret.interpret(&program);
             Ok(())
         } else {
-            Err(())
+            Err(anyhow::anyhow!("Compilation failed"))
         }
     }
 
@@ -152,8 +158,8 @@ impl Compiler {
         input: &str,
         f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>) -> T,
     ) -> Result<T, Recovered<T>> {
-        let input: Rc<str> = Rc::from(input);
-        let id = self.sources.add(name, input.clone());
+        let input: Arc<str> = Arc::from(input);
+        let id = SourceId::new(name, input.clone());
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
         let result = f(&mut parser);
@@ -212,7 +218,6 @@ impl Compiler {
         let last_expr = last_stmt.as_expr().unwrap();
         self.interpret.interpret(&result);
         let value = self.interpret.eval_expr(last_expr);
-        self.report.merge(&mut self.interpret.report);
         self.recover(value)
     }
 
@@ -234,11 +239,11 @@ impl Compiler {
     }
 
     pub fn report_to_string(&mut self) -> String {
-        trim(&self.report.string(&mut self.sources).unwrap())
+        trim(&self.report.string().unwrap())
     }
 
     pub fn print_report(&mut self) {
-        self.report.print(&mut self.sources).unwrap();
+        self.report.print().unwrap();
     }
 }
 

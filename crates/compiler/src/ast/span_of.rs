@@ -21,23 +21,21 @@ impl Expr {
             Expr::Call(s, ..) => *s,
             Expr::Block(s, ..) => *s,
             Expr::Query(s, ..) => *s,
-            Expr::TraitMethod(s, ..) => *s,
+            Expr::Assoc(s, ..) => *s,
             Expr::Index(s, ..) => *s,
             Expr::Array(s, ..) => *s,
             Expr::Assign(s, ..) => *s,
             Expr::Return(s, ..) => *s,
             Expr::Continue(s, ..) => *s,
             Expr::Break(s, ..) => *s,
-            Expr::Fun(s, ..) => *s,
+            Expr::Lambda(s, ..) => *s,
             Expr::Match(s, ..) => *s,
             Expr::Err(s, ..) => *s,
             Expr::While(s, ..) => *s,
             Expr::Record(s, ..) => *s,
             Expr::Path(s, ..) => *s,
-            Expr::Value(..) => unreachable!(),
             Expr::For(s, ..) => *s,
             Expr::Char(s, ..) => *s,
-            Expr::Unresolved(s, ..) => *s,
             Expr::QueryInto(s, ..) => *s,
             Expr::InfixBinaryOp(s, ..) => *s,
             Expr::PrefixUnaryOp(s, ..) => *s,
@@ -51,6 +49,7 @@ impl Expr {
             Expr::LetIn(s, ..) => *s,
             Expr::Update(s, ..) => *s,
             Expr::Anonymous(s, ..) => *s,
+            Expr::Closure(s, ..) => *s,
         }
     }
 }
@@ -82,6 +81,8 @@ impl Query {
         match self {
             Query::From(s, ..) => *s,
             Query::Where(s, ..) => *s,
+            Query::Union(s, ..) => *s,
+            Query::Limit(s, ..) => *s,
             Query::Select(s, ..) => *s,
             Query::JoinOn(s, ..) => *s,
             Query::GroupOverCompute(s, ..) => *s,
@@ -89,6 +90,7 @@ impl Query {
             Query::OverCompute(s, ..) => *s,
             Query::JoinOverOn(s, ..) => *s,
             Query::Err(s) => *s,
+            Query::Drop(s, ..) => *s,
         }
     }
 }

@@ -3,6 +3,7 @@ mod common;
 use common::dsl::query_join_on;
 use common::dsl::sugared::expr_anonymous;
 use common::passes::parse_expr;
+use compiler::aqua;
 use compiler::ast::Type;
 
 use common::dsl::aggr;
@@ -19,12 +20,12 @@ use common::dsl::expr_continue;
 use common::dsl::expr_err;
 use common::dsl::expr_field;
 use common::dsl::expr_float;
-use common::dsl::expr_fun;
-use common::dsl::expr_fun_typed;
 use common::dsl::expr_if;
 use common::dsl::expr_if_else;
 use common::dsl::expr_index;
 use common::dsl::expr_int;
+use common::dsl::expr_lambda;
+use common::dsl::expr_lambda_typed;
 use common::dsl::expr_match;
 use common::dsl::expr_query;
 use common::dsl::expr_query_into;
@@ -77,7 +78,7 @@ use common::dsl::sugared::expr_paren;
 use common::dsl::sugared::expr_sub;
 use common::dsl::tr_def;
 use common::dsl::tr_type;
-use common::dsl::ty_fun;
+use common::dsl::ty_lambda;
 use common::dsl::ty_record;
 use common::dsl::ty_tuple;
 use common::dsl::unresolved::bound;
@@ -1545,6 +1546,29 @@ fn test_parser_stmt_query() {
 }
 
 #[test]
+fn test_parser_stmt_query_select_sugar() {
+    let a = parse_stmt(aqua!(
+        "from x in y
+         select x.a, x.b
+         into sink();"
+    ))
+    .unwrap();
+    let b = stmt_expr(expr_query_into(
+        "x",
+        Type::Unknown,
+        expr_var("y"),
+        [query_select([
+            ("a", expr_field(expr_var("x"), "a")),
+            ("b", expr_field(expr_var("x"), "b")),
+        ])],
+        "sink",
+        [],
+        [],
+    ));
+    check!(a, b);
+}
+
+#[test]
 fn test_parser_stmt_query_join_on() {
     let a = parse_stmt(aqua!(
         "from x in [1, 2, 3]
@@ -1622,37 +1646,37 @@ fn test_parser_stmt_query_annot() {
 }
 
 #[test]
-fn test_parser_expr_fun0() {
-    let a = parse_expr(aqua!("fun() = 1")).unwrap();
-    let b = expr_fun([], expr_int("1"));
+fn test_parser_expr_lambda0() {
+    let a = parse_expr(aqua!("() => 1")).unwrap();
+    let b = expr_lambda([], expr_int("1"));
     check!(a, b);
 }
 
 #[test]
-fn test_parser_expr_fun1() {
-    let a = parse_expr(aqua!("fun(x: i32): i32 = 1")).unwrap();
-    let b = expr_fun_typed([("x", ty("i32"))], ty("i32"), expr_int("1"));
+fn test_parser_expr_lambda1() {
+    let a = parse_expr(aqua!("(x: i32) => 1")).unwrap();
+    let b = expr_lambda_typed([("x", ty("i32"))], expr_int("1"));
     check!(a, b);
 }
 
 #[test]
-fn test_parser_expr_fun2() {
-    let a = parse_expr(aqua!("fun(x) = fun(y) = 1")).unwrap();
-    let b = expr_fun(["x"], expr_fun(["y"], expr_int("1")));
+fn test_parser_expr_lambda2() {
+    let a = parse_expr(aqua!("x => y => 1")).unwrap();
+    let b = expr_lambda(["x"], expr_lambda(["y"], expr_int("1")));
     check!(a, b);
 }
 
 #[test]
-fn test_parser_type_fun0() {
-    let a = parse_type(aqua!("fun(i32, i32): i32")).unwrap();
-    let b = ty_fun([ty("i32"), ty("i32")], ty("i32"));
+fn test_parser_type_lambda0() {
+    let a = parse_type(aqua!("(i32, i32) => i32")).unwrap();
+    let b = ty_lambda([ty("i32"), ty("i32")], ty("i32"));
     check!(a, b);
 }
 
 #[test]
-fn test_parser_type_fun1() {
-    let a = parse_type(aqua!("fun(i32): fun(i32): i32")).unwrap();
-    let b = ty_fun([ty("i32")], ty_fun([ty("i32")], ty("i32")));
+fn test_parser_type_lambda1() {
+    let a = parse_type(aqua!("i32 => i32 => i32")).unwrap();
+    let b = ty_lambda([ty("i32")], ty_lambda([ty("i32")], ty("i32")));
     check!(a, b);
 }
 
@@ -1738,6 +1762,23 @@ fn test_parser_expr_record1() {
 fn test_parser_expr_record2() {
     let a = parse_expr(aqua!("record(x=1, y=2)")).unwrap();
     let b = expr_record([("x", expr_int("1")), ("y", expr_int("2"))]);
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_record3() {
+    let a = parse_expr(aqua!("record(r.x)")).unwrap();
+    let b = expr_record([("x", expr_field(expr_var("r"), "x"))]);
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_record4() {
+    let a = parse_expr(aqua!("record(r.x, r.y)")).unwrap();
+    let b = expr_record([
+        ("x", expr_field(expr_var("r"), "x")),
+        ("y", expr_field(expr_var("r"), "y")),
+    ]);
     check!(a, b);
 }
 
@@ -1829,7 +1870,7 @@ fn test_parser_recover2() {
             │
           1 │ def f(x: i32): i32 = +;
             │                      ┬
-            │                      ╰── Expected one of `{`, `[`, `(`, `-`, `!`, `break`, ...
+            │                      ╰── Expected one of `{`, `[`, `(`, `-`, `!`, `_`, ...
          ───╯
          
          Error: Unexpected token `;`
@@ -1837,7 +1878,7 @@ fn test_parser_recover2() {
             │
           1 │ def f(x: i32): i32 = +;
             │                       ┬
-            │                       ╰── Expected one of `{`, `[`, `(`, `-`, `!`, `break`, ...
+            │                       ╰── Expected one of `{`, `[`, `(`, `-`, `!`, `_`, ...
          ───╯"
     );
 }
@@ -1854,7 +1895,7 @@ fn test_parser_recover3() {
             │
           1 │ def f(x: +): i32 = 1;
             │          ┬
-            │          ╰── Expected one of `[`, `(`, `!`, `_`, `fun`, `struct`, ...
+            │          ╰── Expected one of `[`, `(`, `!`, `_`, `struct`, `record`, ...
          ───╯"
     );
 }

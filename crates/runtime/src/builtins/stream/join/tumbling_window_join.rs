@@ -24,7 +24,7 @@ impl<T: Data> Stream<T> {
         K: Data + Key,
         O: Data,
     {
-        ctx.operator(|tx| async move {
+        ctx.operator(move |tx| async move {
             let mut s: JoinState<K, T, R> = JoinState::default();
             let mut l_watermark = Time::zero();
             let mut r_watermark = Time::zero();
@@ -38,22 +38,22 @@ impl<T: Data> Stream<T> {
                             let t0 = align(time, duration);
                             let (lvec, rvec) = s.get(t0, key);
                             for r in rvec.0.iter() {
-                                tx.send(Event::Data(t0, joiner(&data, r).deep_clone())).await;
+                                tx.send(Event::Data(t0, joiner(&data, r).deep_clone())).await?;
                             }
                             lvec.0.push(data);
                         }
                         Event::Watermark(t) => {
                             if t < r_watermark {
                                 s.gc(t, duration);
-                                tx.send(Event::Watermark(t)).await;
+                                tx.send(Event::Watermark(t)).await?;
                             } else if l_watermark < r_watermark && r_watermark < t {
-                                tx.send(Event::Watermark(r_watermark)).await
+                                tx.send(Event::Watermark(r_watermark)).await?;
                             }
                             l_watermark = t;
                         }
                         Event::Sentinel => {
                             if done_r {
-                                tx.send(Event::Sentinel).await;
+                                tx.send(Event::Sentinel).await?;
                                 break;
                             }
                             done_l = true;
@@ -66,22 +66,22 @@ impl<T: Data> Stream<T> {
                             let t0 = align(time, duration);
                             let (lvec, rvec) = s.get(t0, key);
                             for l in lvec.0.iter() {
-                                tx.send(Event::Data(t0, joiner(l, &data).deep_clone())).await;
+                                tx.send(Event::Data(t0, joiner(l, &data).deep_clone())).await?;
                             }
                             rvec.0.push(data);
                         }
                         Event::Watermark(t) => {
                             if t < l_watermark {
                                 s.gc(t, duration);
-                                tx.send(Event::Watermark(t)).await;
+                                tx.send(Event::Watermark(t)).await?;
                             } else if r_watermark < l_watermark && l_watermark < t {
-                                tx.send(Event::Watermark(l_watermark)).await
+                                tx.send(Event::Watermark(l_watermark)).await?;
                             }
                             r_watermark = t;
                         }
                         Event::Sentinel => {
                             if done_l {
-                                tx.send(Event::Sentinel).await;
+                                tx.send(Event::Sentinel).await?;
                                 break;
                             }
                             done_r = true;
@@ -90,6 +90,7 @@ impl<T: Data> Stream<T> {
                     },
                 };
             }
+            Ok(())
         })
     }
 }

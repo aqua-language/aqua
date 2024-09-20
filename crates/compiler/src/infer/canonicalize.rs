@@ -1,13 +1,15 @@
-use crate::ast::Trait;
+use crate::ast::Impl;
 use crate::ast::Type;
+use crate::traversal::mapper::AcceptMapper;
 use crate::traversal::mapper::Mapper;
 
+use super::Constraint;
 use super::Context;
 
 pub struct Canonicalize<'a>(&'a mut Context);
 
-impl Canonicalize<'_> {
-    pub fn new<'a>(ctx: &'a mut Context) -> Canonicalize<'a> {
+impl<'a> Canonicalize<'a> {
+    pub fn new(ctx: &'a mut Context) -> Canonicalize<'a> {
         Canonicalize(ctx)
     }
 }
@@ -15,16 +17,21 @@ impl Canonicalize<'_> {
 impl<'a> Mapper for Canonicalize<'a> {
     fn map_type(&mut self, t: &Type) -> Type {
         if let Type::Var(x) = t {
-            Type::Var(self.0.type_scope().table.find(*x))
+            Type::Var(self.0.type_scope().type_table.find(*x))
         } else {
             self._map_type(t)
         }
     }
 }
 
-impl Trait {
-    /// Canonicalize all type variables in a trait.
-    pub fn canonicalize(&self, ctx: &mut Context) -> Trait {
-        Canonicalize::new(ctx).map_trait(self)
+impl Impl {
+    pub fn canonicalize(&self, ctx: &mut Context) -> Impl {
+        self.map(&mut Canonicalize::new(ctx))
+    }
+}
+
+impl Constraint {
+    pub fn canonicalize(&self, ctx: &mut Context) -> Constraint {
+        self.map(&mut Canonicalize::new(ctx))
     }
 }

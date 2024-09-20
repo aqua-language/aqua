@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use crate::ast::Name;
+use crate::ast::Trait;
 use crate::ast::Type;
 
 pub(crate) struct Mangler(String);
@@ -35,12 +36,20 @@ impl Mangler {
         m.finish()
     }
 
-    pub(crate) fn mangle_impl_def(x0: Name, ts0: &[Type], x1: Name, ts1: &[Type]) -> Name {
+    pub(crate) fn mangle_trait_impl_def(tr: &Trait, x: &Name, ts: &[Type]) -> Name {
         let mut m = Mangler::new();
-        m.write(x0);
-        ts0.into_iter().for_each(|t| m.mangle_type(t));
-        m.write(x1);
-        ts1.into_iter().for_each(|t| m.mangle_type(t));
+        m.write(tr.x);
+        tr.ts.iter().for_each(|t| m.mangle_type(t));
+        m.write(x);
+        ts.into_iter().for_each(|t| m.mangle_type(t));
+        m.finish()
+    }
+
+    pub(crate) fn mangle_type_impl_def(t: &Type, x: &Name, ts: &[Type]) -> Name {
+        let mut m = Mangler::new();
+        m.mangle_type(t);
+        m.write(x);
+        ts.into_iter().for_each(|t| m.mangle_type(t));
         m.finish()
     }
 
@@ -59,7 +68,7 @@ impl Mangler {
             Type::Assoc(_, _, _) => unreachable!(),
             Type::Var(_) => unreachable!(),
             Type::Generic(_) => unreachable!(),
-            Type::Fun(ts, t) => {
+            Type::Lambda(ts, t) => {
                 self.write("Fun");
                 ts.into_iter().for_each(|t| self.mangle_type(t));
                 self.mangle_type(t);

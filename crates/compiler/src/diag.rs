@@ -1,4 +1,3 @@
-use crate::sources::Sources;
 use crate::span::Span;
 use std::io::Write;
 
@@ -45,11 +44,12 @@ impl Report {
     pub fn err(&mut self, span: Span, label: impl AsRef<str>, msg: impl AsRef<str>) {
         if !self.supress {
             let kind = ReportKind::Error;
-            let report = ariadne::Report::build(kind, *span.file(), *span.start() as usize)
-                .with_label(Label::new(span).with_message(msg.as_ref()))
-                .with_message(label.as_ref())
-                .with_config(Config::default().with_color(false))
-                .finish();
+            let report =
+                ariadne::Report::build(kind, *span.file().unwrap(), *span.start() as usize)
+                    .with_label(Label::new(span).with_message(msg.as_ref()))
+                    .with_message(label.as_ref())
+                    .with_config(Config::default().with_color(false))
+                    .finish();
             self.diags.push(report);
         }
     }
@@ -63,7 +63,7 @@ impl Report {
         msg1: impl AsRef<str>,
     ) {
         let kind = ReportKind::Error;
-        let report = ariadne::Report::build(kind, *s0.file(), *s0.start() as usize)
+        let report = ariadne::Report::build(kind, *s0.file().unwrap(), *s0.start() as usize)
             .with_label(Label::new(s0).with_message(msg0.as_ref()))
             .with_label(Label::new(s1).with_message(msg1.as_ref()))
             .with_message(label.as_ref())
@@ -72,17 +72,17 @@ impl Report {
         self.diags.push(report);
     }
 
-    pub fn print(&mut self, sources: &mut Sources) -> std::io::Result<()> {
+    pub fn print(&mut self) -> std::io::Result<()> {
         for diag in self.diags.drain(..) {
-            diag.eprint(&mut *sources)?;
+            diag.eprint(&mut crate::source::Cache)?;
         }
         Ok(())
     }
 
-    pub fn string(&mut self, sources: &mut Sources) -> Result<String, std::string::FromUtf8Error> {
+    pub fn string(&mut self) -> Result<String, std::string::FromUtf8Error> {
         let mut buf = Vec::new();
         for diag in self.diags.drain(..) {
-            diag.write(&mut *sources, &mut buf).unwrap();
+            diag.write(&mut crate::source::Cache, &mut buf).unwrap();
             writeln!(&mut buf).unwrap();
         }
         String::from_utf8(buf)

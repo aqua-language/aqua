@@ -1,4 +1,4 @@
-use runtime::prelude::Aggregator;
+use runtime::builtins::url::Url;
 use runtime::prelude::Assigner;
 use runtime::prelude::Blob;
 use runtime::prelude::Dict;
@@ -7,10 +7,11 @@ use runtime::prelude::Encoding;
 use runtime::prelude::File;
 use runtime::prelude::Path;
 use runtime::prelude::Reader;
+use runtime::prelude::Send;
 use runtime::prelude::Set;
 use runtime::prelude::SocketAddr;
+use runtime::prelude::Sync;
 use runtime::prelude::Time;
-use runtime::prelude::TimeSource;
 use runtime::prelude::Writer;
 
 pub use super::types::array::Array;
@@ -25,9 +26,8 @@ pub use super::types::variant::Variant;
 
 use std::rc::Rc;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Send, Sync)]
 pub enum Value {
-    Aggregator(Aggregator<Rc<Value>, Rc<Value>, Rc<Value>, Rc<Value>>),
     Array(Array),
     Blob(Blob),
     Bool(bool),
@@ -56,7 +56,6 @@ pub enum Value {
     Dataflow(Dataflow),
     String(runtime::builtins::im_string::String),
     Time(Time),
-    TimeSource(TimeSource<Rc<Value>>),
     Tuple(Tuple),
     U128(u128),
     U16(u16),
@@ -64,13 +63,14 @@ pub enum Value {
     U64(u64),
     U8(u8),
     Usize(usize),
+    Url(Url),
     Variant(Variant),
     Vec(runtime::builtins::vec::Vec<Value>),
     Writer(Writer),
     Instance(Instance),
     Ordering(std::cmp::Ordering),
     Backend(Backend),
-    Range(runtime::builtins::range::Range<Rc<Value>>)
+    Range(runtime::builtins::range::Range<Rc<Value>>),
 }
 
 impl Value {

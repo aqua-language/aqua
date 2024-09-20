@@ -7,6 +7,7 @@ use common::dsl::expr_int;
 use common::dsl::program;
 use common::dsl::stmt_def;
 use common::dsl::types::ty_i32;
+use compiler::aqua;
 
 use crate::common::passes::lift;
 

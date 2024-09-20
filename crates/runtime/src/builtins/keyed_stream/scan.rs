@@ -1,7 +1,6 @@
 #![allow(unused)]
 use crate::HashMap;
 
-use crate::builtins::aggregator::Aggregator;
 use crate::runner::context::Context;
 use crate::traits::Data;
 use crate::traits::Key;
@@ -34,17 +33,18 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
                         //     .unwrap();
                     }
                     KeyedEvent::Watermark(t) => {
-                        tx.send(KeyedEvent::Watermark(t)).await;
+                        tx.send(KeyedEvent::Watermark(t)).await?;
                     }
                     KeyedEvent::Snapshot(i) => {
-                        tx.send(KeyedEvent::Snapshot(i)).await;
+                        tx.send(KeyedEvent::Snapshot(i)).await?;
                     }
                     KeyedEvent::Sentinel => {
-                        tx.send(KeyedEvent::Sentinel).await;
+                        tx.send(KeyedEvent::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

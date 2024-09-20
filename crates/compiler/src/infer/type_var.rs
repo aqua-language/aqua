@@ -5,8 +5,8 @@ use ena::unify::UnifyValue;
 use crate::ast::Type;
 use crate::ast::TypeVar;
 
-use super::floats;
-use super::ints;
+use super::intrinstics::floats;
+use super::intrinstics::ints;
 
 impl UnifyKey for TypeVar {
     type Value = TypeVarValue;

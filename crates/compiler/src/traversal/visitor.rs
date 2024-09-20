@@ -2,7 +2,6 @@
 
 use std::rc::Rc;
 
-use runtime::prelude::Aggregator;
 use runtime::prelude::Assigner;
 use runtime::prelude::Encoding;
 use runtime::prelude::Set;
@@ -11,6 +10,7 @@ use crate::ast::Aggr;
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
+use crate::ast::Impl;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
@@ -31,6 +31,7 @@ use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
+use crate::builtins::types::stream::StreamKind;
 use crate::builtins::value::Dataflow;
 use crate::builtins::value::Fun;
 use crate::builtins::value::Record;
@@ -38,6 +39,7 @@ use crate::builtins::value::Stream;
 use crate::builtins::value::Tuple;
 use crate::builtins::value::Value;
 use crate::builtins::value::Variant;
+use crate::infer::Constraint;
 use crate::span::Span;
 
 pub(crate) trait Visitor {
@@ -46,15 +48,7 @@ pub(crate) trait Visitor {
     }
     #[inline(always)]
     fn _visit_program(&mut self, program: &Program) {
-        self.visit_top_stmts(&program.stmts);
-    }
-
-    fn visit_top_stmts(&mut self, stmts: &[Stmt]) {
-        self.visit_iter(stmts, Self::visit_top_stmt);
-    }
-
-    fn visit_top_stmt(&mut self, s: &Stmt) {
-        self.visit_stmt(s);
+        self.visit_stmts(&program.stmts);
     }
 
     fn visit_stmts(&mut self, stmts: &[Stmt]) {
@@ -110,17 +104,17 @@ pub(crate) trait Visitor {
         self.visit_generics(&s.generics);
         self.visit_params(&s.params);
         self.visit_type(&s.ty);
-        self.visit_bounds(&s.where_clause);
+        self.visit_impls(&s.where_clause);
         self.visit_stmt_def_body(&s.body);
     }
 
     #[inline(always)]
-    fn visit_bounds(&mut self, bs: &[Trait]) {
-        self._visit_bounds(bs);
+    fn visit_impls(&mut self, bs: &[Impl]) {
+        self._visit_impls(bs);
     }
     #[inline(always)]
-    fn _visit_bounds(&mut self, bs: &[Trait]) {
-        self.visit_iter(bs, Self::visit_bound);
+    fn _visit_impls(&mut self, bs: &[Impl]) {
+        self.visit_iter(bs, Self::visit_impl);
     }
 
     #[inline(always)]
@@ -169,27 +163,32 @@ pub(crate) trait Visitor {
         }
     }
 
-    fn visit_bound(&mut self, b: &Trait) {
-        self._visit_bound(b);
+    fn visit_impl(&mut self, b: &Impl) {
+        self._visit_impl(b);
     }
     #[inline(always)]
-    fn _visit_bound(&mut self, b: &Trait) {
+    fn _visit_impl(&mut self, b: &Impl) {
         match b {
-            Trait::Path(span, path) => {
+            Impl::Path(span, path) => {
                 self.visit_span(span);
                 self.visit_path(path);
             }
-            Trait::Cons(x, ts, xts) => {
-                self.visit_name(x);
-                self.visit_types(ts);
-                self.visit_assoc_types(xts);
+            Impl::Trait(tr) => {
+                self.visit_trait(tr);
             }
-            Trait::Type(t) => {
+            Impl::Type(t) => {
                 self.visit_type(t);
             }
-            Trait::Err => {}
-            Trait::Var(_) => {}
+            Impl::Err => {}
+            Impl::Var(_) => {}
+            Impl::Unknown => {}
         }
+    }
+
+    fn visit_trait(&mut self, tr: &Trait) {
+        self.visit_name(&tr.x);
+        self.visit_types(&tr.ts);
+        self.visit_assoc_types(&tr.xts);
     }
 
     #[inline(always)]
@@ -218,7 +217,7 @@ pub(crate) trait Visitor {
         self.visit_span(&s.span);
         self.visit_name(&s.name);
         self.visit_generics(&s.generics);
-        self.visit_bounds(&s.where_clause);
+        self.visit_impls(&s.where_clause);
         s.defs.iter().for_each(|d| self.visit_stmt_trait_def(d));
         s.types.iter().for_each(|t| self.visit_trait_type(t));
     }
@@ -233,7 +232,7 @@ pub(crate) trait Visitor {
         self.visit_generics(&d.generics);
         self.visit_trait_def_params(&d.params);
         self.visit_type(&d.ty);
-        self.visit_iter(&d.where_clause, Self::visit_bound);
+        self.visit_iter(&d.where_clause, Self::visit_impl);
     }
 
     #[inline(always)]
@@ -271,8 +270,8 @@ pub(crate) trait Visitor {
     fn _visit_stmt_impl(&mut self, s: &StmtImpl) {
         self.visit_span(&s.span);
         self.visit_generics(&s.generics);
-        self.visit_bounds(&s.where_clause);
-        self.visit_bound(&s.head);
+        self.visit_impls(&s.where_clause);
+        self.visit_impl(&s.head);
         self.visit_rc_iter(&s.defs, Self::visit_stmt_impl_def);
         self.visit_rc_iter(&s.types, Self::visit_stmt_type);
     }
@@ -401,10 +400,6 @@ pub(crate) trait Visitor {
             Expr::Path(_, _, path) => {
                 self.visit_path(path);
             }
-            Expr::Unresolved(_, _, x, ts) => {
-                self.visit_name(x);
-                self.visit_types(ts);
-            }
             Expr::Int(_, _, _v) => {}
             Expr::Float(_, _, _v) => {}
             Expr::Bool(_, _, _v) => {}
@@ -463,8 +458,8 @@ pub(crate) trait Visitor {
                 self.visit_types(ts);
                 self.visit_exprs(es);
             }
-            Expr::TraitMethod(_, _, b, x, ts) => {
-                self.visit_bound(b);
+            Expr::Assoc(_, _, b, x, ts) => {
+                self.visit_impl(b);
                 self.visit_name(x);
                 self.visit_types(ts);
             }
@@ -488,7 +483,7 @@ pub(crate) trait Visitor {
                 self.visit_expr(e);
                 self.visit_block(b);
             }
-            Expr::Fun(_, _, xts, t, e) => {
+            Expr::Lambda(_, _, xts, t, e) => {
                 self.visit_params(xts);
                 self.visit_type(t);
                 self.visit_expr(e);
@@ -499,9 +494,6 @@ pub(crate) trait Visitor {
                 self.visit_block(b);
             }
             Expr::Err(_, _) => {}
-            Expr::Value(_, v) => {
-                self.visit_value(v);
-            }
             Expr::InfixBinaryOp(_, _, _op, e0, e1) => {
                 self.visit_expr(e0);
                 self.visit_expr(e1);
@@ -543,6 +535,12 @@ pub(crate) trait Visitor {
                 self.visit_expr(e1);
             }
             Expr::Anonymous(_, _) => {}
+            Expr::Closure(_, _, xts0, xts1, t, e) => {
+                self.visit_params(xts0);
+                self.visit_params(xts1);
+                self.visit_type(t);
+                self.visit_expr(e);
+            }
         }
     }
 
@@ -558,9 +556,9 @@ pub(crate) trait Visitor {
         self._visit_arm(pe);
     }
     #[inline(always)]
-    fn _visit_arm(&mut self, pe: &(Pat, Expr)) {
-        self.visit_pattern(&pe.0);
-        self.visit_expr(&pe.1);
+    fn _visit_arm(&mut self, (p, e): &(Pat, Expr)) {
+        self.visit_pattern(p);
+        self.visit_expr(e);
     }
 
     fn visit_query_stmts(&mut self, qs: &[Query]) {
@@ -579,6 +577,12 @@ pub(crate) trait Visitor {
         match q {
             Query::From(_, x, e) => {
                 self.visit_name(x);
+                self.visit_expr(e);
+            }
+            Query::Union(_, e) => {
+                self.visit_expr(e);
+            }
+            Query::Limit(_, e) => {
                 self.visit_expr(e);
             }
             Query::Var(_, x, e) => {
@@ -613,6 +617,9 @@ pub(crate) trait Visitor {
                 self.visit_expr(e2);
             }
             Query::Err(_) => {}
+            Query::Drop(_, x) => {
+                self.visit_name(x);
+            }
         }
     }
 
@@ -718,7 +725,7 @@ pub(crate) trait Visitor {
                 self.visit_types(ts);
             }
             Type::Assoc(b, x, ts) => {
-                self.visit_bound(b);
+                self.visit_impl(b);
                 self.visit_name(x);
                 self.visit_types(ts);
             }
@@ -726,7 +733,7 @@ pub(crate) trait Visitor {
             Type::Generic(x) => {
                 self.visit_name(x);
             }
-            Type::Fun(ts, t) => {
+            Type::Lambda(ts, t) => {
                 self.visit_types(ts);
                 self.visit_type(t);
             }
@@ -850,7 +857,6 @@ pub(crate) trait Visitor {
 
     fn _visit_value(&mut self, v: &Value) {
         match v {
-            Value::Aggregator(v) => self._visit_value_aggregator(v),
             Value::Array(v) => self._visit_value_array(v),
             Value::Blob(_) => {}
             Value::Bool(_) => {}
@@ -879,7 +885,6 @@ pub(crate) trait Visitor {
             Value::Dataflow(v) => self._visit_value_dataflow(v),
             Value::String(_) => {}
             Value::Time(_) => {}
-            Value::TimeSource(_) => {}
             Value::Tuple(v) => self._visit_value_tuple(v),
             Value::U128(_) => {}
             Value::U16(_) => {}
@@ -887,6 +892,7 @@ pub(crate) trait Visitor {
             Value::U64(_) => {}
             Value::U8(_) => {}
             Value::Usize(_) => {}
+            Value::Url(_) => {}
             Value::Variant(v) => self._visit_value_variant(v),
             Value::Vec(v) => self._visit_value_vec(v),
             Value::Writer(_) => {}
@@ -906,26 +912,6 @@ pub(crate) trait Visitor {
         }
     }
 
-    fn _visit_value_aggregator(
-        &mut self,
-        a: &Aggregator<Rc<Value>, Rc<Value>, Rc<Value>, Rc<Value>>,
-    ) {
-        match a {
-            Aggregator::Incremental {
-                lift,
-                combine,
-                lower,
-            } => {
-                self.visit_value(lift);
-                self.visit_value(combine);
-                self.visit_value(lower);
-            }
-            Aggregator::Holistic { compute } => {
-                self.visit_value(compute);
-            }
-        }
-    }
-
     fn _visit_value_array(&mut self, a: &crate::builtins::types::array::Array) {
         for v in &a.0 {
             self.visit_value(v);
@@ -933,13 +919,13 @@ pub(crate) trait Visitor {
     }
 
     fn _visit_value_vec(&mut self, v: &runtime::builtins::vec::Vec<Value>) {
-        for v in v.0.iter() {
+        for v in v.0.as_ref().iter() {
             self.visit_value(v);
         }
     }
 
     fn _visit_value_dict(&mut self, v: &runtime::builtins::dict::Dict<Value, Value>) {
-        for (k, v) in v.0.iter() {
+        for (k, v) in v.0.as_ref().iter() {
             self.visit_value(k);
             self.visit_value(v);
         }
@@ -974,7 +960,7 @@ pub(crate) trait Visitor {
     }
 
     fn _visit_value_set(&mut self, s: &Set<Value>) {
-        for v in s.0.iter() {
+        for v in s.0.as_ref().iter() {
             self.visit_value(v);
         }
     }
@@ -992,28 +978,64 @@ pub(crate) trait Visitor {
     }
 
     fn _visit_value_stream(&mut self, s: &Stream) {
-        match s {
-            Stream::Source(_, _, f) => {
+        match s.0.as_ref() {
+            StreamKind::Source(_, _, f, _, _) => {
                 self._visit_value_fun(f);
             }
-            Stream::Map(s, f) => {
+            StreamKind::Take(e, _) => {
+                self._visit_value_stream(e);
+            }
+            StreamKind::Map(s, f) => {
                 self._visit_value_stream(s);
                 self._visit_value_fun(f);
             }
-            Stream::Filter(_, _) => todo!(),
-            Stream::Flatten(_) => todo!(),
-            Stream::FlatMap(_, _) => todo!(),
-            Stream::Keyby(_, _) => todo!(),
-            Stream::Unkey(_) => todo!(),
-            Stream::Window(_, _, _) => todo!(),
-            Stream::Merge(_, _) => todo!(),
-            Stream::Sink(_, _, _) => todo!(),
+            StreamKind::Filter(s, f) => {
+                self._visit_value_stream(s);
+                self._visit_value_fun(f);
+            }
+            StreamKind::Flatten(s) => {
+                self._visit_value_stream(s);
+            }
+            StreamKind::FlatMap(_, _) => todo!(),
+            StreamKind::Keyby(_, _) => todo!(),
+            StreamKind::Unkey(_) => todo!(),
+            StreamKind::Window(_, _, _) => todo!(),
+            StreamKind::Merge(_, _) => todo!(),
+            StreamKind::IncrWindow(_, _, _, _, _) => todo!(),
         }
     }
 
     fn _visit_value_fun(&mut self, f: &Fun) {
         f.params.values().for_each(|t| self.visit_type(t));
         self.visit_stmt_def_body(&f.body);
+    }
+
+    fn visit_constraint(&mut self, c: &Constraint) {
+        self._visit_constraint(c);
+    }
+
+    #[inline(always)]
+    fn _visit_constraint(&mut self, c: &Constraint) {
+        match c {
+            Constraint::ExprAssoc(s, t, i, x, ts) => {
+                self.visit_span(s);
+                self.visit_type(t);
+                self.visit_impl(i);
+                self.visit_name(x);
+                self.visit_types(ts);
+            }
+            Constraint::TypeAssoc(s, t, i, x, ts) => {
+                self.visit_span(s);
+                self.visit_type(t);
+                self.visit_impl(i);
+                self.visit_name(x);
+                self.visit_types(ts);
+            }
+            Constraint::WhereClause(s, i) => {
+                self.visit_span(s);
+                self.visit_impl(i);
+            }
+        }
     }
 }
 
@@ -1042,5 +1064,11 @@ impl AcceptVisitor for Expr {
 impl AcceptVisitor for Type {
     fn visit(&self, mut visitor: &mut impl Visitor) {
         visitor.visit_type(self);
+    }
+}
+
+impl AcceptVisitor for Constraint {
+    fn visit(&self, mut visitor: &mut impl Visitor) {
+        visitor.visit_constraint(self);
     }
 }

@@ -17,20 +17,21 @@ impl<T: Data> Stream<T> {
                 match self.recv().await {
                     Event::Data(t, v) => {
                         acc = fun(v, acc);
-                        tx.send(Event::Data(t, acc.deep_clone())).await;
+                        tx.send(Event::Data(t, acc.deep_clone())).await?;
                     }
                     Event::Watermark(t) => {
-                        tx.send(Event::Watermark(t)).await;
+                        tx.send(Event::Watermark(t)).await?;
                     }
                     Event::Snapshot(i) => {
-                        tx.send(Event::Snapshot(i)).await;
+                        tx.send(Event::Snapshot(i)).await?;
                     }
                     Event::Sentinel => {
-                        tx.send(Event::Sentinel).await;
+                        tx.send(Event::Sentinel).await?;
                         break;
                     }
                 }
             }
+            Ok(())
         })
     }
 }

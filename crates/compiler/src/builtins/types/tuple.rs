@@ -1,12 +1,23 @@
 use crate::ast::Index;
-use crate::Compiler;
+use crate::builtins::Context;
 
+use linkme::distributed_slice;
+use runtime::prelude::DeepClone;
 use serde::Serialize;
-
 use crate::builtins::value::Value;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(_ctx: &mut Context) {}
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize)]
 pub struct Tuple(pub Vec<Value>);
+
+impl DeepClone for Tuple {
+    fn deep_clone(&self) -> Self {
+        Tuple(self.0.iter().map(|v| v.deep_clone()).collect())
+    }
+}
 
 impl std::fmt::Display for Tuple {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -48,9 +59,4 @@ impl<'a> std::ops::Index<&'a Index> for Tuple {
     fn index(&self, index: &'a Index) -> &Value {
         &self.0[index.data]
     }
-}
-
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_tuple(&mut self) {}
 }

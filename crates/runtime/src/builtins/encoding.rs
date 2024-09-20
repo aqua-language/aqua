@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::traits::DeepClone;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(C)]
 pub enum Encoding {
@@ -14,6 +16,12 @@ impl std::fmt::Display for Encoding {
             Encoding::Csv { sep } => write!(f, "Csv({})", sep),
             Encoding::Json => write!(f, "Json"),
         }
+    }
+}
+
+impl DeepClone for Encoding {
+    fn deep_clone(&self) -> Self {
+        self.clone()
     }
 }
 

@@ -1,21 +1,25 @@
-use crate::ast::BuiltinDef;
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::ImplDecl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
-impl Compiler {
-    #[allow(unused)]
-    pub(super) fn declare_socket(&mut self) {
-        self.declare_type("type SocketAddr;", BuiltinType { rust: "SocketAddr" });
-        self.declare_def(
-            "def socket(s: String): SocketAddr;",
-            BuiltinDef {
-                rust: "SocketAddr::parse",
-                fun: |_ctx, _v| {
-                    todo!()
-                    // let v0 = v[0].as_string();
-                    // SocketAddr::parse(v0).into()
-                },
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type SocketAddr;",
+        codegen: None,
+    });
+    ctx.declare(Decl::Impl {
+        aqua: "impl SocketAddr",
+        decls: &[ImplDecl::Def {
+            aqua: "def new(s: String): SocketAddr;",
+            codegen: None,
+            fun: |_ctx, _v| {
+                todo!()
+                // let v0 = v[0].as_string();
+                // SocketAddr::parse(v0).into()
             },
-        );
-    }
+        }],
+    });
 }

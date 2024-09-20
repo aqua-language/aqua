@@ -1,3 +1,5 @@
+use compiler::aqua;
+
 use crate::common::passes::desugar;
 
 #[macro_use]

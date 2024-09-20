@@ -1,20 +1,21 @@
 use crate::builtins::value::Value;
-use crate::Compiler;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(super) fn declare_display(&mut self) {
-        self.declare_trait(
-            "trait Display[T] {
-                 def to_string(v:T): String;
-             }",
-        );
-    }
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Trait {
+        aqua: "trait Display[T] {
+             def toString(v:T): String;
+         }",
+    });
 }
 
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Aggregator(_) => unreachable!(),
             Value::Array(v) => write!(f, "{v}"),
             Value::Blob(v) => write!(f, "{v}"),
             Value::Bool(v) => write!(f, "{v}"),
@@ -43,7 +44,6 @@ impl std::fmt::Display for Value {
             Value::Dataflow(v) => write!(f, "{v}"),
             Value::String(v) => write!(f, "{v}"),
             Value::Time(v) => write!(f, "{v}"),
-            Value::TimeSource(v) => write!(f, "{v}"),
             Value::Tuple(v) => write!(f, "{v}"),
             Value::U128(v) => write!(f, "{v}"),
             Value::U16(v) => write!(f, "{v}"),
@@ -58,6 +58,7 @@ impl std::fmt::Display for Value {
             Value::Ordering(v) => write!(f, "{v:?}"),
             Value::Backend(v) => write!(f, "{v}"),
             Value::Range(v) => write!(f, "{v}"),
+            Value::Url(v) => write!(f, "{v}"),
         }
     }
 }

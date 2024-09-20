@@ -1,8 +1,18 @@
-use crate::ast::BuiltinType;
-use crate::Compiler;
+use linkme::distributed_slice;
 
-impl Compiler {
-    pub(in super) fn declare_char(&mut self) {
-        self.declare_type("type char;", BuiltinType { rust: "char" });
-    }
+use crate::ast::Codegen;
+use crate::builtins::Context;
+use crate::builtins::Decl;
+use crate::builtins::DECLS;
+
+#[distributed_slice(DECLS)]
+fn declare(ctx: &mut Context) {
+    ctx.declare(Decl::Type {
+        aqua: "type char;",
+        codegen: Some(Codegen {
+            rust: "char",
+            java: "char",
+            egglog: None,
+        }),
+    });
 }

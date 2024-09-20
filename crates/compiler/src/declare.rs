@@ -1,5 +1,9 @@
 use std::rc::Rc;
 
+use runtime::prelude::Send;
+use runtime::prelude::Sync;
+
+use crate::ast::Impl;
 use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Stmt;
@@ -9,10 +13,9 @@ use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
 use crate::ast::StmtType;
-use crate::ast::Trait;
 use crate::traversal::visitor::Visitor;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Send, Sync)]
 pub struct Context {
     pub defs: Map<Name, Rc<StmtDef>>,
     pub structs: Map<Name, Rc<StmtStruct>>,
@@ -20,6 +23,7 @@ pub struct Context {
     pub traits: Map<Name, Rc<StmtTrait>>,
     pub types: Map<Name, Rc<StmtType>>,
     pub trait_impls: Map<Name, Vec<Rc<StmtImpl>>>,
+    pub type_impls: Vec<Rc<StmtImpl>>,
 }
 
 impl Visitor for Context {
@@ -29,17 +33,20 @@ impl Visitor for Context {
             Stmt::Def(s) => {
                 self.defs.insert(s.name, s.clone());
             }
-            Stmt::Impl(s) => match s.head {
-                Trait::Cons(x, _, _) => {
+            Stmt::Impl(s) => match &s.head {
+                Impl::Trait(tr) => {
                     self.trait_impls
-                        .entry(x)
+                        .entry(tr.x)
                         .or_insert_with(Vec::new)
                         .push(s.clone());
                 }
-                Trait::Type(_) => {}
-                Trait::Path(_, _) => {}
-                Trait::Err => {}
-                Trait::Var(_) => {}
+                Impl::Type(_) => {
+                    self.type_impls.push(s.clone());
+                }
+                Impl::Path(..) => {}
+                Impl::Err => {}
+                Impl::Var(..) => {}
+                Impl::Unknown => {}
             },
             Stmt::Expr(_) => {}
             Stmt::Struct(s) => {

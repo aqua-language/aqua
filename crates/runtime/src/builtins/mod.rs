@@ -1,4 +1,3 @@
-pub mod aggregator;
 pub mod array;
 pub mod assigner;
 pub mod blob;
@@ -30,6 +29,7 @@ pub mod cell;
 pub mod im_string;
 pub mod channel;
 pub mod range;
+pub mod url;
 
 // #[cfg(feature = "model")]
 // pub mod model;

@@ -19,7 +19,7 @@ impl Expr {
             Expr::Query(_, t, ..) => t,
             Expr::QueryInto(_, t, ..) => t,
             Expr::Field(_, t, ..) => t,
-            Expr::TraitMethod(_, t, ..) => t,
+            Expr::Assoc(_, t, ..) => t,
             Expr::Err(_, t) => t,
             Expr::Index(_, t, ..) => t,
             Expr::Array(_, t, ..) => t,
@@ -27,15 +27,13 @@ impl Expr {
             Expr::Return(_, t, ..) => t,
             Expr::Continue(_, t) => t,
             Expr::Break(_, t) => t,
-            Expr::Fun(_, t, ..) => t,
+            Expr::Lambda(_, t, ..) => t,
             Expr::Match(_, t, ..) => t,
             Expr::While(_, t, ..) => t,
             Expr::Record(_, t, ..) => t,
             Expr::Path(_, t, ..) => t,
-            Expr::Value(t, ..) => t,
             Expr::For(_, t, ..) => t,
             Expr::Char(_, t, ..) => t,
-            Expr::Unresolved(_, t, ..) => t,
             Expr::InfixBinaryOp(_, t, ..) => t,
             Expr::PrefixUnaryOp(_, t, ..) => t,
             Expr::PostfixUnaryOp(_, t, ..) => t,
@@ -48,6 +46,7 @@ impl Expr {
             Expr::LetIn(_, t, ..) => t,
             Expr::Update(_, t, ..) => t,
             Expr::Anonymous(_, t) => t,
+            Expr::Closure(_, t, ..) => t,
         }
     }
 }

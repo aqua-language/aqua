@@ -20,6 +20,7 @@ impl<T: Data> Stream<T> {
                     break;
                 }
             }
+            Ok(())
         });
     }
 }

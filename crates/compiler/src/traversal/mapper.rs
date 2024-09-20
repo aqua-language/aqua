@@ -4,6 +4,8 @@ use std::rc::Rc;
 
 use crate::ast::Block;
 use crate::ast::Expr;
+use crate::ast::ExprBody;
+use crate::ast::Impl;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
@@ -13,7 +15,6 @@ use crate::ast::Query;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::ExprBody;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
@@ -21,10 +22,11 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::TypeBody;
 use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
+use crate::ast::TypeBody;
+use crate::infer::Constraint;
 use crate::span::Span;
 
 pub(crate) trait Mapper {
@@ -110,7 +112,7 @@ pub(crate) trait Mapper {
         let generics = self.map_generics(&s.generics);
         let params = self.map_params(&s.params).into();
         let ty = self.map_type(&s.ty);
-        let where_clause = self.map_bounds(&s.where_clause);
+        let where_clause = self.map_impls(&s.where_clause);
         let body = self.map_stmt_def_body(&s.body);
         self.exit_scope();
         StmtDef::new(span, name, generics, params, ty, where_clause, body)
@@ -164,38 +166,49 @@ pub(crate) trait Mapper {
     }
 
     #[inline(always)]
-    fn map_bounds(&mut self, bs: &[Trait]) -> Vec<Trait> {
-        self._map_bounds(bs)
+    fn map_impls(&mut self, bs: &[Impl]) -> Vec<Impl> {
+        self._map_impls(bs)
     }
     #[inline(always)]
-    fn _map_bounds(&mut self, bs: &[Trait]) -> Vec<Trait> {
-        self.map_iter(bs, Self::map_trait)
+    fn _map_impls(&mut self, bs: &[Impl]) -> Vec<Impl> {
+        self.map_iter(bs, Self::map_impl)
     }
 
-    fn map_trait(&mut self, b: &Trait) -> Trait {
-        self._map_bound(b)
+    fn map_impl(&mut self, b: &Impl) -> Impl {
+        self._map_impl(b)
     }
     #[inline(always)]
-    fn _map_bound(&mut self, b: &Trait) -> Trait {
+    fn _map_impl(&mut self, b: &Impl) -> Impl {
         match b {
-            Trait::Path(span, path) => {
+            Impl::Path(span, path) => {
                 let span = self.map_span(span);
                 let path = self.map_path(path);
-                Trait::Path(span, path)
+                Impl::Path(span, path)
             }
-            Trait::Cons(x, ts, xts) => {
-                let x = self.map_name(x);
-                let ts = self.map_types(ts);
-                let xts = self.map_iter(xts, Self::map_assoc_type).into();
-                Trait::Cons(x, ts, xts)
+            Impl::Trait(tr) => {
+                let tr = self.map_trait(tr);
+                Impl::Trait(tr)
             }
-            Trait::Type(t) => {
+            Impl::Type(t) => {
                 let t = self.map_type(t);
-                Trait::Type(Rc::new(t))
+                Impl::Type(Rc::new(t))
             }
-            Trait::Err => Trait::Err,
-            Trait::Var(v) => Trait::Var(*v),
+            Impl::Err => Impl::Err,
+            Impl::Var(v) => Impl::Var(*v),
+            Impl::Unknown => Impl::Unknown,
         }
+    }
+
+    fn map_trait(&mut self, tr: &Trait) -> Trait {
+        self._map_trait(tr)
+    }
+
+    #[inline(always)]
+    fn _map_trait(&mut self, tr: &Trait) -> Trait {
+        let x = self.map_name(&tr.x);
+        let ts = self.map_types(&tr.ts);
+        let xts = self.map_iter(&tr.xts, Self::map_assoc_type).into();
+        Trait::new(x, ts, xts)
     }
 
     fn map_assoc_type(&mut self, xt: &(Name, Type)) -> (Name, Type) {
@@ -217,7 +230,7 @@ pub(crate) trait Mapper {
         let span = self.map_span(&s.span);
         let name = self.map_name(&s.name);
         let generics = self.map_generics(&s.generics);
-        let where_clause = self.map_bounds(&s.where_clause);
+        let where_clause = self.map_impls(&s.where_clause);
         let defs = self.map_trait_defs(&s.defs);
         let types = self.map_trait_types(&s.types);
         self.exit_scope();
@@ -243,7 +256,7 @@ pub(crate) trait Mapper {
         let generics = self.map_generics(&d.generics);
         let params = self.map_iter(&d.params, Self::map_trait_def_param).into();
         let ty = self.map_type(&d.ty);
-        let where_clause = self.map_bounds(&d.where_clause);
+        let where_clause = self.map_impls(&d.where_clause);
         self.exit_scope();
         StmtTraitDef::new(span, name, generics, params, ty, where_clause)
     }
@@ -287,8 +300,8 @@ pub(crate) trait Mapper {
         self.enter_scope();
         let span = self.map_span(&s.span);
         let generics = self.map_generics(&s.generics);
-        let where_clause = self.map_bounds(&s.where_clause);
-        let head = self.map_trait(&s.head);
+        let where_clause = self.map_impls(&s.where_clause);
+        let head = self.map_impl(&s.head);
         let defs = self.map_rc_iter(&s.defs, Self::map_stmt_def);
         let types = self.map_rc_iter(&s.types, Self::map_stmt_type);
         self.exit_scope();
@@ -398,11 +411,6 @@ pub(crate) trait Mapper {
                 let path = self.map_path(path);
                 Expr::Path(s, t, path)
             }
-            Expr::Unresolved(_, _, x, ts) => {
-                let x = self.map_name(x);
-                let ts = self.map_types(ts);
-                Expr::Unresolved(s, t, x, ts)
-            }
             Expr::Int(_, _, v) => Expr::Int(s, t, *v),
             Expr::Float(_, _, v) => Expr::Float(s, t, *v),
             Expr::Bool(_, _, v) => Expr::Bool(s, t, *v),
@@ -457,11 +465,11 @@ pub(crate) trait Mapper {
                 let b = self.map_block(b);
                 Expr::Block(s, t, b)
             }
-            Expr::TraitMethod(_, _, b, x, ts) => {
-                let b = self.map_trait(b);
+            Expr::Assoc(_, _, b, x, ts) => {
+                let b = self.map_impl(b);
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
-                Expr::TraitMethod(s, t, b, x, ts)
+                Expr::Assoc(s, t, b, x, ts)
             }
             Expr::Match(_, _, e, arms) => {
                 let e = self.map_expr(e);
@@ -488,13 +496,13 @@ pub(crate) trait Mapper {
                 let b = self.map_block(b);
                 Expr::While(s, t, Rc::new(e), b)
             }
-            Expr::Fun(_, _, ps, t1, e) => {
+            Expr::Lambda(_, _, ps, t1, e) => {
                 self.enter_scope();
                 let ps = self.map_params(ps).into();
                 let t1 = self.map_type(t1);
                 let e = self.map_expr(e);
                 self.exit_scope();
-                Expr::Fun(s, t, ps, t1, Rc::new(e))
+                Expr::Lambda(s, t, ps, t1, Rc::new(e))
             }
             Expr::For(_, _, x, e, b) => {
                 self.enter_scope();
@@ -505,7 +513,6 @@ pub(crate) trait Mapper {
                 Expr::For(s, t, x, Rc::new(e), b)
             }
             Expr::Err(_, _) => Expr::Err(s, t),
-            Expr::Value(_, _) => unreachable!(),
             Expr::Query(_, _, x0, t0, e, qs) => {
                 let x0 = self.map_name(x0);
                 let t0 = self.map_type(t0);
@@ -573,6 +580,13 @@ pub(crate) trait Mapper {
                 Expr::Update(s, t, Rc::new(e0), x, Rc::new(e1))
             }
             Expr::Anonymous(_, _) => Expr::Anonymous(s, t),
+            Expr::Closure(_, _, xts0, xts1, t1, e) => {
+                let xts0 = self.map_params(xts0).into();
+                let xts1 = self.map_params(xts1).into();
+                let t1 = self.map_type(t1);
+                let e = self.map_expr(e);
+                Expr::Closure(s, t, xts0, xts1, t1, Rc::new(e))
+            }
         }
     }
 
@@ -595,6 +609,14 @@ pub(crate) trait Mapper {
                 let x = self.map_name(x);
                 let e = self.map_expr(e);
                 Query::From(s, x, Rc::new(e))
+            }
+            Query::Union(_, e) => {
+                let e = self.map_expr(e);
+                Query::Union(s, Rc::new(e))
+            }
+            Query::Limit(_, e) => {
+                let e = self.map_expr(e);
+                Query::Limit(s, Rc::new(e))
             }
             Query::Var(_, x, e) => {
                 let x = self.map_name(x);
@@ -633,6 +655,10 @@ pub(crate) trait Mapper {
                 Query::JoinOverOn(s, x, Rc::new(e0), Rc::new(e1), Rc::new(e2))
             }
             Query::Err(_) => Query::Err(s),
+            Query::Drop(_, x) => {
+                let x = self.map_name(x);
+                Query::Drop(s, x)
+            }
         }
     }
 
@@ -768,7 +794,7 @@ pub(crate) trait Mapper {
                 Type::Alias(x, ts)
             }
             Type::Assoc(b, x, ts) => {
-                let b = self.map_trait(b);
+                let b = self.map_impl(b);
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
                 Type::Assoc(b, x, ts)
@@ -778,10 +804,10 @@ pub(crate) trait Mapper {
                 let x = self.map_name(x);
                 Type::Generic(x)
             }
-            Type::Fun(ts, t) => {
+            Type::Lambda(ts, t) => {
                 let ts = self.map_types(ts);
                 let t = self.map_type(t);
-                Type::Fun(ts, Rc::new(t))
+                Type::Lambda(ts, Rc::new(t))
             }
             Type::Tuple(ts) => {
                 let ts = self.map_types(ts);
@@ -922,6 +948,37 @@ pub(crate) trait Mapper {
     ) -> Vec<T> {
         iter.into_iter().map(|x| f(self, x)).collect()
     }
+
+    fn map_constraint(&mut self, c: &Constraint) -> Constraint {
+        self._map_constraint(c)
+    }
+
+    #[inline(always)]
+    fn _map_constraint(&mut self, c: &Constraint) -> Constraint {
+        match c {
+            Constraint::ExprAssoc(s, t, i, x, ts) => {
+                let s = self.map_span(s);
+                let t = self.map_type(t);
+                let i = self.map_impl(i);
+                let x = self.map_name(x);
+                let ts = self.map_types(ts);
+                Constraint::ExprAssoc(s, t, i, x, ts)
+            }
+            Constraint::TypeAssoc(s, t, i, x, ts) => {
+                let s = self.map_span(s);
+                let t = self.map_type(t);
+                let i = self.map_impl(i);
+                let x = self.map_name(x);
+                let ts = self.map_types(ts);
+                Constraint::TypeAssoc(s, t, i, x, ts)
+            }
+            Constraint::WhereClause(s, i) => {
+                let s = self.map_span(s);
+                let i = self.map_impl(i);
+                Constraint::WhereClause(s, i)
+            }
+        }
+    }
 }
 
 pub(crate) trait AcceptMapper {
@@ -994,14 +1051,20 @@ impl AcceptMapper for ExprBody {
     }
 }
 
-impl AcceptMapper for Trait {
+impl AcceptMapper for Impl {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_trait(self)
+        mapper.map_impl(self)
     }
 }
 
 impl AcceptMapper for Vec<Stmt> {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_stmts(self)
+    }
+}
+
+impl AcceptMapper for Constraint {
+    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
+        mapper.map_constraint(self)
     }
 }

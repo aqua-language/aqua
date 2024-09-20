@@ -1,5 +1,11 @@
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Set<K>(Vec<K>);
+
+impl<K> Default for Set<K> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl<K> Set<K> {
     pub fn new() -> Self {
@@ -24,6 +30,18 @@ impl<K> Set<K> {
 
     pub fn iter(&self) -> std::slice::Iter<K> {
         self.0.iter()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn take(&mut self) -> Set<K> {
+        std::mem::take(self)
     }
 }
 
