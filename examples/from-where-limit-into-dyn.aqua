@@ -1,7 +1,10 @@
 struct Data(time:Time, key:String, value:i32);
 
 var v =
-  from x in source[Data](file_reader(path("data.csv"), false), csv(','), (x, t) => x.time, 0s, 1s)
+  from x in Stream[Data]::source(
+    Reader::file(Path::new("data.csv"), false),
+    Format::csv(','),
+    (x, t) => x.time, 0s, 1s)
   where x.value < 50
   limit 100
   into collect();

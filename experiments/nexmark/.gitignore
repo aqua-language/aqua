@@ -1,6 +1,0 @@
-.*
-!/.gitignore
-
-*.jsonl
-*.csv
-target/

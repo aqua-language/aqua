@@ -12,7 +12,7 @@ use compiler::ast::Map;
 use compiler::builtins::types::dataflow::Dataflow;
 use compiler::builtins::types::function::Fun;
 use compiler::builtins::types::record::Record;
-use compiler::builtins::types::stream::StreamKind;
+use compiler::builtins::types::stream::Operator;
 use compiler::builtins::types::tuple::Tuple;
 use compiler::builtins::types::variant::Variant;
 use compiler::builtins::value::Value;
@@ -124,7 +124,7 @@ fn test_interpret_dataflow0() {
     ))
     .unwrap();
     let b = Dataflow::Sink(
-        StreamKind::Source(
+        Operator::Source(
             Reader::file(Path::new("file.csv"), false),
             Encoding::csv(','),
             Fun::new(

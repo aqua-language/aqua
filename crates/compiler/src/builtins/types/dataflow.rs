@@ -10,6 +10,10 @@ use crate::builtins::Context;
 use crate::builtins::Decl;
 use crate::builtins::ImplDecl;
 use crate::builtins::DECLS;
+use crate::codegen::runtime::flink::package::FLINK_WORKSPACE;
+use crate::codegen::runtime::flink::DisplayFlink;
+use crate::codegen::runtime::native::package::NATIVE_WORKSPACE;
+use crate::codegen::runtime::native::DisplayNative;
 use crate::codegen::Codegen;
 
 use super::backend::Backend;
@@ -53,18 +57,26 @@ fn declare(ctx: &mut Context) {
                 fun: |ctx, v| {
                     let v0 = v[0].as_dataflow();
                     let v1 = v[1].as_backend();
+                    let source = Codegen::new(&ctx.decls, &v0);
                     match v1 {
-                        Backend::Rust => {
-                            let package = ctx
-                                .workspace
-                                .new_package(Codegen::new(&ctx.decls, &v0).rust())
-                                .unwrap();
+                        Backend::Native => {
+                            let package = NATIVE_WORKSPACE.new_package(source.native()).unwrap();
                             let executable = package.compile().unwrap();
                             let instance = executable.run_locally().unwrap();
                             Value::Instance(instance).into()
                         }
-                        Backend::Java => {
+                        Backend::Flink => {
+                            let package = FLINK_WORKSPACE.new_package(source.flink()).unwrap();
+                            let executable = package.compile().unwrap();
+                            let instance = executable.run().unwrap();
+                            Value::Instance(instance).into()
+                        }
+                        Backend::Spark => {
                             todo!()
+                            // let package = FLINK_WORKSPACE.new_package(source.spark()).unwrap();
+                            // let executable = package.compile().unwrap();
+                            // let instance = executable.run().unwrap();
+                            // Value::Instance(instance).into()
                         }
                     }
                 },

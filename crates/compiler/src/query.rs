@@ -2,12 +2,12 @@ use std::rc::Rc;
 
 use crate::ast::Aggr;
 use crate::ast::Expr;
+use crate::ast::Impl;
 use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Query;
-use crate::ast::Segment;
 use crate::ast::Type;
 use crate::span::Span;
 use crate::traversal::mapper::Mapper;
@@ -325,10 +325,9 @@ impl Mapper for Context {
                 let e = self.first_from_clause(*s, *x0, t0.clone(), e);
                 let e = qs.iter().fold(e, |e, q| self.query(e, q));
                 let es = self.map_exprs(es);
-                let es = std::iter::once(e).chain(es).collect();
-                let path = Path::new(vec![Segment::new(*s, *x1, ts.clone(), vec![].into())]);
-                let e = Expr::Path(*s, Type::Unknown, path);
-                let e = Expr::Call(*s, t.clone(), Rc::new(e), es);
+                let es = std::iter::once(e).chain(es).collect::<Vec<_>>();
+                let efun = Expr::Assoc(*s, Type::Unknown, Impl::Unknown, *x1, ts.clone());
+                let e = Expr::Call(*s, t.clone(), Rc::new(efun), es);
                 self.exit_scope();
                 e
             }

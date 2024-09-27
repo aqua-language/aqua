@@ -31,7 +31,7 @@ use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
-use crate::builtins::types::stream::StreamKind;
+use crate::builtins::types::stream::Operator;
 use crate::builtins::value::Dataflow;
 use crate::builtins::value::Fun;
 use crate::builtins::value::Record;
@@ -979,29 +979,28 @@ pub(crate) trait Visitor {
 
     fn _visit_value_stream(&mut self, s: &Stream) {
         match s.0.as_ref() {
-            StreamKind::Source(_, _, f, _, _) => {
+            Operator::Source(_, _, f, _, _) => {
                 self._visit_value_fun(f);
             }
-            StreamKind::Take(e, _) => {
+            Operator::Take(e, _) => {
                 self._visit_value_stream(e);
             }
-            StreamKind::Map(s, f) => {
+            Operator::Map(s, f) => {
                 self._visit_value_stream(s);
                 self._visit_value_fun(f);
             }
-            StreamKind::Filter(s, f) => {
+            Operator::Filter(s, f) => {
                 self._visit_value_stream(s);
                 self._visit_value_fun(f);
             }
-            StreamKind::Flatten(s) => {
+            Operator::Flatten(s) => {
                 self._visit_value_stream(s);
             }
-            StreamKind::FlatMap(_, _) => todo!(),
-            StreamKind::Keyby(_, _) => todo!(),
-            StreamKind::Unkey(_) => todo!(),
-            StreamKind::Window(_, _, _) => todo!(),
-            StreamKind::Merge(_, _) => todo!(),
-            StreamKind::IncrWindow(_, _, _, _, _) => todo!(),
+            Operator::FlatMap(_, _) => todo!(),
+            Operator::Keyby(_, _) => todo!(),
+            Operator::Window(_, _, _) => todo!(),
+            Operator::Merge(_, _) => todo!(),
+            Operator::IncrWindow(_, _, _, _, _) => todo!(),
         }
     }
 

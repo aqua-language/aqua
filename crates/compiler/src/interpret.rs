@@ -16,14 +16,12 @@ use crate::builtins::types::tuple::Tuple;
 use crate::builtins::types::variant::Variant;
 use crate::builtins::value::Value;
 use crate::declare;
-use crate::package;
 use crate::traversal::visitor::AcceptVisitor;
 
 #[derive(Debug, Default, Send, Sync, Clone)]
 pub struct Context {
     pub stack: Stack,
     pub decls: declare::Context,
-    pub workspace: package::Workspace,
 }
 
 #[derive(Debug, Clone)]
@@ -76,7 +74,6 @@ impl Context {
         Context {
             stack: Stack::new(),
             decls: declare::Context::default(),
-            workspace: package::Workspace::new(),
         }
     }
 

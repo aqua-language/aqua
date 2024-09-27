@@ -142,5 +142,5 @@ pub fn interpret(input: impl AsRef<str>) -> Result<Value, Recovered<Value>> {
 }
 
 pub fn codegen(input: &str) -> String {
-    Compiler::default().init().codegen("test", input)
+    Compiler::default().init().codegen_rust("test", input)
 }

@@ -71,6 +71,12 @@ impl std::fmt::Display for Instance {
 }
 
 impl Instance {
+    pub fn new(child: Child) -> Self {
+        Self {
+            child: Rc::new(RefCell::new(child)),
+        }
+    }
+
     pub fn wait(&self) -> Result<()> {
         let mut child = self.child.borrow_mut();
         for line in BufReader::new(child.stderr.as_mut().unwrap()).lines() {

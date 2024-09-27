@@ -17,14 +17,19 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Backend",
         decls: &[
             ImplDecl::Def {
-                aqua: "def rust(): Backend;",
+                aqua: "def native(): Backend;",
                 codegen: None,
-                fun: |_ctx, _v| Backend::rust().into(),
+                fun: |_ctx, _v| Backend::native().into(),
             },
             ImplDecl::Def {
-                aqua: "def java(): Backend;",
+                aqua: "def flink(): Backend;",
                 codegen: None,
-                fun: |_ctx, _v| Backend::java().into(),
+                fun: |_ctx, _v| Backend::flink().into(),
+            },
+            ImplDecl::Def {
+                aqua: "def spark(): Backend;",
+                codegen: None,
+                fun: |_ctx, _v| Backend::Spark.into(),
             },
         ],
     });
@@ -32,24 +37,26 @@ fn declare(ctx: &mut Context) {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub enum Backend {
-    Rust,
-    Java,
+    Native,
+    Flink,
+    Spark,
 }
 
 impl std::fmt::Display for Backend {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Backend::Rust => write!(f, "Rust"),
-            Backend::Java => write!(f, "Java"),
+            Backend::Native => write!(f, "Native"),
+            Backend::Flink => write!(f, "Flink"),
+            Backend::Spark => write!(f, "Spark"),
         }
     }
 }
 
 impl Backend {
-    pub fn rust() -> Self {
-        Self::Rust
+    pub fn native() -> Self {
+        Self::Native
     }
-    pub fn java() -> Self {
-        Self::Java
+    pub fn flink() -> Self {
+        Self::Flink
     }
 }

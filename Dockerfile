@@ -1,4 +1,4 @@
-FROM ubuntu:20.04
+FROM ubuntu:latest
 
 # Set the noninteractive timezone (prevents configuration prompts)
 ARG DEBIAN_FRONTEND=noninteractive

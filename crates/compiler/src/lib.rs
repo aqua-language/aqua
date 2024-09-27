@@ -1,4 +1,5 @@
 use anyhow::Result;
+use codegen::host::rust::DisplayRust;
 use std::sync::Arc;
 
 use ast::Program;
@@ -25,7 +26,6 @@ pub mod interpret;
 pub mod lexer;
 #[allow(unused)]
 pub mod lift;
-pub mod package;
 pub mod parser;
 pub mod print;
 pub mod query;
@@ -221,7 +221,7 @@ impl Compiler {
         self.recover(value)
     }
 
-    pub fn codegen(&mut self, name: &str, input: &str) -> String {
+    pub fn codegen_rust(&mut self, name: &str, input: &str) -> String {
         let program = self.monomorphise(name, input).unwrap();
         program.rust().to_string()
     }
