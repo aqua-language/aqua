@@ -27,7 +27,7 @@ fn declare(ctx: &mut Context) {
                     java: "Time.now",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| Time::now().into(),
+                eval: |_ctx, _v| Time::now().into(),
             },
             ImplDecl::Def {
                 aqua: "def from_seconds(v0: i64): Time;",
@@ -36,7 +36,7 @@ fn declare(ctx: &mut Context) {
                     java: "Time.fromSeconds",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_i64();
                     // Time::from_seconds(v0)
@@ -49,7 +49,7 @@ fn declare(ctx: &mut Context) {
                     java: "Time.fromNanoseconds",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_i128().0;
                     // Time::from_nanoseconds(v0)
@@ -62,7 +62,7 @@ fn declare(ctx: &mut Context) {
                     java: "Time.seconds",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     // let _v0 = v[0].as_time();
                     todo!()
                 },
@@ -74,7 +74,7 @@ fn declare(ctx: &mut Context) {
                     java: "Time.nanoseconds",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     // let _v0 = v[0].as_time();
                     todo!()
                 },
@@ -86,7 +86,7 @@ fn declare(ctx: &mut Context) {
                     java: "Time.year",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     // let v0 = v[0].as_time();
                     todo!()
                 },
@@ -98,7 +98,7 @@ fn declare(ctx: &mut Context) {
                     java: "Time.fromString",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_string();
                     // let v1 = v[1].as_string();
@@ -112,7 +112,7 @@ fn declare(ctx: &mut Context) {
                     java: "Time.toString",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_time();
                     // let v1 = v[1].as_string();

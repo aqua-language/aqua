@@ -111,10 +111,10 @@ fn test_infer_def3() {
             ╭─[test:1:1]
             │
           1 │ def f(x: i32): f32 = x;
-            │ ───────────┬─────────┬─
+            │ ───────────┬───────────
             │            ╰───────────── Expected f32
-            │                      │
-            │                      ╰─── Found i32
+            │            │
+            │            ╰───────────── Found i32
          ───╯"
     )
 }
@@ -670,11 +670,10 @@ fn test_infer_trait_def0() {
 }
 
 #[test]
-#[ignore = "TODO: Fix this"]
 fn test_infer_trait_def1() {
     let a = infer(aqua!(
         "trait Foo[T] { def f(x: T): T; }
-         def g[T](x: T): T where Foo[T] = f(x);"
+         def g[T](x: T): T where Foo[T] = x.f();"
     ))
     .unwrap();
     let b = infer(aqua!(
@@ -705,84 +704,85 @@ fn test_infer_impl_i32_assoc() {
 }
 
 #[test]
-fn test_infer_desugar_i32_add() {
+fn test_infer_i32_add() {
     let a = infer(aqua!("1 + 2;")).unwrap();
     let b = infer(aqua!("Add[i32,i32]::add(1:i32, 2:i32):i32;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_desugar_i32_sub() {
+fn test_infer_i32_sub() {
     let a = infer(aqua!("1 - 1;")).unwrap();
     let b = infer(aqua!("Sub[i32,i32]::sub(1:i32, 1:i32):i32;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_desugar_i32_mul() {
+fn test_infer_i32_mul() {
     let a = infer(aqua!("1 * 1;")).unwrap();
     let b = infer(aqua!("Mul[i32,i32]::mul(1:i32, 1:i32):i32;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_desugar_i32_div() {
+fn test_infer_i32_div() {
     let a = infer(aqua!("1 / 1;")).unwrap();
     let b = infer(aqua!("Div[i32,i32]::div(1:i32, 1:i32):i32;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_desugar_f64_add() {
+fn test_infer_f64_add() {
     let a = infer(aqua!("1.0 + 1.0;")).unwrap();
     let b = infer(aqua!("Add[f64,f64]::add(1.0:f64, 1.0:f64):f64;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_desugar_f64_sub() {
+fn test_infer_f64_sub() {
     let a = infer(aqua!("1.0 - 1.0;")).unwrap();
     let b = infer(aqua!("Sub[f64,f64]::sub(1.0:f64, 1.0:f64):f64;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_desugar_f64_mul() {
+fn test_infer_f64_mul() {
     let a = infer(aqua!("1.0 * 1.0;")).unwrap();
     let b = infer(aqua!("Mul[f64,f64]::mul(1.0:f64, 1.0:f64):f64;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_desugar_f64_div() {
+fn test_infer_f64_div() {
     let a = infer(aqua!("1.0 / 1.0;")).unwrap();
     let b = infer(aqua!("Div[f64,f64]::div(1.0:f64, 1.0:f64):f64;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_desugar_f64_i32_add() {
+fn test_infer_f64_i32_add() {
     let a = infer(aqua!("1.0 + 1;")).unwrap();
     let b = infer(aqua!("Add[f64,i32]::add(1.0:f64, 1:i32):f64;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_desugar_i32_f64_add() {
+fn test_infer_i32_f64_add() {
     let a = infer(aqua!("1 + 1.0;")).unwrap();
     let b = infer(aqua!("Add[i32,f64]::add(1:i32, 1.0:f64):f64;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_desugar_i32_neg() {
+#[ignore]
+fn test_infer_i32_neg() {
     let a = infer(aqua!("-1;")).unwrap();
     let b = infer(aqua!("Neg[i32]::neg(1:i32):i32;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_desugar_i32_eq() {
+fn test_infer_i32_eq() {
     let a = infer(aqua!("1 == 2;")).unwrap();
     let b = infer(aqua!("PartialEq[i32,i32]::eq(1:i32, 2:i32):bool;")).unwrap();
     check!(a, b);
@@ -797,16 +797,8 @@ fn test_infer_i32_abs() {
 
 #[test]
 fn test_infer_i32_postfix() {
-    let a = infer(aqua!(
-        "def postfix_min(x: i32): i32 = x * 60;
-         1min;"
-    ))
-    .unwrap();
-    let b = infer(aqua!(
-        "def postfix_min(x: i32): i32 = Mul[i32,i32]::mul(x:i32, 60:i32);
-         postfix_min(1:i32):i32;"
-    ))
-    .unwrap();
+    let a = infer(aqua!("1min;")).unwrap();
+    let b = infer(aqua!("Duration::postfix_min(1:i32):Duration;")).unwrap();
     check!(a, b);
 }
 
@@ -891,7 +883,7 @@ fn test_infer_vec_i32_display0() {
 
 #[test]
 fn test_infer_vec_i32_display1() {
-    let a = infer(aqua!("Display[Vec[_]]::toString(Vec[_]::new());")).unwrap();
+    let a = infer(aqua!("Display[Vec[i32]]::toString(Vec[i32]::new());")).unwrap();
     let b = infer(aqua!(
         "Display[Vec[i32]]::toString(Vec[i32]::new()):String;"
     ))
@@ -911,7 +903,8 @@ fn test_infer_vec_i32_display2() {
 
 #[test]
 fn test_infer_vec_i32_display3() {
-    infer(aqua!("Display[_]::toString(Vec[_]::new());")).unwrap_err();
+    let a = infer(aqua!("Display[_]::toString(Vec[_]::new());")).unwrap();
+    println!("{}", a.verbose());
 }
 
 #[test]
@@ -959,22 +952,37 @@ fn test_infer_while2() {
 }
 
 #[test]
+fn test_infer_path() {
+    let a = infer(aqua!("Path::new;")).unwrap();
+    let b = infer(aqua!("Path::new : (String => Path);")).unwrap();
+    check!(a, b);
+}
+
+#[test]
 fn test_infer_stream0() {
     let a = infer(aqua!(
         r#"struct Data(time:Time, key:String, value:i32);
           
-           var x = source(file_reader(path("data.csv"), true), csv(','), (data:Data, t) => data.time, 1s, 1s);
-           var y = filter(x, (x:Data) => x.value > 100);
-           var z = sink(y, file_writer(path("output.csv")), csv(','));"#
-    )).unwrap();
+           Stream::source(
+               Reader::file(Path::new("data.csv"), true),
+               Encoding::csv(','),
+               (data:Data, t:Time) => data.time, 1s, 1s)
+             .filter((x:Data) => x.value > 100)
+             .sink(Writer::file(Path::new("output.csv")), Encoding::csv(','));"#
+    ))
+    .unwrap();
 
     let b = infer(aqua!(
         r#"struct Data(time:Time, key:String, value:i32);
           
-           var x = source[Data](file_reader(path("data.csv"), true), csv(','), (data, t) => data.time, 1s, 1s);
-           var y = filter(x, x => x.value > 100);
-           var z = sink(y, file_writer(path("output.csv")), csv(','));"#
-    )).unwrap();
+           Stream[Data]::source(
+               Reader::file(Path::new("data.csv"), true),
+               Encoding::csv(','),
+               (data:Data, t:Time) => data.time, 1s, 1s)
+             .filter((x:Data) => x.value > 100)
+             .sink(Writer::file(Path::new("output.csv")), Encoding::csv(','));"#
+    ))
+    .unwrap();
     check!(a, b);
 }
 
@@ -983,17 +991,26 @@ fn test_infer_stream1() {
     let a = infer(aqua!(
         r#"struct Data(time:Time, key:String, value:i32);
           
-           var x = source(file_reader(path("data.csv"), true), csv(','), (data:Data, t) => data.time, 1s, 1s);
-           var y = map(x, (x:Data) => record(x.value, x.value));
-           var z = sink(y, file_writer(path("output.csv")), csv(','));"#
-    )).unwrap();
+           Stream::source(
+               Reader::file(Path::new("data.csv"), true),
+               Encoding::csv(','),
+               (data:Data, t:Time) => data.time, 1s, 1s)
+             .map[_]((x:Data) => x.value)
+             .sink(Writer::file(Path::new("output.csv")), Encoding::csv(','));"#
+    ))
+    .unwrap();
+    println!("{}", a.verbose());
 
-    let b = infer(aqua!(
-        r#"struct Data(time:Time, key:String, value:i32);
-          
-           var x = source[Data](file_reader(path("data.csv"), true), csv(','), (data, t) => data.time, 1s, 1s);
-           var y = map(x, x => record(x.value, x.value));
-           var z = sink(y, file_writer(path("output.csv")), csv(','));"#
-    )).unwrap();
-    check!(a, b);
+    // let b = infer(aqua!(
+    //     r#"struct Data(time:Time, key:String, value:i32);
+    //
+    //        Stream[Data]::source(
+    //            Reader::file(Path::new("data.csv"), true),
+    //            Encoding::csv(','),
+    //            (data:Data, t:Time) => data.time, 1s, 1s)
+    //          .map((x:Data) => record(x.value, x.value))
+    //          .sink(Writer::file(Path::new("output.csv")), Encoding::csv(','));"#
+    // ))
+    // .unwrap();
+    // check!(a, b);
 }

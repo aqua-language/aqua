@@ -27,7 +27,7 @@ fn declare(ctx: &mut Context) {
                     java: "Model.load_model",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_blob();
                     // Model::new(v0).into()
@@ -40,7 +40,7 @@ fn declare(ctx: &mut Context) {
                     java: "Model.predict",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_model();
                     // let v1 = v[1].as_matrix();

@@ -8,10 +8,12 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
-        aqua: "trait Add[A,B] {
-             type Output;
-             def add(a:A, b:B): Add[A,B]::Output;
-         }",
+        aqua: indoc::indoc! {
+            "trait Add[A,B] {
+                 type Output;
+                 def add(a:A, b:B): Add[A,B]::Output;
+             }"
+        },
     });
 }
 

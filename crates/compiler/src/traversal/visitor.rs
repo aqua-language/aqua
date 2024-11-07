@@ -39,7 +39,7 @@ use crate::builtins::value::Stream;
 use crate::builtins::value::Tuple;
 use crate::builtins::value::Value;
 use crate::builtins::value::Variant;
-use crate::infer::Constraint;
+use crate::infer::solver::Constraint;
 use crate::span::Span;
 
 pub(crate) trait Visitor {
@@ -188,7 +188,6 @@ pub(crate) trait Visitor {
     fn visit_trait(&mut self, tr: &Trait) {
         self.visit_name(&tr.x);
         self.visit_types(&tr.ts);
-        self.visit_assoc_types(&tr.xts);
     }
 
     #[inline(always)]
@@ -479,19 +478,19 @@ pub(crate) trait Visitor {
             }
             Expr::Continue(_, _) => {}
             Expr::Break(_, _) => {}
-            Expr::While(_, _, e, b) => {
-                self.visit_expr(e);
-                self.visit_block(b);
+            Expr::While(_, _, e0, e1) => {
+                self.visit_expr(e0);
+                self.visit_expr(e1);
             }
             Expr::Lambda(_, _, xts, t, e) => {
                 self.visit_params(xts);
                 self.visit_type(t);
                 self.visit_expr(e);
             }
-            Expr::For(_, _, x, e, b) => {
+            Expr::For(_, _, x, e0, e1) => {
                 self.visit_name(x);
-                self.visit_expr(e);
-                self.visit_block(b);
+                self.visit_expr(e0);
+                self.visit_expr(e1);
             }
             Expr::Err(_, _) => {}
             Expr::InfixBinaryOp(_, _, _op, e0, e1) => {
@@ -516,10 +515,10 @@ pub(crate) trait Visitor {
                 self.visit_types(ts);
                 self.visit_exprs(es);
             }
-            Expr::IfElse(_, _, e, b0, b1) => {
-                self.visit_expr(e);
-                self.visit_block(b0);
-                self.visit_block(b1);
+            Expr::IfElse(_, _, e0, e1, e2) => {
+                self.visit_expr(e0);
+                self.visit_expr(e1);
+                self.visit_expr(e2);
             }
             Expr::IntSuffix(_, _, _v, _x) => {}
             Expr::FloatSuffix(_, _, _v, _x) => {}
@@ -635,8 +634,8 @@ pub(crate) trait Visitor {
         self._visit_agg(agg);
     }
     fn _visit_agg(&mut self, agg: &Aggr) {
-        self.visit_name(&agg.x);
-        self.visit_expr(&agg.e0);
+        self.visit_name(&agg.x0);
+        self.visit_name(&agg.x1);
         self.visit_expr(&agg.e1);
     }
 
@@ -672,7 +671,7 @@ pub(crate) trait Visitor {
     #[inline(always)]
     fn _visit_segment(&mut self, seg: &Segment) {
         self.visit_span(&seg.span);
-        self.visit_name(&seg.name);
+        self.visit_name(&seg.x);
         self.visit_types(&seg.ts);
         self.visit_iter(&seg.xts, |ctx, xt| {
             ctx.visit_name(&xt.0);
@@ -1038,35 +1037,35 @@ pub(crate) trait Visitor {
     }
 }
 
-pub(crate) trait AcceptVisitor {
+pub(crate) trait Visitable {
     fn visit(&self, visitor: &mut impl Visitor);
 }
 
-impl AcceptVisitor for Program {
+impl Visitable for Program {
     fn visit(&self, mut visitor: &mut impl Visitor) {
         visitor.visit_program(self);
     }
 }
 
-impl AcceptVisitor for Stmt {
+impl Visitable for Stmt {
     fn visit(&self, mut visitor: &mut impl Visitor) {
         visitor.visit_stmt(self);
     }
 }
 
-impl AcceptVisitor for Expr {
+impl Visitable for Expr {
     fn visit(&self, mut visitor: &mut impl Visitor) {
         visitor.visit_expr(self);
     }
 }
 
-impl AcceptVisitor for Type {
+impl Visitable for Type {
     fn visit(&self, mut visitor: &mut impl Visitor) {
         visitor.visit_type(self);
     }
 }
 
-impl AcceptVisitor for Constraint {
+impl Visitable for Constraint {
     fn visit(&self, mut visitor: &mut impl Visitor) {
         visitor.visit_constraint(self);
     }

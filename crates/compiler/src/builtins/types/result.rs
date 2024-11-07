@@ -25,7 +25,7 @@ fn declare(ctx: &mut Context) {
                     java: "Result.ok",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].clone();
                     // Result::ok(v0).into()
@@ -38,7 +38,7 @@ fn declare(ctx: &mut Context) {
                     java: "Result.error",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_string();
                     // Result::error(v0).into()
@@ -51,7 +51,7 @@ fn declare(ctx: &mut Context) {
                     java: "Result.isOk",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     let v0 = _v[0].as_result();
                     v0.is_ok().into()
                 },
@@ -63,7 +63,7 @@ fn declare(ctx: &mut Context) {
                     java: "Result.isError",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     let v0 = _v[0].as_result();
                     v0.is_error().into()
                 },
@@ -75,7 +75,7 @@ fn declare(ctx: &mut Context) {
                     java: "Result.unwrapOk",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_result();
                     // v0.unwrap_ok()
@@ -88,7 +88,7 @@ fn declare(ctx: &mut Context) {
                     java: "Result.unwrapError",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_result();
                     // v0.unwrap_error().into()

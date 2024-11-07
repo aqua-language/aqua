@@ -1,0 +1,13 @@
+(function Op2 (Type String String Expr Expr) Expr)
+
+(function ExprList2 (Expr Expr) ExprList)
+(function TypeList2 (Type Type) TypeList)
+
+(rewrite (ExprList2 e0 e1) (ExprListCons e0 (ExprListCons e1 (ExprListNil))))
+(rewrite (TypeList2 t0 t1) (TypeListCons t0 (TypeListCons t1 (TypeListNil))))
+
+(rewrite
+  (Op2 t x m e0 e1)
+  (ExprCall t
+    (ExprDef (TypeLambda (TypeList2 (typeof e0) (typeof e1)) t) x m)
+    (ExprList2 e0 e1)))

@@ -23,6 +23,16 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    pub fn new_from(file: SourceId, input: &'a str, pos: usize) -> Lexer<'a> {
+        Lexer {
+            file,
+            input,
+            eof: false,
+            pos,
+            report: Report::new(),
+        }
+    }
+
     fn unexpected_char(&mut self, c: char) {
         self.report.err(
             Span::new(self.file, (self.pos - 1) as u32..self.pos as u32),
@@ -31,8 +41,8 @@ impl<'a> Lexer<'a> {
         );
     }
 
-    pub fn text(&self, t: Spanned<Token>) -> &'a str {
-        t.text(self.input)
+    pub fn input(&self) -> &'a str {
+        self.input
     }
 
     pub fn lex(&mut self) -> Option<Spanned<Token>> {

@@ -1,6 +1,5 @@
 use anyhow::Result;
-use codegen::host::rust::DisplayRust;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use ast::Program;
 use builtins::value::Value;
@@ -8,16 +7,16 @@ use config::CompilerConfig;
 use diag::Report;
 use lexer::Lexer;
 use parser::Parser;
-use source::SourceId;
 use span::Span;
 
 pub mod ast;
-pub mod codegen;
+pub mod backend;
 pub mod diag;
 pub mod display;
 pub mod flatten;
 // pub mod ffi;
 pub mod builtins;
+pub mod check;
 pub mod controlflow;
 pub mod declare;
 pub mod desugar;
@@ -26,6 +25,7 @@ pub mod interpret;
 pub mod lexer;
 #[allow(unused)]
 pub mod lift;
+pub mod lookup;
 pub mod parser;
 pub mod print;
 pub mod query;
@@ -34,6 +34,7 @@ pub mod resolve;
 pub mod source;
 pub mod span;
 pub mod spanned;
+pub mod splice;
 pub mod token;
 pub mod traversal {
     pub mod mapper;
@@ -57,9 +58,21 @@ macro_rules! aqua {
     };
 }
 
+fn timed<O>(name: &str, f: impl FnOnce() -> O) -> O {
+    if std::env::var("AQUA_TIMED").is_ok() {
+        let start = std::time::Instant::now();
+        let result = f();
+        let elapsed = start.elapsed();
+        eprintln!("{}: {:?}", name, elapsed);
+        result
+    } else {
+        f()
+    }
+}
+
 #[derive(Debug)]
 pub struct Compiler {
-    pub desugar: desugar::Context,
+    pub sources: source::Cache,
     pub query: query::Context,
     pub resolve: resolve::Context,
     #[allow(unused)]
@@ -82,7 +95,7 @@ impl Default for Compiler {
 impl Drop for Compiler {
     fn drop(&mut self) {
         if !self.report.is_empty() {
-            self.report.print().unwrap();
+            self.print_report();
         }
     }
 }
@@ -90,7 +103,7 @@ impl Drop for Compiler {
 impl Compiler {
     pub fn new(config: CompilerConfig) -> Self {
         Compiler {
-            desugar: desugar::Context::new(),
+            sources: source::Cache::default(),
             query: query::Context::new(),
             resolve: resolve::Context::new(),
             infer: infer::Context::new(),
@@ -104,22 +117,21 @@ impl Compiler {
     }
 
     pub fn init(&mut self) -> &mut Self {
-        let stmts = crate::builtins::declare();
-        // self.declare();
+        let stmts = crate::builtins::declare(&mut self.sources);
         let program = Program::new(Span::default(), stmts);
-        // let program = self.desugar.desugar(&program);
-        // let program = self.query.querycomp(&program);
+        let program = desugar::desugar(&mut self.sources, &program);
+        let program = self.query.querycomp(&program);
         let program = self.resolve.resolve(&program);
-        self.report.merge(&mut self.resolve.report);
+        self.report.append(&mut self.resolve.report);
         // let program = self.flatten.flatten(&program);
         // let program = self.lift.lift(&program);
         // self.report.merge(&mut self.lift.report);
         let program = self.infer.infer(&program);
-        self.report.merge(&mut self.infer.report);
+        self.report.append(&mut self.infer.report);
         let _program = self.monomorphise.monomorphise(&program);
         self.interpret.interpret(&program);
         if !self.report.is_empty() {
-            self.report.print().unwrap();
+            self.print_report();
         }
         self
         // let result = self.inferrer.infer(&result);
@@ -129,23 +141,48 @@ impl Compiler {
         // assert!(self.interpreter.report.is_empty());
     }
 
-    pub fn compile_and_run(&mut self, name: impl ToString, input: &str) -> Result<()> {
-        let input: Arc<str> = Arc::from(input);
-        let id = SourceId::new(name, input.clone());
+    pub fn check(&mut self, name: impl ToString, input: &str) -> Result<()> {
+        let input: Rc<str> = Rc::from(input);
+        let id = self.sources.add(name, input.clone());
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
         let program = parser.parse(Parser::program).unwrap();
-        let program = self.desugar.desugar(&program);
+        let program = desugar::desugar(&mut self.sources, &program);
         let program = self.query.querycomp(&program);
         let program = self.resolve.resolve(&program);
         let program = self.infer.infer(&program);
-        self.report.merge(&mut parser.report);
-        self.report.merge(&mut lexer.report);
-        self.report.merge(&mut self.resolve.report);
-        self.report.merge(&mut self.infer.report);
+        let mut report = check::check(&program);
+        self.report.append(&mut parser.report);
+        self.report.append(&mut lexer.report);
+        self.report.append(&mut self.resolve.report);
+        self.report.append(&mut self.infer.report);
+        self.report.append(&mut report);
         if self.report.is_empty() {
-            let program = self.monomorphise.monomorphise(&program);
-            self.interpret.interpret(&program);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Compilation failed"))
+        }
+    }
+
+    pub fn run(&mut self, name: impl ToString, input: &str) -> Result<()> {
+        let input: Rc<str> = Rc::from(input);
+        let id = self.sources.add(name, input.clone());
+        let mut lexer = Lexer::new(id, input.as_ref());
+        let mut parser = Parser::new(&input, &mut lexer);
+        let program = timed("parse", || parser.parse(Parser::program).unwrap());
+        let program = timed("desugar", || desugar::desugar(&mut self.sources, &program));
+        let program = timed("querycomp", || self.query.querycomp(&program));
+        let program = timed("resolve", || self.resolve.resolve(&program));
+        let program = timed("infer", || self.infer.infer(&program));
+        let mut report = timed("check", || check::check(&program));
+        self.report.append(&mut parser.report);
+        self.report.append(&mut lexer.report);
+        self.report.append(&mut self.resolve.report);
+        self.report.append(&mut self.infer.report);
+        self.report.append(&mut report);
+        if self.report.is_empty() {
+            let program = timed("monomorphise", || self.monomorphise.monomorphise(&program));
+            timed("interpret", || self.interpret.interpret(&program));
             Ok(())
         } else {
             Err(anyhow::anyhow!("Compilation failed"))
@@ -158,19 +195,19 @@ impl Compiler {
         input: &str,
         f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>) -> T,
     ) -> Result<T, Recovered<T>> {
-        let input: Arc<str> = Arc::from(input);
-        let id = SourceId::new(name, input.clone());
+        let input: Rc<str> = Rc::from(input);
+        let id = self.sources.add(name, input.clone());
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
         let result = f(&mut parser);
-        self.report.merge(&mut parser.report);
-        self.report.merge(&mut lexer.report);
+        self.report.append(&mut parser.report);
+        self.report.append(&mut lexer.report);
         self.recover(result)
     }
 
     pub fn desugar(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
         let program = self.parse(name, input, |parser| parser.parse(Parser::program).unwrap())?;
-        let result = self.desugar.desugar(&program);
+        let result = desugar::desugar(&mut self.sources, &program);
         self.recover(result)
     }
 
@@ -183,7 +220,7 @@ impl Compiler {
     pub fn resolve(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
         let program = self.querycomp(name, input)?;
         let result = self.resolve.resolve(&program);
-        self.report.merge(&mut self.resolve.report);
+        self.report.append(&mut self.resolve.report);
         self.recover(result)
     }
 
@@ -202,7 +239,7 @@ impl Compiler {
     pub fn infer(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
         let result = self.resolve(name, input)?;
         let result = self.infer.infer(&result);
-        self.report.merge(&mut self.infer.report);
+        self.report.append(&mut self.infer.report);
         self.recover(result)
     }
 
@@ -221,13 +258,8 @@ impl Compiler {
         self.recover(value)
     }
 
-    pub fn codegen_rust(&mut self, name: &str, input: &str) -> String {
-        let program = self.monomorphise(name, input).unwrap();
-        program.rust().to_string()
-    }
-
     pub fn add_report(&mut self, report: &mut Report) {
-        self.report.merge(report);
+        self.report.append(report);
     }
 
     pub fn recover<T>(&mut self, result: T) -> Result<T, Recovered<T>> {
@@ -239,11 +271,11 @@ impl Compiler {
     }
 
     pub fn report_to_string(&mut self) -> String {
-        trim(&self.report.string().unwrap())
+        trim(&self.report.string(&mut self.sources).unwrap())
     }
 
     pub fn print_report(&mut self) {
-        self.report.print().unwrap();
+        self.report.print(&mut self.sources).unwrap();
     }
 }
 

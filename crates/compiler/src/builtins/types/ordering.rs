@@ -27,7 +27,7 @@ fn declare(ctx: &mut Context) {
                     java: "(|| Ordering.Less)",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| Ordering::Less.into(),
+                eval: |_ctx, _v| Ordering::Less.into(),
             },
             ImplDecl::Def {
                 aqua: "def equal(): Ordering;",
@@ -36,7 +36,7 @@ fn declare(ctx: &mut Context) {
                     java: "(|| Ordering.Equal)",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| Ordering::Equal.into(),
+                eval: |_ctx, _v| Ordering::Equal.into(),
             },
             ImplDecl::Def {
                 aqua: "def greater(): Ordering;",
@@ -45,7 +45,7 @@ fn declare(ctx: &mut Context) {
                     java: "(|| Ordering.Greater)",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| Ordering::Greater.into(),
+                eval: |_ctx, _v| Ordering::Greater.into(),
             },
             ImplDecl::Def {
                 aqua: "def is_eq(a:Ordering): bool;",
@@ -54,7 +54,7 @@ fn declare(ctx: &mut Context) {
                     java: "Ordering.isEq",
                     egglog: None,
                 }),
-                fun: |_ctx, v| v[0].as_ordering().is_eq().into(),
+                eval: |_ctx, v| v[0].as_ordering().is_eq().into(),
             },
             ImplDecl::Def {
                 aqua: "def is_ne(a:Ordering): bool;",
@@ -63,7 +63,7 @@ fn declare(ctx: &mut Context) {
                     java: "Ordering.isNe",
                     egglog: None,
                 }),
-                fun: |_ctx, v| v[0].as_ordering().is_ne().into(),
+                eval: |_ctx, v| v[0].as_ordering().is_ne().into(),
             },
             ImplDecl::Def {
                 aqua: "def is_lt(a:Ordering): bool;",
@@ -72,7 +72,7 @@ fn declare(ctx: &mut Context) {
                     java: "Ordering.isLt",
                     egglog: None,
                 }),
-                fun: |_ctx, v| v[0].as_ordering().is_lt().into(),
+                eval: |_ctx, v| v[0].as_ordering().is_lt().into(),
             },
             ImplDecl::Def {
                 aqua: "def is_gt(a:Ordering): bool;",
@@ -81,7 +81,7 @@ fn declare(ctx: &mut Context) {
                     java: "Ordering.isGt",
                     egglog: None,
                 }),
-                fun: |_ctx, v| v[0].as_ordering().is_gt().into(),
+                eval: |_ctx, v| v[0].as_ordering().is_gt().into(),
             },
             ImplDecl::Def {
                 aqua: "def is_le(a:Ordering): bool;",
@@ -90,7 +90,7 @@ fn declare(ctx: &mut Context) {
                     java: "Ordering.isLe",
                     egglog: None,
                 }),
-                fun: |_ctx, v| v[0].as_ordering().is_le().into(),
+                eval: |_ctx, v| v[0].as_ordering().is_le().into(),
             },
             ImplDecl::Def {
                 aqua: "def is_ge(a:Ordering): bool;",
@@ -99,7 +99,7 @@ fn declare(ctx: &mut Context) {
                     java: "Ordering.isGe",
                     egglog: None,
                 }),
-                fun: |_ctx, v| v[0].as_ordering().is_ge().into(),
+                eval: |_ctx, v| v[0].as_ordering().is_ge().into(),
             },
         ],
     });

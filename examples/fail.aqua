@@ -1,1 +1,3 @@
-Display[Vec[i32]]::to_string(vecNew[i32]());
+def f(): i32 = 1;
+
+Display[Vec[i32]]::toString(Vec[i32]::new());

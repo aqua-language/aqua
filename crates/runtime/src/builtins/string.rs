@@ -178,6 +178,10 @@ impl String {
         self.as_ref().len()
     }
 
+    pub fn concat(self, other: String) -> String {
+        String::from(format!("{}{}", self.as_ref(), other.as_ref()))
+    }
+
     pub fn decode<T: DeserializeOwned>(self, encoding: Encoding) -> T {
         match encoding {
             Encoding::Csv { sep } => crate::formats::csv::de::Reader::<1024>::new(sep)

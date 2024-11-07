@@ -2,17 +2,20 @@ use crate::source::SourceId;
 
 impl ariadne::Span for Span {
     fn start(&self) -> usize {
-        *self.start() as usize
+        self.start().unwrap() as usize
     }
 
     fn end(&self) -> usize {
-        *self.end() as usize
+        self.end().unwrap() as usize
     }
 
     type SourceId = SourceId;
 
     fn source(&self) -> &Self::SourceId {
-        self.file().as_ref().unwrap()
+        match self {
+            Span::Source(id, _, _) => id,
+            Span::Generated => unreachable!()
+        }
     }
 }
 
@@ -36,11 +39,13 @@ impl PartialOrd for Span {
 }
 
 impl Eq for Span {}
+
 impl PartialEq for Span {
     fn eq(&self, _: &Self) -> bool {
         true
     }
 }
+
 impl std::hash::Hash for Span {
     fn hash<H: std::hash::Hasher>(&self, _: &mut H) {}
 }
@@ -68,24 +73,47 @@ impl Span {
         Span::Source(file, range.start, range.end)
     }
 
-    pub fn file(&self) -> Option<&SourceId> {
+    pub fn file(&self) -> Option<SourceId> {
         match self {
-            Span::Source(file, _, _) => Some(file),
+            Span::Source(file, _, _) => Some(*file),
             Span::Generated => None,
         }
     }
 
-    pub fn start(&self) -> &u32 {
+    pub fn start(&self) -> Option<u32> {
         match self {
-            Span::Source(_, start, _) => start,
-            Span::Generated => &0,
+            Span::Source(_, start, _) => Some(*start),
+            Span::Generated => None,
         }
     }
 
-    pub fn end(&self) -> &u32 {
+    pub fn end(&self) -> Option<u32> {
         match self {
-            Span::Source(_, _, end) => end,
-            Span::Generated => &0,
+            Span::Source(_, _, end) => Some(*end),
+            Span::Generated => None,
+        }
+    }
+
+    pub fn contains(&self, other: &Span) -> bool {
+        match (self, other) {
+            (Span::Source(file1, start1, end1), Span::Source(file2, start2, end2)) => {
+                file1 == file2 && start1 <= start2 && end1 >= end2
+            }
+            _ => false,
+        }
+    }
+
+    pub fn shift(&self, offset: u32) -> Span {
+        match self {
+            Span::Source(file, start, end) => Span::Source(*file, start + offset, end + offset),
+            Span::Generated => Span::Generated,
+        }
+    }
+
+    pub fn shrink(&self, offset: u32) -> Span {
+        match self {
+            Span::Source(file, start, end) => Span::Source(*file, start + offset, end - offset),
+            Span::Generated => Span::Generated,
         }
     }
 }

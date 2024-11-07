@@ -61,7 +61,7 @@ impl Visitor for Context {
             Stmt::Trait(s) => {
                 self.traits.insert(s.name, s.clone());
             }
-            Stmt::Err(_) => todo!(),
+            Stmt::Err(_) => {}
         }
     }
 }

@@ -29,7 +29,7 @@ fn declare(ctx: &mut Context) {
                     java: "Option.some",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].clone();
                     Option::some(Rc::new(v0)).into()
                 },
@@ -41,7 +41,7 @@ fn declare(ctx: &mut Context) {
                     java: "Option.none",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| Option::none().into(),
+                eval: |_ctx, _v| Option::none().into(),
             },
             ImplDecl::Def {
                 aqua: "def is_some(v: Option[T]): bool;",
@@ -50,7 +50,7 @@ fn declare(ctx: &mut Context) {
                     java: "Option.isSome",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_option();
                     v0.is_some().into()
                 },
@@ -62,7 +62,7 @@ fn declare(ctx: &mut Context) {
                     java: "Option.unwrap",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_option();
                     v0.unwrap().as_ref().clone()
                 },

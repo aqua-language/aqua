@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use std::sync::Arc;
 
 use crate::ast::BuiltinDef;
 use crate::ast::BuiltinType;
@@ -8,7 +7,7 @@ use crate::ast::Stmt;
 use crate::diag::Report;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
-use crate::source::SourceId;
+use crate::source::Cache;
 use crate::span::Span;
 use crate::spanned::Spanned;
 use crate::token::Token;
@@ -98,11 +97,13 @@ mod functions {
 #[distributed_slice]
 pub static DECLS: [fn(&mut Context)];
 
-pub struct Context {
+pub struct Context<'a> {
     pub stmts: Vec<Stmt>,
     pub report: Report,
+    pub sources: &'a mut Cache,
 }
 
+#[derive(Debug, Clone)]
 pub enum Decl {
     Def {
         aqua: &'static str,
@@ -122,30 +123,33 @@ pub enum Decl {
     },
 }
 
+#[derive(Debug, Clone)]
 pub enum ImplDecl {
     Type {
         aqua: &'static str,
     },
     Def {
         aqua: &'static str,
-        fun: fn(&mut crate::interpret::Context, &[Value]) -> Value,
+        eval: fn(&mut crate::interpret::Context, &[Value]) -> Value,
         codegen: Option<Codegen>,
     },
 }
 
-impl Context {
+impl<'s> Context<'s> {
     pub fn declare(&mut self, decl: Decl) {
-        let stmt = match decl {
-            Decl::Def { aqua, fun, codegen } => self
-                .try_parse(aqua, |parser, follow| {
+        match decl.clone() {
+            Decl::Def { aqua, fun, codegen } => {
+                let s = self.parse(aqua, |parser, follow| {
                     parser.stmt_def_builtin(follow, BuiltinDef { codegen, fun })
-                })
-                .map(|s| Stmt::Def(Rc::new(s))),
-            Decl::Type { aqua, codegen } => self
-                .try_parse(aqua, |parser, follow| {
+                });
+                self.stmts.push(Stmt::Def(Rc::new(s)))
+            }
+            Decl::Type { aqua, codegen } => {
+                let s = self.parse(aqua, |parser, follow| {
                     parser.stmt_type_builtin(follow, BuiltinType { codegen })
-                })
-                .map(|s| Stmt::Type(Rc::new(s))),
+                });
+                self.stmts.push(Stmt::Type(Rc::new(s)))
+            }
             Decl::Impl { aqua, decls } => {
                 let mut aqua = aqua.to_string();
                 aqua.push_str(" {\n");
@@ -163,54 +167,63 @@ impl Context {
                 let defs = decls
                     .iter()
                     .filter_map(|d| match d {
-                        ImplDecl::Def { codegen, fun, .. } => Some(BuiltinDef {
+                        ImplDecl::Def {
+                            codegen, eval: fun, ..
+                        } => Some(BuiltinDef {
                             codegen: codegen.clone(),
                             fun: *fun,
                         }),
                         _ => None,
                     })
                     .collect::<Vec<_>>();
-                self.try_parse(&aqua, |parser, follow| {
+                let s = self.parse(&aqua, |parser, follow| {
                     parser.stmt_impl_builtin(follow, &defs)
-                })
-                .map(|s| Stmt::Impl(Rc::new(s)))
+                });
+
+                self.stmts.push(Stmt::Impl(Rc::new(s)))
             }
-            Decl::Trait { aqua } => self
-                .try_parse(aqua, |parser, follow| parser.stmt_trait(follow))
-                .map(|s| Stmt::Trait(Rc::new(s))),
+            Decl::Trait { aqua } => {
+                let s = self.parse(aqua, |parser, follow| parser.stmt_trait(follow));
+                self.stmts.push(Stmt::Trait(Rc::new(s)))
+            }
         };
-        if let Some(stmt) = stmt {
-            self.stmts.push(stmt)
-        }
     }
 
-    fn try_parse<T>(
+    fn parse<T>(
         &mut self,
         input: &str,
         f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>, Token) -> Result<Spanned<T>, Span>,
-    ) -> Option<T> {
-        let input: Arc<str> = Arc::from(input);
-        let id = SourceId::new("builtin", input.clone());
+    ) -> T {
+        let input: Rc<str> = Rc::from(input);
+        let id = self.sources.add("builtin", input.clone());
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
         let result = parser.parse(f);
-        self.report.merge(&mut parser.report);
-        self.report.merge(&mut lexer.report);
-        result
-    }
-}
-
-impl Context {
-    fn new() -> Self {
-        Self {
-            stmts: Vec::new(),
-            report: Report::new(),
+        self.report.append(&mut parser.report);
+        self.report.append(&mut lexer.report);
+        if self.report.is_empty() {
+            result.unwrap()
+        } else {
+            panic!(
+                "Internal Compiler Error: {}",
+                self.report.string(&mut self.sources).unwrap()
+            );
         }
     }
 }
 
-pub fn declare() -> Vec<Stmt> {
-    let mut ctx = Context::new();
+impl<'s> Context<'s> {
+    fn new(sources: &'s mut Cache) -> Self {
+        Self {
+            stmts: Vec::new(),
+            report: Report::new(),
+            sources,
+        }
+    }
+}
+
+pub fn declare(sources: &mut Cache) -> Vec<Stmt> {
+    let mut ctx = Context::new(sources);
     DECLS.iter().for_each(|decl| decl(&mut ctx));
     ctx.stmts
 }

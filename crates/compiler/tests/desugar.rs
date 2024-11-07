@@ -224,14 +224,14 @@ fn test_desugar_dot() {
 #[test]
 fn test_desugar_int_suffix() {
     let a = desugar(aqua!("10s;")).unwrap();
-    let b = parse(aqua!("postfix_s(10);")).unwrap();
+    let b = parse(aqua!("_::postfix_s(10);")).unwrap();
     check!(a, b);
 }
 
 #[test]
 fn test_desugar_float_suffix() {
     let a = desugar(aqua!("1.0s;")).unwrap();
-    let b = parse(aqua!("postfix_s(1.0);")).unwrap();
+    let b = parse(aqua!("_::postfix_s(1.0);")).unwrap();
     check!(a, b);
 }
 
@@ -254,6 +254,35 @@ fn test_desugar_anon2() {
     let a = desugar(aqua!("foo(_ + _ + bar(_));")).unwrap();
     let b = parse(aqua!(
         "foo((_0, _1, _2) => Add::add(Add::add(_0, _1), bar(_2)));"
+    ))
+    .unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_desugar_splice0() {
+    let a = desugar(aqua!(r#""my name is ${name}";"#)).unwrap();
+    let b = parse(aqua!(
+        r#"String::concat(
+               "my name is ",
+               Display::toString({name})
+           );"#
+    ))
+    .unwrap();
+    check!(a, b);
+}
+
+#[test]
+fn test_desugar_splice1() {
+    let a = desugar(aqua!(r#""I am ${age + 1} years old";"#)).unwrap();
+    let b = parse(aqua!(
+        r#"String::concat(
+               String::concat(
+                   "I am ",
+                   Display::toString({Add::add(age, 1)}),
+               ),
+               " years old"
+           );"#
     ))
     .unwrap();
     check!(a, b);

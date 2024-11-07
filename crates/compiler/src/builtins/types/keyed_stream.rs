@@ -19,7 +19,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def source[K, T](r: Reader, e: Encoding, t: (T, Time) => Time): KeyedStream[K, T];",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     // let v0 = v[0].as_reader();
                     // let v1 = v[1].as_encoding();
                     // let v2 = v[2].as_time_source();
@@ -29,7 +29,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def sink[K, T](s: KeyedStream[K, T], w: Writer, e: Encoding): Dataflow;",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_writer();
                     // let v2 = v[2].as_encoding();
@@ -39,7 +39,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def map[K, A, B](s: KeyedStream[K, A], f: A=>B): KeyedStream[K, B];",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_function();
                     todo!()
@@ -48,7 +48,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def filter[K, T](s: KeyedStream[K, T], f: T=>bool): KeyedStream[K, T];",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_function();
                     todo!()
@@ -60,7 +60,7 @@ fn declare(ctx: &mut Context) {
                      where Iterator[I, Item=B];"
                 },
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_function();
                     todo!()
@@ -70,7 +70,7 @@ fn declare(ctx: &mut Context) {
                 aqua:"def flatten[K, T, I](s: KeyedStream[K, I]): KeyedStream[K, T]
                     where IntoIterator[I, Item=T];",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     todo!()
                 },
@@ -86,7 +86,7 @@ fn declare(ctx: &mut Context) {
                     ): KeyedStream[K, O];"
                 },
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_discretizer();
                     // let v2 = v[2].as_aggregator();
@@ -96,7 +96,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def keyby[K0, K1, T](s: Stream[T], f: (T)=>K0): KeyedStream[K1, T];",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     // let v0 = v[0].as_stream();
                     // let v1 = v[1].as_function();
                     todo!()
@@ -105,7 +105,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def unkey[K, T](s: KeyedStream[K, T]): Stream[T];",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let _v0 = v[0].as_stream();
                     todo!()
                 },

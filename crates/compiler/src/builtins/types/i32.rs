@@ -1,6 +1,7 @@
 use linkme::distributed_slice;
 
 use crate::ast::Codegen;
+use crate::ast::Egglog;
 use crate::builtins::Context;
 use crate::builtins::Decl;
 use crate::builtins::ImplDecl;
@@ -12,8 +13,11 @@ fn declare(ctx: &mut Context) {
         aqua: "type i32;",
         codegen: Some(Codegen {
             rust: "i32",
-            java: "int",
-            egglog: None,
+            java: "Integer",
+            egglog: Some(Egglog {
+                name: "TypeI32",
+                code: |_, f| write!(f, r#"(let TypeI32 (TypeListCons "i32" TypeListNil))"#),
+            }),
         }),
     });
 
@@ -23,10 +27,10 @@ fn declare(ctx: &mut Context) {
             aqua: "def abs(a:i32): i32;",
             codegen: Some(Codegen {
                 rust: "i32::abs",
-                java: "Math.abs",
+                java: "Math::abs",
                 egglog: None,
             }),
-            fun: |_ctx, v| {
+            eval: |_ctx, v| {
                 let v0 = v[0].as_i32();
                 v0.abs().into()
             },
@@ -42,11 +46,20 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def add(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a+b)",
+                    rust: "|a,b| a+b",
                     java: "(a,b) -> a+b",
-                    egglog: None,
+                    egglog: Some(Egglog {
+                        name: "Add_add",
+                        // When instantiated: (rewrite (BinOp i32 "addi32" a 0) a)
+                        code: |x, f| {
+                            indoc::writedoc! {f, r#"
+                                (rewrite (op2 Add.add {x} a b) (op2 Add.add {x} b a))
+                                (rewrite (Op2 TypeI32 {x} a b) (Op2 TypeI32 "addi32" b a))
+                            "#}
+                        },
+                    }),
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 + v1).into()
@@ -64,11 +77,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def sub(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a-b)",
+                    rust: "|a,b| a-b",
                     java: "(a,b) -> a-b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 - v1).into()
@@ -86,11 +99,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def mul(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a*b)",
+                    rust: "|a,b| a*b",
                     java: "(a,b) -> a*b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 * v1).into()
@@ -108,11 +121,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def div(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a/b)",
+                    rust: "|a,b| a/b",
                     java: "(a,b) -> a/b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 / v1).into()
@@ -130,11 +143,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def neg(a:i32): Neg[i32]::Output;",
                 codegen: Some(Codegen {
-                    rust: "(|a| -a)",
+                    rust: "|a| -a",
                     java: "(a) -> -a",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     (-v0).into()
                 },
@@ -147,11 +160,11 @@ fn declare(ctx: &mut Context) {
         decls: &[ImplDecl::Def {
             aqua: "def toString(v: i32): String;",
             codegen: Some(Codegen {
-                rust: "(|v| v.to_string())",
+                rust: "|v| v.to_string()",
                 java: "(v) -> v.toString()",
                 egglog: None,
             }),
-            fun: |_ctx, v| {
+            eval: |_ctx, v| {
                 let v0 = v[0].as_i32();
                 runtime::prelude::String::from(v0.to_string()).into()
             },
@@ -167,7 +180,7 @@ fn declare(ctx: &mut Context) {
                 java: "Default::default",
                 egglog: None,
             }),
-            fun: |_ctx, _v| 0i32.into(),
+            eval: |_ctx, _v| 0i32.into(),
         }],
     });
 
@@ -177,11 +190,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def eq(a:i32, b:i32): bool;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a == b)",
+                    rust: "|a,b| a == b",
                     java: "(a,b) -> a == b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 == v1).into()
@@ -190,11 +203,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def ne(a:i32, b:i32): bool;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a != b)",
+                    rust: "|a,b| a != b",
                     java: "(a,b) -> a != b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 != v1).into()
@@ -209,11 +222,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def cmp(a:i32, b:i32): Ordering;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a.cmp(&b))",
+                    rust: "|a,b| a.cmp(&b)",
                     java: "(a,b) -> a.compareTo(b)",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     v0.cmp(&v1).into()
@@ -222,11 +235,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def min(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a.min(b))",
+                    rust: "|a,b| a.min(b)",
                     java: "(a,b) -> Math.min(a,b)",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     v0.min(v1).into()
@@ -235,11 +248,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def max(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a.max(b))",
+                    rust: "|a,b| a.max(b)",
                     java: "Math.max",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     v0.max(v1).into()
@@ -254,11 +267,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def partial_cmp(a: i32, b: i32): Option[Ordering];",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a.partial_cmp(&b))",
+                    rust: "|a,b| a.partial_cmp(&b)",
                     java: "(a,b) -> a.compareTo(b)",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     crate::builtins::value::Value::Option(runtime::builtins::option::Option(
@@ -270,11 +283,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def lt(a: i32, b: i32): bool;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a < b)",
+                    rust: "|a,b| a < b",
                     java: "(a,b) -> a < b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 < v1).into()
@@ -283,11 +296,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def le(a: i32, b: i32): bool;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a <= b)",
+                    rust: "|a,b| a <= b",
                     java: "(a,b) -> a <= b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 <= v1).into()
@@ -296,11 +309,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def gt(a: i32, b: i32): bool;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a > b)",
+                    rust: "|a,b| a > b",
                     java: "(a,b) -> a > b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 > v1).into()
@@ -309,11 +322,11 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def ge(a: i32, b: i32): bool;",
                 codegen: Some(Codegen {
-                    rust: "(|a,b| a >= b)",
+                    rust: "|a,b| a >= b",
                     java: "(a,b) -> a >= b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_i32();
                     (v0 >= v1).into()

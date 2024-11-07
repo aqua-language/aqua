@@ -19,17 +19,12 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def native(): Backend;",
                 codegen: None,
-                fun: |_ctx, _v| Backend::native().into(),
+                eval: |_ctx, _v| Backend::native().into(),
             },
             ImplDecl::Def {
                 aqua: "def flink(): Backend;",
                 codegen: None,
-                fun: |_ctx, _v| Backend::flink().into(),
-            },
-            ImplDecl::Def {
-                aqua: "def spark(): Backend;",
-                codegen: None,
-                fun: |_ctx, _v| Backend::Spark.into(),
+                eval: |_ctx, _v| Backend::flink().into(),
             },
         ],
     });
@@ -39,7 +34,6 @@ fn declare(ctx: &mut Context) {
 pub enum Backend {
     Native,
     Flink,
-    Spark,
 }
 
 impl std::fmt::Display for Backend {
@@ -47,7 +41,6 @@ impl std::fmt::Display for Backend {
         match self {
             Backend::Native => write!(f, "Native"),
             Backend::Flink => write!(f, "Flink"),
-            Backend::Spark => write!(f, "Spark"),
         }
     }
 }

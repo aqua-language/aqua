@@ -16,7 +16,7 @@ use crate::builtins::types::tuple::Tuple;
 use crate::builtins::types::variant::Variant;
 use crate::builtins::value::Value;
 use crate::declare;
-use crate::traversal::visitor::AcceptVisitor;
+use crate::traversal::visitor::Visitable;
 
 #[derive(Debug, Default, Send, Sync, Clone)]
 pub struct Context {
@@ -203,9 +203,9 @@ impl Context {
             Expr::Return(_, _, _) => unreachable!(),
             Expr::Continue(_, _) => unreachable!(),
             Expr::Break(_, _) => unreachable!(),
-            Expr::While(_, _, e0, b) => {
+            Expr::While(_, _, e0, e1) => {
                 while self.eval_expr(e0).as_bool() {
-                    self.eval_block(b);
+                    self.eval_expr(e1);
                 }
                 Tuple::new(vec![]).into()
             }
@@ -220,11 +220,11 @@ impl Context {
             Expr::Annotate(_, _, _) => unreachable!(),
             Expr::Paren(_, _, _) => unreachable!(),
             Expr::Dot(_, _, _, _, _, _) => unreachable!(),
-            Expr::IfElse(_, _, e0, b0, b1) => {
+            Expr::IfElse(_, _, e0, e1, e2) => {
                 if self.eval_expr(e0).as_bool() {
-                    self.eval_block(b0)
+                    self.eval_expr(e1)
                 } else {
-                    self.eval_block(b1)
+                    self.eval_expr(e2)
                 }
             }
             Expr::IntSuffix(_, _, _, _) => unreachable!(),

@@ -1,4 +1,4 @@
-use crate::infer::Constraint;
+use crate::infer::solver::Constraint;
 use crate::span::Span;
 
 use super::BuiltinDef;
@@ -82,17 +82,19 @@ impl Stmt {
 }
 
 impl ExprBody {
-    pub fn as_expr(&self) -> &Expr {
-        let ExprBody::UserDefined(e) = self else {
-            unreachable!()
-        };
-        e
+    pub fn as_udf(&self) -> Option<&Expr> {
+        if let ExprBody::UserDefined(e) = self {
+            Some(e)
+        } else {
+            None
+        }
     }
-    pub fn as_builtin(&self) -> &BuiltinDef {
-        let ExprBody::Builtin(b) = self else {
-            unreachable!()
-        };
-        b
+    pub fn as_bif(&self) -> Option<&BuiltinDef> {
+        if let ExprBody::Builtin(b) = self {
+            Some(b)
+        } else {
+            None
+        }
     }
 }
 
@@ -122,7 +124,7 @@ impl Impl {
 impl Path {
     pub fn as_name(&self) -> Option<&Name> {
         if self.segments.len() == 1 && self.segments[0].ts.is_empty() {
-            Some(&self.segments[0].name)
+            Some(&self.segments[0].x)
         } else {
             None
         }

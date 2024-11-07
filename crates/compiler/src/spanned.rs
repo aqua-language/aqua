@@ -18,6 +18,13 @@ impl<T> Spanned<T> {
             v: f(self.v),
         }
     }
+
+    pub fn shift(self, offset: u32) -> Spanned<T> {
+        Spanned {
+            s: self.s.shift(offset),
+            v: self.v,
+        }
+    }
 }
 
 impl<T> Spanned<Option<Vec<T>>> {

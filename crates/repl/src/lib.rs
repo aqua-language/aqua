@@ -5,6 +5,7 @@ use compiler::parser::Parser;
 use compiler::Compiler;
 use config::ReplConfig;
 use helper::validator::StmtIterator;
+use rustyline::Movement;
 
 use std::io;
 use std::io::LineWriter;
@@ -43,7 +44,7 @@ use rustyline::Modifiers;
 pub struct Repl {
     pub(crate) count: usize,
     pub(crate) editor: Editor<Helper, FileHistory>,
-    pub(crate) compiler: Compiler,
+    pub compiler: Compiler,
     pub(crate) config: ReplConfig,
 }
 
@@ -83,6 +84,8 @@ impl Repl {
         editor.bind_sequence(KeyEvent::ctrl('l'), Cmd::ClearScreen);
         editor.bind_sequence(KeyEvent::ctrl('c'), Cmd::Interrupt);
         editor.bind_sequence(KeyEvent::ctrl('v'), Cmd::YankPop);
+        editor.bind_sequence(KeyEvent::ctrl('e'), Cmd::Move(Movement::EndOfLine));
+        editor.bind_sequence(KeyEvent::ctrl('a'), Cmd::Move(Movement::BeginningOfLine));
         editor.bind_sequence(
             KeyEvent::ctrl('M'),
             Cmd::AcceptOrInsertLine {
@@ -118,7 +121,7 @@ impl Repl {
                 Ok(input) => {
                     let input: Rc<str> = Rc::from(input);
                     self.editor.add_history_entry(input.as_ref());
-                    match self.compiler.compile_and_run(self.count, input.as_ref()) {
+                    match self.compiler.run(self.count, input.as_ref()) {
                         Ok(_) => {
                             self.color(Green);
                         }

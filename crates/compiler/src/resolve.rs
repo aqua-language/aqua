@@ -137,97 +137,96 @@ impl Mapper for Context {
                 let path = self.map_path(path);
                 let mut iter = path.segments.into_iter();
                 let seg0 = iter.next().unwrap();
-                match self.stack.get(&seg0.name) {
+                match self.stack.get(&seg0.x) {
                     Some(Binding::Var) => {
                         if !seg0.ts.is_empty() {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), 0);
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), 0);
                             return Expr::Err(*s, t.clone());
                         }
                         if let Some(seg1) = iter.next() {
-                            self.unexpected_assoc("Variable", "item", &seg0.name, &seg1.name);
+                            self.unexpected_assoc("Variable", "item", &seg0.x, &seg1.x);
                             return Expr::Err(*s, t.clone());
                         }
-                        Expr::Var(*s, t, seg0.name)
+                        Expr::Var(*s, t, seg0.x)
                     }
                     Some(Binding::Def(stmt)) => {
                         if seg0.ts.len() != stmt.generics.len() && !seg0.ts.is_empty() {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                             return Expr::Err(*s, t);
                         }
                         if let Some(seg1) = iter.next() {
-                            self.unexpected_assoc("Def", "item", &seg0.name, &seg1.name);
+                            self.unexpected_assoc("Def", "item", &seg0.x, &seg1.x);
                             return Expr::Err(*s, t);
                         }
                         let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                        Expr::Def(*s, t, seg0.name, ts0.clone())
+                        Expr::Def(*s, t, seg0.x, ts0.clone())
                     }
                     // Unit Struct
                     Some(Binding::Struct(stmt)) => {
                         if !seg0.has_optional_arity(stmt.generics.len()) {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                             return Expr::Err(*s, t.clone());
                         }
                         if !stmt.fields.is_empty() {
-                            self.wrong_fields::<Type, _>(&seg0.name, None, &stmt.fields);
+                            self.wrong_fields::<Type, _>(&seg0.x, None, &stmt.fields);
                             return Expr::Err(*s, t.clone());
                         }
                         if let Some(seg1) = iter.next() {
-                            self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
+                            self.unexpected_assoc("Struct", "item", &seg0.x, &seg1.x);
                             return Expr::Err(*s, t);
                         }
                         let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                        let x0 = seg0.name;
+                        let x0 = seg0.x;
                         Expr::Struct(*s, t, x0, ts0.clone(), Map::new())
                     }
                     Some(Binding::Trait(stmt)) => {
                         if !seg0.has_optional_arity(stmt.generics.len()) {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                             return Expr::Err(*s, t);
                         }
                         if seg0.has_named_args() {
-                            self.unexpected_named_type_args(&seg0.name);
+                            self.unexpected_named_type_args(&seg0.x);
                             return Expr::Err(*s, t);
                         }
                         let Some(seg1) = iter.next() else {
-                            self.expected_assoc("function", &seg0.name);
+                            self.expected_assoc("function", &seg0.x);
                             return Expr::Err(*s, t);
                         };
-                        let Some(def) = stmt.defs.iter().find(|def| def.name == seg1.name) else {
-                            self.unexpected_assoc("Trait", "function", &seg0.name, &seg1.name);
+                        let Some(def) = stmt.defs.iter().find(|def| def.name == seg1.x) else {
+                            self.unexpected_assoc("Trait", "function", &seg0.x, &seg1.x);
                             return Expr::Err(*s, t);
                         };
                         if !seg1.has_optional_arity(def.generics.len()) {
-                            self.wrong_arity(&seg1.name, seg1.ts.len(), def.generics.len());
+                            self.wrong_arity(&seg1.x, seg1.ts.len(), def.generics.len());
                             return Expr::Err(*s, t);
                         }
                         let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                        let xts0 = stmt.types.iter().map(|t| (t.name, Type::Unknown)).collect();
                         let ts1 = seg1.create_unnamed_holes(def.generics.len());
-                        let b = Impl::Trait(Trait::new(seg0.name, ts0, xts0));
-                        Expr::Assoc(*s, t, b, seg1.name, ts1)
+                        let b = Impl::Trait(Trait::new(seg0.x, ts0));
+                        Expr::Assoc(*s, t, b, seg1.x, ts1)
                     }
                     Some(Binding::Type(stmt)) => {
                         if !seg0.has_optional_arity(stmt.generics.len()) {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                             return Expr::Err(*s, t.clone());
                         }
-                        let x0 = seg0.name;
+                        let x0 = seg0.x;
                         let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                         let Some(seg1) = iter.next() else {
-                            self.expected_assoc("function", &seg0.name);
+                            self.expected_assoc("function", &seg0.x);
                             return Expr::Err(*s, t);
                         };
                         let ts1 = seg1.ts;
-                        let x1 = seg1.name;
+                        let x1 = seg1.x;
                         let b = Impl::Type(Rc::new(Type::Cons(x0, ts0)));
                         Expr::Assoc(*s, t, b, x1, ts1)
                     }
                     Some(b) => {
-                        self.unexpected(&seg0.name, b.name(), "expression");
+                        self.unexpected(&seg0.x, b.name(), "expression");
                         Expr::Err(*s, t.clone())
                     }
                     None => {
-                        self.not_found(&seg0.name, "expression");
+                        self.not_found(&seg0.x, "expression");
                         Expr::Err(*s, t.clone())
                     }
                 }
@@ -238,53 +237,53 @@ impl Mapper for Context {
                     let path = self.map_path(path);
                     let mut iter = path.segments.into_iter();
                     let seg0 = iter.next().unwrap();
-                    match self.stack.get(&seg0.name) {
+                    match self.stack.get(&seg0.x) {
                         Some(Binding::Struct(stmt)) => {
                             let Some(ts0) = seg0.try_create_unnamed_holes(stmt.generics.len())
                             else {
-                                self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                                self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                                 return Expr::Err(*s, t);
                             };
                             if seg0.has_named_args() {
-                                self.unexpected_named_type_args(&seg0.name);
+                                self.unexpected_named_type_args(&seg0.x);
                                 return Expr::Err(*s, t);
                             }
                             if let Some(seg1) = iter.next() {
-                                self.unexpected_assoc("Struct", "field", &seg0.name, &seg1.name);
+                                self.unexpected_assoc("Struct", "field", &seg0.x, &seg1.x);
                                 return Expr::Err(*s, t);
                             }
                             let xes: Map<_, _> =
                                 es.iter().flat_map(|e| self.expr_field(e)).collect();
                             if !fields_are_defined(&stmt.fields, &xes) {
-                                self.wrong_fields(&seg0.name, Some(&xes), &stmt.fields);
+                                self.wrong_fields(&seg0.x, Some(&xes), &stmt.fields);
                                 return Expr::Err(*s, t);
                             }
-                            return Expr::Struct(*s, t, seg0.name, ts0, xes);
+                            return Expr::Struct(*s, t, seg0.x, ts0, xes);
                         }
                         Some(Binding::Enum(stmt)) => {
                             if !seg0.has_optional_arity(stmt.generics.len()) {
-                                self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                                self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                                 return Expr::Err(*s, t);
                             }
                             if seg0.has_named_args() {
-                                self.unexpected_named_type_args(&seg0.name);
+                                self.unexpected_named_type_args(&seg0.x);
                                 return Expr::Err(*s, t);
                             }
                             let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                             let Some(seg1) = iter.next() else {
-                                self.expected_assoc("variant", &seg0.name);
+                                self.expected_assoc("variant", &seg0.x);
                                 return Expr::Err(*s, t);
                             };
-                            if !stmt.variants.contains_key(&seg1.name) {
-                                self.unexpected_assoc("Enum", "variant", &seg0.name, &seg1.name);
+                            if !stmt.variants.contains_key(&seg1.x) {
+                                self.unexpected_assoc("Enum", "variant", &seg0.x, &seg1.x);
                                 return Expr::Err(*s, t);
                             }
                             if !seg1.ts.is_empty() {
-                                self.wrong_arity(&seg1.name, seg1.ts.len(), 0);
+                                self.wrong_arity(&seg1.x, seg1.ts.len(), 0);
                                 return Expr::Err(*s, t);
                             }
                             if let Some(seg2) = iter.next() {
-                                self.unexpected_assoc("Enum", "item", &seg1.name, &seg2.name);
+                                self.unexpected_assoc("Enum", "item", &seg1.x, &seg2.x);
                                 return Expr::Err(*s, t);
                             }
                             let es = es.iter().map(|e| self.map_expr(e)).collect::<Vec<_>>();
@@ -292,7 +291,7 @@ impl Mapper for Context {
                                 1 => es.into_iter().next().unwrap(),
                                 _ => Expr::Tuple(*s, Type::Unknown, es),
                             };
-                            return Expr::Enum(*s, t, seg0.name, ts0, seg1.name, Rc::new(e));
+                            return Expr::Enum(*s, t, seg0.x, ts0, seg1.x, Rc::new(e));
                         }
                         _ => {}
                     }
@@ -340,81 +339,80 @@ impl Mapper for Context {
                 let p = self.map_path(p);
                 let mut iter = p.segments.into_iter();
                 let seg0 = iter.next().unwrap();
-                match self.stack.get(&seg0.name) {
+                match self.stack.get(&seg0.x) {
                     Some(Binding::Generic) => {
                         if seg0.has_args() {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), 0);
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), 0);
                             return Type::Err;
                         }
                         if let Some(seg1) = iter.next() {
-                            self.unexpected_assoc("Generic", "item", &seg0.name, &seg1.name);
+                            self.unexpected_assoc("Generic", "item", &seg0.x, &seg1.x);
                             return Type::Err;
                         }
-                        Type::Generic(seg0.name)
+                        Type::Generic(seg0.x)
                     }
                     Some(Binding::Enum(stmt)) => {
                         if !seg0.has_arity(stmt.generics.len()) {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                             return Type::Err;
                         }
                         if let Some(seg1) = iter.next() {
-                            self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
+                            self.unexpected_assoc("Type", "item", &seg0.x, &seg1.x);
                             return Type::Err;
                         }
-                        Type::Cons(seg0.name, seg0.ts.clone())
+                        Type::Cons(seg0.x, seg0.ts.clone())
                     }
                     Some(Binding::Struct(stmt)) => {
                         if !seg0.has_arity(stmt.generics.len()) {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                             return Type::Err;
                         }
                         if let Some(seg1) = iter.next() {
-                            self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
+                            self.unexpected_assoc("Type", "item", &seg0.x, &seg1.x);
                             return Type::Err;
                         }
-                        Type::Cons(seg0.name, seg0.ts.clone())
+                        Type::Cons(seg0.x, seg0.ts.clone())
                     }
                     Some(Binding::Type(stmt)) => {
                         if !seg0.has_arity(stmt.generics.len()) {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                             return Type::Err;
                         }
                         if let Some(seg1) = iter.next() {
-                            self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
+                            self.unexpected_assoc("Type", "item", &seg0.x, &seg1.x);
                             return Type::Err;
                         }
                         match &stmt.body {
-                            TypeBody::UserDefined(_) => Type::Alias(seg0.name, seg0.ts.clone()),
-                            TypeBody::Builtin(_) => Type::Cons(seg0.name, seg0.ts.clone()),
+                            TypeBody::UserDefined(_) => Type::Alias(seg0.x, seg0.ts.clone()),
+                            TypeBody::Builtin(_) => Type::Cons(seg0.x, seg0.ts.clone()),
                         }
                     }
                     Some(Binding::Trait(stmt)) => {
                         if !seg0.has_arity(stmt.generics.len()) {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                             return Type::Err;
                         }
                         let Some(seg1) = iter.next() else {
-                            self.expected_assoc("type", &seg0.name);
+                            self.expected_assoc("type", &seg0.x);
                             return Type::Err;
                         };
-                        let Some(t) = stmt.types.iter().find(|t| t.name == seg1.name) else {
-                            self.unexpected_assoc("Trait", "type", &seg0.name, &seg1.name);
+                        let Some(t) = stmt.types.iter().find(|t| t.name == seg1.x) else {
+                            self.unexpected_assoc("Trait", "type", &seg0.x, &seg1.x);
                             return Type::Err;
                         };
                         if !seg1.has_arity(t.generics.len()) {
-                            self.wrong_arity(&seg1.name, seg1.ts.len(), t.generics.len());
+                            self.wrong_arity(&seg1.x, seg1.ts.len(), t.generics.len());
                             return Type::Err;
                         }
-                        let xts = stmt.types.iter().map(|t| (t.name, Type::Unknown)).collect();
-                        let b = Impl::Trait(Trait::new(seg0.name, seg0.ts.clone(), xts));
-                        Type::Assoc(b, seg1.name, seg1.ts.clone())
+                        let b = Impl::Trait(Trait::new(seg0.x, seg0.ts.clone()));
+                        Type::Assoc(b, seg1.x, seg1.ts.clone())
                     }
                     Some(b) => {
-                        self.unexpected(&seg0.name, b.name(), "type");
+                        self.unexpected(&seg0.x, b.name(), "type");
                         Type::Err
                     }
                     None => {
-                        self.not_found(&seg0.name, "type");
+                        self.not_found(&seg0.x, "type");
                         Type::Err
                     }
                 }
@@ -431,27 +429,27 @@ impl Mapper for Context {
                 let path = self.map_path(path);
                 let mut iter = path.segments.into_iter();
                 let seg0 = iter.next().unwrap();
-                match self.stack.get(&seg0.name) {
+                match self.stack.get(&seg0.x) {
                     Some(Binding::Enum(stmt)) => {
                         if !seg0.has_optional_arity(stmt.generics.len()) {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                             return Pat::Err(*s, t.clone());
                         }
                         let ts0 = Self::create_type_arg_holes(seg0.ts, stmt.generics.len());
                         let Some(seg1) = iter.next() else {
-                            self.expected_assoc("variant", &seg0.name);
+                            self.expected_assoc("variant", &seg0.x);
                             return Pat::Err(*s, t.clone());
                         };
-                        if !stmt.variants.contains_key(&seg1.name) {
-                            self.unexpected_assoc("Enum", "variant", &seg0.name, &seg1.name);
+                        if !stmt.variants.contains_key(&seg1.x) {
+                            self.unexpected_assoc("Enum", "variant", &seg0.x, &seg1.x);
                             return Pat::Err(*s, t.clone());
                         }
                         if !seg1.ts.is_empty() {
-                            self.wrong_arity(&seg1.name, seg1.ts.len(), 0);
+                            self.wrong_arity(&seg1.x, seg1.ts.len(), 0);
                             return Pat::Err(*s, t.clone());
                         }
                         if let Some(seg2) = iter.next() {
-                            self.unexpected_assoc("Enum", "item", &seg1.name, &seg2.name);
+                            self.unexpected_assoc("Enum", "item", &seg1.x, &seg2.x);
                             return Pat::Err(*s, t.clone());
                         }
                         let Some(ps) = self.enum_pat_args(args, stmt.variants.is_empty()) else {
@@ -461,41 +459,41 @@ impl Mapper for Context {
                             1 => ps.into_iter().next().unwrap(),
                             _ => Pat::Tuple(*s, Type::Unknown, ps),
                         };
-                        Pat::Enum(*s, t, seg0.name, ts0.clone(), seg1.name, Rc::new(p))
+                        Pat::Enum(*s, t, seg0.x, ts0.clone(), seg1.x, Rc::new(p))
                     }
                     Some(Binding::Struct(stmt)) => {
                         if !seg0.has_arity(stmt.generics.len()) {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                             return Pat::Err(*s, t.clone());
                         }
                         let ts0 = Self::create_type_arg_holes(seg0.ts, stmt.generics.len());
                         if let Some(seg1) = iter.next() {
-                            self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
+                            self.unexpected_assoc("Struct", "item", &seg0.x, &seg1.x);
                             return Pat::Err(*s, t.clone());
                         }
                         let Some(xps) = self.struct_pat_args(args) else {
                             return Pat::Err(*s, t.clone());
                         };
                         if !fields_are_defined(&stmt.fields, &xps) {
-                            self.wrong_fields(&seg0.name, Some(&xps), &stmt.fields);
+                            self.wrong_fields(&seg0.x, Some(&xps), &stmt.fields);
                             return Pat::Err(*s, t.clone());
                         }
-                        Pat::Struct(*s, t, seg0.name, ts0.clone(), xps)
+                        Pat::Struct(*s, t, seg0.x, ts0.clone(), xps)
                     }
                     Some(b) => {
-                        self.unexpected(&seg0.name, b.name(), "pattern");
+                        self.unexpected(&seg0.x, b.name(), "pattern");
                         Pat::Err(*s, t.clone())
                     }
                     None => {
                         if !seg0.ts.is_empty() {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), 0);
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), 0);
                             return Pat::Err(*s, t.clone());
                         }
                         if let Some(seg) = iter.next() {
-                            self.unexpected_assoc("Struct", "item", &seg0.name, &seg.name);
+                            self.unexpected_assoc("Struct", "item", &seg0.x, &seg.x);
                             return Pat::Err(*s, t.clone());
                         }
-                        Pat::Var(*s, t, seg0.name)
+                        Pat::Var(*s, t, seg0.x)
                     }
                 }
             }
@@ -667,14 +665,14 @@ impl Context {
                     let mut iter = path.segments.iter();
                     let seg0 = iter.next().unwrap();
                     if !seg0.ts.is_empty() {
-                        self.wrong_arity(&seg0.name, seg0.ts.len(), 0);
+                        self.wrong_arity(&seg0.x, seg0.ts.len(), 0);
                         return None;
                     }
                     if let Some(seg1) = iter.next() {
-                        self.unexpected_assoc("Assignment", "item", &seg0.name, &seg1.name);
+                        self.unexpected_assoc("Assignment", "item", &seg0.x, &seg1.x);
                         return None;
                     }
-                    Some((seg0.name, e1))
+                    Some((seg0.x, e1))
                 } else {
                     self.expected_name(e0);
                     None
@@ -683,24 +681,24 @@ impl Context {
             Expr::Path(_, _, path) => {
                 let mut iter = path.segments.iter();
                 let seg0 = iter.next().unwrap();
-                match self.stack.get(&seg0.name) {
+                match self.stack.get(&seg0.x) {
                     Some(Binding::Var) => {
                         if !seg0.ts.is_empty() {
-                            self.wrong_arity(&seg0.name, seg0.ts.len(), 0);
+                            self.wrong_arity(&seg0.x, seg0.ts.len(), 0);
                             return None;
                         }
                         if let Some(seg1) = iter.next() {
-                            self.unexpected_assoc("Variable", "item", &seg0.name, &seg1.name);
+                            self.unexpected_assoc("Variable", "item", &seg0.x, &seg1.x);
                             return None;
                         }
-                        Some((seg0.name, Expr::Var(s, t, seg0.name)))
+                        Some((seg0.x, Expr::Var(s, t, seg0.x)))
                     }
                     Some(b) => {
-                        self.unexpected(&seg0.name, b.name(), "variable");
+                        self.unexpected(&seg0.x, b.name(), "variable");
                         None
                     }
                     None => {
-                        self.not_found(&seg0.name, "variable");
+                        self.not_found(&seg0.x, "variable");
                         None
                     }
                 }
@@ -786,25 +784,25 @@ impl Context {
         let path = self.map_path(path);
         let mut iter = path.segments.into_iter();
         let seg0 = iter.next().unwrap();
-        match self.stack.get(&seg0.name) {
+        match self.stack.get(&seg0.x) {
             Some(Binding::Trait(stmt)) => {
                 if !seg0.has_optional_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                    self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                     return Impl::Err;
                 }
                 let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
                 if seg0.has_named_args() {
-                    self.unexpected_named_type_args(&seg0.name);
+                    self.unexpected_named_type_args(&seg0.x);
                     return Impl::Err;
                 }
                 if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Trait", "item", &seg0.name, &seg1.name);
+                    self.unexpected_assoc("Trait", "item", &seg0.x, &seg1.x);
                     return Impl::Err;
                 }
                 if !defs_are_defined(&stmt.defs, found_defs) {
                     self.wrong_items(
                         "def",
-                        &seg0.name,
+                        &seg0.x,
                         found_defs.iter().map(|def| &def.name),
                         stmt.defs.iter().map(|def| &def.name),
                     );
@@ -813,67 +811,59 @@ impl Context {
                 if !types_are_defined(&stmt.types, found_types) {
                     self.wrong_items(
                         "type",
-                        &seg0.name,
+                        &seg0.x,
                         found_types.iter().map(|ty| &ty.name),
                         stmt.types.iter().map(|ty| &ty.name),
                     );
                     return Impl::Err;
                 }
-                let xts = found_types
-                    .iter()
-                    .map(|s| {
-                        let x = s.name;
-                        let t = self.map_type(s.body.as_udt().unwrap());
-                        (x, t)
-                    })
-                    .collect();
-                Impl::Trait(Trait::new(seg0.name, ts0, xts))
+                Impl::Trait(Trait::new(seg0.x, ts0))
             }
             Some(Binding::Type(stmt)) => {
                 if !seg0.has_optional_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                    self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                     return Impl::Err;
                 }
                 let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                let t = Type::Cons(seg0.name, ts0.clone());
+                let t = Type::Cons(seg0.x, ts0.clone());
                 if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Type", "item", &seg0.name, &seg1.name);
+                    self.unexpected_assoc("Type", "item", &seg0.x, &seg1.x);
                     return Impl::Err;
                 }
                 Impl::Type(Rc::new(t))
             }
             Some(Binding::Struct(stmt)) => {
                 if !seg0.has_optional_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                    self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                     return Impl::Err;
                 }
                 let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                let t = Type::Cons(seg0.name, ts0.clone());
+                let t = Type::Cons(seg0.x, ts0.clone());
                 if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Struct", "item", &seg0.name, &seg1.name);
+                    self.unexpected_assoc("Struct", "item", &seg0.x, &seg1.x);
                     return Impl::Err;
                 }
                 Impl::Type(Rc::new(t))
             }
             Some(Binding::Enum(stmt)) => {
                 if !seg0.has_optional_arity(stmt.generics.len()) {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
+                    self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                     return Impl::Err;
                 }
                 let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                let t = Type::Cons(seg0.name, ts0.clone());
+                let t = Type::Cons(seg0.x, ts0.clone());
                 if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Enum", "item", &seg0.name, &seg1.name);
+                    self.unexpected_assoc("Enum", "item", &seg0.x, &seg1.x);
                     return Impl::Err;
                 }
                 Impl::Type(Rc::new(t))
             }
             Some(b) => {
-                self.unexpected(&seg0.name, b.name(), "trait");
+                self.unexpected(&seg0.x, b.name(), "trait");
                 Impl::Err
             }
             None => {
-                self.not_found(&seg0.name, "trait");
+                self.not_found(&seg0.x, "trait");
                 Impl::Err
             }
         }
@@ -884,27 +874,24 @@ impl Context {
         let path = self.map_path(path);
         let mut iter = path.segments.into_iter();
         let seg0 = iter.next().unwrap();
-        match self.stack.get(&seg0.name) {
+        match self.stack.get(&seg0.x) {
             Some(Binding::Trait(stmt)) => {
                 let Some(ts0) = seg0.try_create_unnamed_holes(stmt.generics.len()) else {
-                    self.wrong_arity(&seg0.name, seg0.ts.len(), stmt.generics.len());
-                    return Impl::Err;
-                };
-                let Some(xts0) = seg0.try_create_named_holes(&stmt.types) else {
+                    self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
                     return Impl::Err;
                 };
                 if let Some(seg1) = iter.next() {
-                    self.unexpected_assoc("Trait", "item", &seg0.name, &seg1.name);
+                    self.unexpected_assoc("Trait", "item", &seg0.x, &seg1.x);
                     return Impl::Err;
                 }
-                Impl::Trait(Trait::new(seg0.name, ts0, xts0))
+                Impl::Trait(Trait::new(seg0.x, ts0))
             }
             Some(b) => {
-                self.unexpected(&seg0.name, b.name(), "trait");
+                self.unexpected(&seg0.x, b.name(), "trait");
                 Impl::Err
             }
             None => {
-                self.not_found(&seg0.name, "trait");
+                self.not_found(&seg0.x, "trait");
                 Impl::Err
             }
         }
@@ -951,24 +938,6 @@ impl Segment {
             Some(vec![Type::Unknown; arity])
         } else if self.ts.len() == arity {
             Some(self.ts.clone())
-        } else {
-            None
-        }
-    }
-
-    fn try_create_named_holes(&self, expected: &[Rc<StmtTraitType>]) -> Option<Map<Name, Type>> {
-        if self
-            .xts
-            .iter()
-            .all(|(x, _)| expected.iter().any(|s| *x == s.name))
-        {
-            // If all named types are defined, return the named types.
-            let xts = expected
-                .iter()
-                .filter(|s| !self.xts.contains_key(&s.name))
-                .cloned()
-                .map(|s| (s.name, Type::Unknown));
-            Some(self.xts.clone().into_iter().chain(xts).collect())
         } else {
             None
         }

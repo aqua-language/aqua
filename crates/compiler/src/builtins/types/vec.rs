@@ -28,10 +28,10 @@ fn declare(ctx: &mut Context) {
             aqua: "def toString(v:Vec[T]): String;",
             codegen: Some(Codegen {
                 rust: "Vec::to_string",
-                java: "Vector.toString",
+                java: "Vector::toString",
                 egglog: None,
             }),
-            fun: |_ctx, v| {
+            eval: |_ctx, v| {
                 let a0 = v[0].as_vec();
                 runtime::builtins::im_string::String::from(a0.to_string()).into()
             },
@@ -48,7 +48,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.new",
                     egglog: None,
                 }),
-                fun: |_, _v| Vec::new().into(),
+                eval: |_, _v| Vec::new().into(),
             },
             ImplDecl::Def {
                 aqua: "def push(v:Vec[T], x:T): ();",
@@ -57,7 +57,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.push",
                     egglog: None,
                 }),
-                fun: |_, v| {
+                eval: |_, v| {
                     let a0 = v[0].as_vec();
                     let a1 = v[1].clone();
                     a0.push(a1);
@@ -71,7 +71,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.pop",
                     egglog: None,
                 }),
-                fun: |_, v| {
+                eval: |_, v| {
                     let a0 = v[0].as_vec();
                     a0.pop().map(Into::into).into()
                 },
@@ -83,7 +83,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.len",
                     egglog: None,
                 }),
-                fun: |_, v| {
+                eval: |_, v| {
                     let a0 = v[0].as_vec();
                     a0.len().into()
                 },
@@ -95,7 +95,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.get",
                     egglog: None,
                 }),
-                fun: |_, v| {
+                eval: |_, v| {
                     let a0 = v[0].as_vec();
                     let a1 = v[1].as_usize();
                     a0.get(a1).map(Into::into).into()
@@ -108,7 +108,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.insert",
                     egglog: None,
                 }),
-                fun: |_, v| {
+                eval: |_, v| {
                     let a0 = v[0].as_vec();
                     let a1 = v[1].as_usize();
                     let a2 = v[2].clone();
@@ -123,7 +123,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.isEmpty",
                     egglog: None,
                 }),
-                fun: |_, v| {
+                eval: |_, v| {
                     let a0 = v[0].as_vec();
                     a0.is_empty().into()
                 },
@@ -135,7 +135,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.sort",
                     egglog: None,
                 }),
-                fun: |_, v| {
+                eval: |_, v| {
                     let a0 = v[0].as_vec();
                     a0.sort();
                     Tuple(vec![]).into()
@@ -148,7 +148,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.remove",
                     egglog: None,
                 }),
-                fun: |_, v| {
+                eval: |_, v| {
                     let a0 = v[0].as_vec();
                     let a1 = v[1].as_usize();
                     a0.remove(a1).into()
@@ -161,7 +161,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.clear",
                     egglog: None,
                 }),
-                fun: |_, v| {
+                eval: |_, v| {
                     let a0 = v[0].as_vec();
                     a0.clear();
                     Tuple(vec![]).into()
@@ -174,7 +174,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.concat",
                     egglog: None,
                 }),
-                fun: |_, v| {
+                eval: |_, v| {
                     let a0 = v[0].as_vec();
                     let a1 = v[1].as_vec();
                     a0.extend(a1);
@@ -188,7 +188,7 @@ fn declare(ctx: &mut Context) {
                     java: "Vector.map",
                     egglog: None,
                 }),
-                fun: |ctx, v| {
+                eval: |ctx, v| {
                     let a0 = v[0].as_vec();
                     let a1 = v[1].as_function();
                     Value::Vec(

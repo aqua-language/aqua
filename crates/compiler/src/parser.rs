@@ -1098,7 +1098,7 @@ where
             if path.as_name().is_some() && fields.is_none() && t1.v == Token::Eq {
                 self.skip();
                 // x = p
-                let x = path.segments.pop().unwrap().name;
+                let x = path.segments.pop().unwrap().x;
                 let p1 = self.pat(follow)?;
                 let s = p0.s + p1.s;
                 return Ok(Spanned::new(s, PathPatField::Named(x, p1.v)));
@@ -1399,23 +1399,25 @@ where
             }
             Token::If => {
                 let t = self.next();
-                let e = self.expr(follow | Token::LBrace)?;
-                let b0 = self.block(follow | Token::Else | Stmt::FIRST)?;
+                let e0 = self.expr(follow | Token::LBrace)?;
+                let b1 = self.block(follow | Token::Else | Stmt::FIRST)?;
+                let e1 = Expr::Block(b1.s, Type::Unknown, b1.v);
                 if self.start(follow | Token::Else | Stmt::FIRST, follow)?.v == Token::Else {
                     self.skip();
                     let b1 = self.block(follow)?;
+                    let e2 = Expr::Block(b1.s, Type::Unknown, b1.v);
                     let s = t.s + b1.s;
                     Ok(Spanned::new(
                         s,
-                        Expr::IfElse(s, Type::Unknown, Rc::new(e.v), b0.v, b1.v),
+                        Expr::IfElse(s, Type::Unknown, Rc::new(e0.v), Rc::new(e1), Rc::new(e2)),
                     ))
                 } else {
-                    let s = t.s + b0.s;
-                    let e1 = Expr::Tuple(s, Type::Unknown, vec![]);
-                    let b1 = Block::new(s, vec![], e1);
+                    let s = t.s + b1.s;
+                    let b2 = Block::new(s, vec![], Expr::Tuple(s, Type::Unknown, vec![]));
+                    let e2 = Expr::Block(s, Type::Unknown, b2);
                     Ok(Spanned::new(
                         s,
-                        Expr::IfElse(s, Type::Unknown, Rc::new(e.v), b0.v, b1),
+                        Expr::IfElse(s, Type::Unknown, Rc::new(e0.v), Rc::new(e1), Rc::new(e2)),
                     ))
                 }
             }
@@ -1450,24 +1452,26 @@ where
             }
             Token::While => {
                 let t = self.next();
-                let e = self.expr(follow | Token::LBrace)?;
-                let b = self.block(follow)?;
-                let s = t.s + b.s;
+                let e0 = self.expr(follow | Token::LBrace)?;
+                let b1 = self.block(follow)?;
+                let e1 = Expr::Block(b1.s, Type::Unknown, b1.v);
+                let s = t.s + b1.s;
                 Ok(Spanned::new(
                     s,
-                    Expr::While(s, Type::Unknown, Rc::new(e.v), b.v),
+                    Expr::While(s, Type::Unknown, Rc::new(e0.v), Rc::new(e1)),
                 ))
             }
             Token::For => {
                 let t = self.next();
                 let x = self.name(follow)?;
                 self.expect(Token::In, follow)?;
-                let e = self.expr(follow | Token::LBrace)?;
-                let b = self.block(follow)?;
-                let s = t.s + b.s;
+                let e0 = self.expr(follow | Token::LBrace)?;
+                let b1 = self.block(follow)?;
+                let e1 = Expr::Block(b1.s, Type::Unknown, b1.v);
+                let s = t.s + b1.s;
                 Ok(Spanned::new(
                     s,
-                    Expr::For(s, Type::Unknown, x.v, Rc::new(e.v), b.v),
+                    Expr::For(s, Type::Unknown, x.v, Rc::new(e0.v), Rc::new(e1)),
                 ))
             }
             Token::Record => {
@@ -1544,7 +1548,18 @@ where
             }
             Token::Underscore => {
                 let t = self.next();
-                Ok(Spanned::new(t.s, Expr::Anonymous(t.s, Type::Unknown)))
+                if self.start(follow | Token::ColonColon, follow)?.v == Token::ColonColon {
+                    self.next();
+                    let x = self.name(follow)?;
+                    let ts = self.optional_ty_args(follow)?;
+                    let s = t.s + x.s;
+                    Ok(Spanned::new(
+                        s,
+                        Expr::Assoc(s, Type::Unknown, Impl::Unknown, x.v, ts),
+                    ))
+                } else {
+                    Ok(Spanned::new(t.s, Expr::Anonymous(t.s, Type::Unknown)))
+                }
             }
             t => unreachable!("{:?}", t),
         }
@@ -1657,7 +1672,7 @@ where
     fn aggr(&mut self, follow: Token) -> Result<Spanned<Aggr>, Span> {
         let x = self.name(follow | Token::Eq)?;
         self.expect(Token::Eq, follow)?;
-        let e0 = self.expr(follow | Token::Of)?;
+        let e0 = self.name(follow | Token::Of)?;
         self.expect(Token::Of, follow)?;
         let e1 = self.expr(follow | Token::If)?;
         let (s, e2) = if self.start(Token::If | follow, follow)?.v == Token::If {

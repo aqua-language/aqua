@@ -19,7 +19,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def open(path:Path): File;",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_path();
                     File::open(v0).into()
                 },
@@ -27,7 +27,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def read_to_string(file:File): String;",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_file();
                     // v0.read_to_string().into()
@@ -36,7 +36,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def read_to_bytes(file:File): Blob;",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_file();
                     v0.read_to_bytes().into()
                 },
@@ -44,7 +44,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def inspect(file:File): ();",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_file();
                     // v0.inspect().into()

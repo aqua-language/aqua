@@ -236,11 +236,13 @@ impl std::fmt::Display for Token {
 impl Spanned<Token> {
     pub fn text(self, input: &str) -> &str {
         let span = self.s;
+        let start = span.start().unwrap() as usize;
+        let end = span.end().unwrap() as usize;
         match self.v {
-            Token::Code => &input[(span.start() + 3) as usize..(span.end() - 3) as usize],
-            Token::String => &input[(span.start() + 1) as usize..(span.end() - 1) as usize],
-            Token::Char => &input[(span.start() + 1) as usize..(span.end() - 1) as usize],
-            _ => &input[*span.start() as usize..*span.end() as usize],
+            Token::Code => &input[(start + 3) as usize..(end - 3) as usize],
+            Token::String => &input[(start + 1) as usize..(end - 1) as usize],
+            Token::Char => &input[(start + 1) as usize..(end - 1) as usize],
+            _ => &input[start as usize..end as usize],
         }
     }
 }

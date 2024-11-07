@@ -27,7 +27,7 @@ fn declare(ctx: &mut Context) {
                     java: "Image.load",
                     egglog:None
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_blob();
                     // Image::new(v0).into()
@@ -40,7 +40,7 @@ fn declare(ctx: &mut Context) {
                     java: "Image.crop",
                     egglog:None
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_image();
                     // let v1 = v[1].as_u32();
@@ -57,7 +57,7 @@ fn declare(ctx: &mut Context) {
                     java: "Image.centerCrop",
                     egglog:None
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                         // let v0 = v[0].as_image();
                         // let v1 = v[1].as_u32();
@@ -72,7 +72,7 @@ fn declare(ctx: &mut Context) {
                     java: "Image.resize",
                     egglog:None
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                         // let v0 = v[0].as_image();
                         // let v1 = v[1].as_u32();
@@ -87,7 +87,7 @@ fn declare(ctx: &mut Context) {
                     java: "Image.resizeWidth",
                     egglog:None
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                         // let v0 = v[0].as_image();
                         // let v1 = v[1].as_u32();
@@ -101,7 +101,7 @@ fn declare(ctx: &mut Context) {
                     java: "Image.resizeHeight",
                     egglog:None
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                         // let v0 = v[0].as_image();
                         // let v1 = v[1].as_u32();
@@ -115,7 +115,7 @@ fn declare(ctx: &mut Context) {
                     java: "Image.intoMatrix",
                     egglog:None
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                         // let v0 = v[0].as_image();
                         // rt::Matrix::F32(v0.into_matrix()).into()
@@ -128,7 +128,7 @@ fn declare(ctx: &mut Context) {
                     java: "Image.fromMatrix",
                     egglog:None
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                         // let v0 = v[0].as_matrix();
                         // if let rt::Matrix::F32(v) = v0 {
@@ -141,7 +141,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua:"def save(img: Image, path: Path): ();",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                         // let v0 = v[0].as_image();
                         // let v1 = v[1].as_path();
@@ -155,7 +155,7 @@ fn declare(ctx: &mut Context) {
                     java: "Image.height",
                     egglog:None
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                         // let v0 = v[0].as_image();
                         // v0.height().into()
@@ -168,7 +168,7 @@ fn declare(ctx: &mut Context) {
                     java: "Image.width",
                     egglog:None
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                         // let v0 = v[0].as_image();
                         // v0.width().into()
@@ -181,7 +181,7 @@ fn declare(ctx: &mut Context) {
                     java: "Image.drawBox",
                     egglog:None
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                         // let v0 = v[0].as_image();
                         // let v1 = v[1].as_u32();
@@ -195,7 +195,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua:"def preview(img: Image): ();",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                         // let v0 = v[0].as_image();
                         // let conf = viuer::Config {

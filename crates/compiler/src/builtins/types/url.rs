@@ -20,7 +20,7 @@ fn declare(ctx: &mut Context) {
         decls: &[ImplDecl::Def {
             aqua: "def parse(s: String): Result[Url];",
             codegen: None,
-            fun: |_ctx, v| {
+            eval: |_ctx, v| {
                 let v0 = v[0].as_string();
                 Url::parse(v0).map(|v| Rc::new(Value::from(v))).into()
             },

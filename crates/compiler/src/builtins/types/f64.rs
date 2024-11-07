@@ -1,6 +1,7 @@
 use linkme::distributed_slice;
 
 use crate::ast::Codegen;
+use crate::builtins::value::Value;
 use crate::builtins::Context;
 use crate::builtins::Decl;
 use crate::builtins::ImplDecl;
@@ -26,7 +27,7 @@ fn declare(ctx: &mut Context) {
                 java: "Math.abs",
                 egglog: None,
             }),
-            fun: |_ctx, v| {
+            eval: |_ctx, v| {
                 let v0 = v[0].as_f64();
                 v0.abs().into()
             },
@@ -46,7 +47,7 @@ fn declare(ctx: &mut Context) {
                     java: "(a,b) -> a+b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_f64();
                     let v1 = v[1].as_f64();
                     (v0 + v1).into()
@@ -68,7 +69,7 @@ fn declare(ctx: &mut Context) {
                     java: "(a,b) -> a-b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_f64();
                     let v1 = v[1].as_f64();
                     (v0 - v1).into()
@@ -90,7 +91,7 @@ fn declare(ctx: &mut Context) {
                     java: "(a,b) -> a*b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_f64();
                     let v1 = v[1].as_f64();
                     (v0 * v1).into()
@@ -112,7 +113,7 @@ fn declare(ctx: &mut Context) {
                     java: "(a,b) -> a/b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_f64();
                     let v1 = v[1].as_f64();
                     (v0 / v1).into()
@@ -134,7 +135,7 @@ fn declare(ctx: &mut Context) {
                     java: "(a,b) -> a+b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_f64();
                     let v1 = v[1].as_i32();
                     (v0 + v1 as f64).into()
@@ -156,7 +157,7 @@ fn declare(ctx: &mut Context) {
                     java: "(a,b) -> a+b",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     let v1 = v[1].as_f64();
                     (v0 as f64 + v1).into()
@@ -164,4 +165,20 @@ fn declare(ctx: &mut Context) {
             },
         ],
     });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl Display[f64]",
+        decls: &[ImplDecl::Def {
+            aqua: "def toString(a:f64): String;",
+            codegen: Some(Codegen {
+                rust: "f64::display",
+                java: "String.valueOf",
+                egglog: None,
+            }),
+            eval: |_ctx, v| {
+                let v0 = v[0].as_f64();
+                Value::String(runtime::prelude::String::from(v0.to_string())).into()
+            },
+        }],
+    })
 }

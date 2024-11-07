@@ -6,6 +6,7 @@ use crate::ast::Pat;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtImpl;
+use crate::ast::StmtTrait;
 use crate::ast::Type;
 use crate::traversal::mapper::Mapper;
 
@@ -72,6 +73,12 @@ impl<'a> Mapper for Annotate<'a> {
 impl StmtImpl {
     pub fn annotate(&self, ctx: &mut Context) -> StmtImpl {
         Annotate::new(ctx).map_stmt_impl(self)
+    }
+}
+
+impl StmtTrait {
+    pub fn annotate(&self, ctx: &mut Context) -> StmtTrait {
+        Annotate::new(ctx).map_stmt_trait(self)
     }
 }
 

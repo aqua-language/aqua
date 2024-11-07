@@ -24,35 +24,35 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Reader",
         decls: &[
             ImplDecl::Def {
-                aqua: "def file_reader(path: Path, watch: bool): Reader;",
+                aqua: "def file(path: Path, watch: bool): Reader;",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let path = v[0].as_path();
                     let watch = v[1].as_bool();
                     Reader::file(path, watch).into()
                 },
             },
             ImplDecl::Def {
-                aqua: "def http_reader(a0: Url): Reader;",
+                aqua: "def http(a0: Url): Reader;",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let url = v[0].as_url();
                     // Reader::http(url).into()
                 },
             },
             ImplDecl::Def {
-                aqua: "def tcp_reader(a0: SocketAddr): Reader;",
+                aqua: "def tcp(a0: SocketAddr): Reader;",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let addr = v[0].as_socket_addr();
                     Reader::tcp(addr).into()
                 },
             },
             ImplDecl::Def {
-                aqua: "def kafka_reader(a0: SocketAddr, a1: String): Reader;",
+                aqua: "def kafka(a0: SocketAddr, a1: String): Reader;",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let addr = v[0].as_socket_addr();
                     // let topic = v[1].as_string();

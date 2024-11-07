@@ -26,7 +26,7 @@ use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
-use crate::infer::Constraint;
+use crate::infer::solver::Constraint;
 use crate::span::Span;
 
 pub(crate) trait Mapper {
@@ -207,8 +207,7 @@ pub(crate) trait Mapper {
     fn _map_trait(&mut self, tr: &Trait) -> Trait {
         let x = self.map_name(&tr.x);
         let ts = self.map_types(&tr.ts);
-        let xts = self.map_iter(&tr.xts, Self::map_assoc_type).into();
-        Trait::new(x, ts, xts)
+        Trait::new(x, ts)
     }
 
     fn map_assoc_type(&mut self, xt: &(Name, Type)) -> (Name, Type) {
@@ -491,10 +490,10 @@ pub(crate) trait Mapper {
             }
             Expr::Continue(_, _) => Expr::Continue(s, t),
             Expr::Break(_, _) => Expr::Break(s, t),
-            Expr::While(_, _, e, b) => {
-                let e = self.map_expr(e);
-                let b = self.map_block(b);
-                Expr::While(s, t, Rc::new(e), b)
+            Expr::While(_, _, e0, e1) => {
+                let e = self.map_expr(e0);
+                let b = self.map_expr(e1);
+                Expr::While(s, t, Rc::new(e), Rc::new(b))
             }
             Expr::Lambda(_, _, ps, t1, e) => {
                 self.enter_scope();
@@ -507,10 +506,10 @@ pub(crate) trait Mapper {
             Expr::For(_, _, x, e, b) => {
                 self.enter_scope();
                 let x = self.map_name(x);
-                let e = self.map_expr(e);
-                let b = self.map_block(b);
+                let e0 = self.map_expr(e);
+                let e1 = self.map_expr(b);
                 self.exit_scope();
-                Expr::For(s, t, x, Rc::new(e), b)
+                Expr::For(s, t, x, Rc::new(e0), Rc::new(e1))
             }
             Expr::Err(_, _) => Expr::Err(s, t),
             Expr::Query(_, _, x0, t0, e, qs) => {
@@ -558,11 +557,11 @@ pub(crate) trait Mapper {
                 let es = self.map_exprs(es);
                 Expr::Dot(s, t, Rc::new(e), x, ts, es)
             }
-            Expr::IfElse(_, _, e, b0, b1) => {
-                let e = self.map_expr(e);
-                let b0 = self.map_block(b0);
-                let b1 = self.map_block(b1);
-                Expr::IfElse(s, t, Rc::new(e), b0, b1)
+            Expr::IfElse(_, _, e0, e1, e2) => {
+                let e = self.map_expr(e0);
+                let b0 = self.map_expr(e1);
+                let b1 = self.map_expr(e2);
+                Expr::IfElse(s, t, Rc::new(e), Rc::new(b0), Rc::new(b1))
             }
             Expr::IntSuffix(_, _, v, x) => Expr::IntSuffix(s, t, *v, *x),
             Expr::FloatSuffix(_, _, v, x) => Expr::FloatSuffix(s, t, *v, *x),
@@ -726,7 +725,7 @@ pub(crate) trait Mapper {
     #[inline(always)]
     fn _map_segment(&mut self, seg: &Segment) -> Segment {
         let span = self.map_span(&seg.span);
-        let name = self.map_name(&seg.name);
+        let name = self.map_name(&seg.x);
         let types = self.map_types(&seg.ts);
         let named_types = self.map_iter(&seg.xts, Self::map_segment_named_type).into();
         Segment::new(span, name, types, named_types)
@@ -981,89 +980,89 @@ pub(crate) trait Mapper {
     }
 }
 
-pub(crate) trait AcceptMapper {
+pub(crate) trait Mappable {
     fn map(&self, mapper: &mut impl Mapper) -> Self;
 }
 
-impl AcceptMapper for Program {
+impl Mappable for Program {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_program(self)
     }
 }
 
-impl AcceptMapper for Stmt {
+impl Mappable for Stmt {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_stmt(self)
     }
 }
 
-impl AcceptMapper for Expr {
+impl Mappable for Expr {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_expr(self)
     }
 }
 
-impl AcceptMapper for Path {
+impl Mappable for Path {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_path(self)
     }
 }
 
-impl AcceptMapper for Segment {
+impl Mappable for Segment {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_segment(self)
     }
 }
 
-impl AcceptMapper for Name {
+impl Mappable for Name {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_name(self)
     }
 }
 
-impl AcceptMapper for Type {
+impl Mappable for Type {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_type(self)
     }
 }
 
-impl AcceptMapper for Pat {
+impl Mappable for Pat {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_pattern(self)
     }
 }
 
-impl AcceptMapper for Query {
+impl Mappable for Query {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_query_stmt(self)
     }
 }
 
-impl AcceptMapper for StmtDef {
+impl Mappable for StmtDef {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_stmt_def(self)
     }
 }
 
-impl AcceptMapper for ExprBody {
+impl Mappable for ExprBody {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_stmt_def_body(self)
     }
 }
 
-impl AcceptMapper for Impl {
+impl Mappable for Impl {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_impl(self)
     }
 }
 
-impl AcceptMapper for Vec<Stmt> {
+impl Mappable for Vec<Stmt> {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_stmts(self)
     }
 }
 
-impl AcceptMapper for Constraint {
+impl Mappable for Constraint {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_constraint(self)
     }

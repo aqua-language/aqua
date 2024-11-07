@@ -22,9 +22,9 @@ use crate::declare;
 use crate::infer::type_var::TypeVarKind;
 use crate::infer::type_var::TypeVarValue;
 use crate::span::Span;
-use crate::traversal::mapper::AcceptMapper;
+use crate::traversal::mapper::Mappable;
 use crate::traversal::mapper::Mapper;
-use crate::traversal::visitor::AcceptVisitor;
+use crate::traversal::visitor::Visitable;
 use mangle::Mangler;
 
 #[derive(Debug, Default)]
@@ -86,7 +86,7 @@ impl Context {
         let stmt = stmt.instantiate(ts);
         let ps = stmt.params.mapv(|t| self.map_type(t));
         let t = stmt.ty.map(self);
-        let b = ExprBody::UserDefined(Rc::new(stmt.body.as_expr().map(self)));
+        let b = ExprBody::UserDefined(Rc::new(stmt.body.as_udf().unwrap().map(self)));
         let stmt = StmtDef::new(stmt.span, x, vec![], ps, t, vec![], b);
         self.stmts.push(Stmt::Def(Rc::new(stmt)));
         x
@@ -245,14 +245,6 @@ impl Context {
                 .iter()
                 .zip(tr0.ts.iter())
                 .all(|(t0, t1)| self.try_unify(t0, t1).is_ok())
-            && tr1
-                .xts
-                .iter()
-                .zip(tr0.xts.iter())
-                .all(|((x0, t0), (x1, t1))| {
-                    assert_eq!(x0, x1);
-                    self.try_unify(t0, t1).is_ok()
-                })
     }
 
     pub fn try_unify(&mut self, t0: &Type, t1: &Type) -> Result<(), (Type, Type)> {
@@ -302,12 +294,8 @@ impl Context {
                     Err((t0.clone(), t1.clone()))
                 }
             }
-            (Type::Assoc(b, x, _), t0) | (t0, Type::Assoc(b, x, _)) => {
-                if let Some(t1) = b.as_trait().unwrap().xts.get(x) {
-                    self.try_unify(t0, t1)
-                } else {
-                    Err((t0.clone(), t1.clone()))
-                }
+            (Type::Assoc(_b, _x, _), _t0) | (_t0, Type::Assoc(_b, _x, _)) => {
+                todo!()
             }
             (Type::Never, _) | (_, Type::Never) => Ok(()),
             (Type::Generic(..), Type::Generic(..)) => unreachable!(),

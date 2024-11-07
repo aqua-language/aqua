@@ -26,7 +26,7 @@ fn declare(ctx: &mut Context) {
                     java: "Matrix.zeros",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0]
                     //     .as_array()
@@ -61,7 +61,7 @@ fn declare(ctx: &mut Context) {
                     java: "Matrix.insert_axis",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_matrix();
                     // let v1 = v[1].as_usize();
@@ -75,7 +75,7 @@ fn declare(ctx: &mut Context) {
                     java: "Matrix.remove_axis",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_matrix();
                     // let v1 = v[1].as_usize();
@@ -89,7 +89,7 @@ fn declare(ctx: &mut Context) {
                     java: "Matrix.into_vec",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_matrix();
                     // map_matrix!(v0, |x: rt::matrix::Matrix<_>| {

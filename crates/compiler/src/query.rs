@@ -2,7 +2,6 @@ use std::rc::Rc;
 
 use crate::ast::Aggr;
 use crate::ast::Expr;
-use crate::ast::Impl;
 use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Path;
@@ -13,7 +12,6 @@ use crate::span::Span;
 use crate::traversal::mapper::Mapper;
 
 use self::util::call;
-use self::util::dcall;
 use self::util::expr_field;
 use self::util::expr_var;
 use self::util::lambda;
@@ -91,7 +89,7 @@ impl Context {
             Type::Unknown,
             Rc::new(estruct),
         );
-        dcall(s, "map", vec![e, elam])
+        call(s, Name::new(s, "map"), vec![], vec![e, elam])
     }
 
     /// [e0] where e1
@@ -100,7 +98,7 @@ impl Context {
     fn where_clause(&mut self, e0: Expr, s: Span, e1: &Expr) -> Expr {
         let e = self.map_expr(e1);
         let elam = lambda(s, [relation(s)], e);
-        dcall(s, "filter", vec![e0, elam])
+        call(s, Name::new(s, "filter"), vec![], vec![e0, elam])
     }
 
     /// [e0] union e1
@@ -108,7 +106,7 @@ impl Context {
     /// merge(e0, e1)
     fn union_clause(&mut self, e0: Expr, s: Span, e1: &Expr) -> Expr {
         let e1 = self.map_expr(e1);
-        dcall(s, "merge", vec![e0, e1])
+        call(s, Name::new(s, "merge"), vec![], vec![e0, e1])
     }
 
     /// [e0] limit e1
@@ -116,7 +114,7 @@ impl Context {
     /// take(e0, r => e1)
     fn limit_clause(&mut self, e0: Expr, s: Span, e1: &Expr) -> Expr {
         let e1 = self.map_expr(e1);
-        dcall(s, "take", vec![e0, e1])
+        call(s, Name::new(s, "take"), vec![], vec![e0, e1])
     }
 
     /// [e0] from x in e
@@ -139,10 +137,10 @@ impl Context {
         // x => record(x=x, x1=r.x1, ..., xn=r.xn)
         let elam = lambda(s, [x], record);
         // e.map(x => record(x=x, x1=r.x1, ..., xn=r.xn))
-        let emap = dcall(s, "map", vec![e, elam]);
+        let emap = call(s, Name::new(s, "map"), vec![], vec![e, elam]);
         // flatMap(e0, r => e.map(x => record(x=x, x1=r.x1, ..., xn=r.xn)))
         let elam = lambda(s, [relation(s)], emap);
-        dcall(s, "flatMap", vec![e0, elam])
+        call(s, Name::new(s, "flatMap"), vec![], vec![e0, elam])
     }
 
     // [e0] select x1=e1,...,xn=en
@@ -156,7 +154,12 @@ impl Context {
         self.unbind_relational_vars();
         xts.keys().for_each(|x| self.bind_relational_var(*x));
         let record = record(s, xts);
-        dcall(s, "map", vec![e0, lambda(s, [relation(s)], record)])
+        call(
+            s,
+            Name::new(s, "map"),
+            vec![],
+            vec![e0, lambda(s, [relation(s)], record)],
+        )
     }
 
     // [e0] drop x
@@ -170,7 +173,12 @@ impl Context {
             .map(|x| (*x, expr_field(r.clone(), *x)))
             .collect::<Map<_, _>>();
         let record = record(s, xts);
-        dcall(s, "map", vec![e0, lambda(s, [relation(s)], record)])
+        call(
+            s,
+            Name::new(s, "map"),
+            vec![],
+            vec![e0, lambda(s, [relation(s)], record)],
+        )
     }
 
     // [e0] group xkey = ekey
@@ -198,7 +206,12 @@ impl Context {
     ) -> Expr {
         // e0.keyBy(r => ekey)
         let ekey = self.map_expr(ekey);
-        let ekeyby = dcall(s, "keyBy", vec![e0, lambda(s, [relation(s)], ekey)]);
+        let ekeyby = call(
+            s,
+            Name::new(s, "keyBy"),
+            vec![],
+            vec![e0, lambda(s, [relation(s)], ekey)],
+        );
         // (xkey, r) => record(...)
         let erecord = {
             let xts = self.aggs(s, aggs);
@@ -212,7 +225,7 @@ impl Context {
         let efun = lambda(s, [xkey, relation(s)], erecord);
         // ekeyby.window(ewin, (xkey, rs) => record(...))
         let ewin = self.map_expr(ewin);
-        dcall(s, "window", vec![ekeyby, ewin, efun])
+        call(s, Name::new(s, "window"), vec![], vec![ekeyby, ewin, efun])
     }
 
     // x = e1 of e2 [if e3]
@@ -224,15 +237,30 @@ impl Context {
                 let x = relation(s);
                 if let Some(e2) = &agg.e2 {
                     let v0 = relation_expr(s);
-                    let v1 = dcall(s, "filter", vec![v0, lambda(s, [x], self.map_expr(e2))]);
-                    let v2 = dcall(s, "map", vec![v1, lambda(s, [x], self.map_expr(&agg.e1))]);
-                    let v3 = call(s, self.map_expr(&agg.e0), vec![v2]);
-                    (agg.x, v3)
+                    let v1 = call(
+                        s,
+                        Name::new(s, "filter"),
+                        vec![],
+                        vec![v0, lambda(s, [x], self.map_expr(e2))],
+                    );
+                    let v2 = call(
+                        s,
+                        Name::new(s, "map"),
+                        vec![],
+                        vec![v1, lambda(s, [x], self.map_expr(&agg.e1))],
+                    );
+                    let v3 = call(s, agg.x1, vec![], vec![v2]);
+                    (agg.x0, v3)
                 } else {
                     let v0 = relation_expr(s);
-                    let v1 = dcall(s, "map", vec![v0, lambda(s, [x], self.map_expr(&agg.e1))]);
-                    let v2 = call(s, self.map_expr(&agg.e0), vec![v1]);
-                    (agg.x, v2)
+                    let v1 = call(
+                        s,
+                        Name::new(s, "map"),
+                        vec![],
+                        vec![v0, lambda(s, [x], self.map_expr(&agg.e1))],
+                    );
+                    let v2 = call(s, agg.x1, vec![], vec![v1]);
+                    (agg.x0, v2)
                 }
             })
             .collect::<Map<_, _>>()
@@ -252,7 +280,7 @@ impl Context {
         xes.keys().for_each(|x| self.bind_relational_var(*x));
         let record = record(s, xes);
         let elam = lambda(s, [relation(s)], record);
-        dcall(s, "window", vec![e0, e, elam])
+        call(s, Name::new(s, "window"), vec![], vec![e0, e, elam])
     }
 
     // [e0] join x in e1 on e2 == e3
@@ -276,9 +304,24 @@ impl Context {
                 .into(),
         );
         // e1.filter(x => e2 == e3)
-        let efilter = dcall(s, "filter", vec![e1, lambda(s, [x], e2)]);
-        let emap = dcall(s, "map", vec![efilter, lambda(s, [x], record)]);
-        dcall(s, "flatMap", vec![e0, lambda(s, [relation(s)], emap)])
+        let efilter = call(
+            s,
+            Name::new(s, "filter"),
+            vec![],
+            vec![e1, lambda(s, [x], e2)],
+        );
+        let emap = call(
+            s,
+            Name::new(s, "map"),
+            vec![],
+            vec![efilter, lambda(s, [x], record)],
+        );
+        call(
+            s,
+            Name::new(s, "flatMap"),
+            vec![],
+            vec![e0, lambda(s, [relation(s)], emap)],
+        )
     }
 
     // [e0] var x = e1
@@ -298,7 +341,12 @@ impl Context {
                 .collect::<Vec<_>>()
                 .into(),
         );
-        dcall(s, "map", vec![e0, lambda(s, [relation(s)], record)])
+        call(
+            s,
+            Name::new(s, "map"),
+            vec![],
+            vec![e0, lambda(s, [relation(s)], record)],
+        )
     }
 }
 
@@ -320,14 +368,13 @@ impl Mapper for Context {
                 self.exit_scope();
                 e
             }
-            Expr::QueryInto(s, t, x0, t0, e, qs, x1, ts, es) => {
+            Expr::QueryInto(s, _, x0, t0, e, qs, x1, ts, es) => {
                 self.enter_scope();
                 let e = self.first_from_clause(*s, *x0, t0.clone(), e);
                 let e = qs.iter().fold(e, |e, q| self.query(e, q));
                 let es = self.map_exprs(es);
                 let es = std::iter::once(e).chain(es).collect::<Vec<_>>();
-                let efun = Expr::Assoc(*s, Type::Unknown, Impl::Unknown, *x1, ts.clone());
-                let e = Expr::Call(*s, t.clone(), Rc::new(efun), es);
+                let e = call(*s, *x1, ts.clone(), es);
                 self.exit_scope();
                 e
             }
@@ -351,6 +398,7 @@ mod util {
     use std::rc::Rc;
 
     use crate::ast::Expr;
+    use crate::ast::Impl;
     use crate::ast::Map;
     use crate::ast::Name;
     use crate::ast::Path;
@@ -374,19 +422,13 @@ mod util {
     }
 
     /// Direct call
-    pub(super) fn dcall(s: Span, x: &'static str, es: Vec<Expr>) -> Expr {
-        let path = Path::new_name(Name::new(s, x));
+    pub(super) fn call(s: Span, x: Name, ts: Vec<Type>, es: Vec<Expr>) -> Expr {
         Expr::Call(
             s,
             Type::Unknown,
-            Rc::new(Expr::Path(s, Type::Unknown, path)),
+            Rc::new(Expr::Assoc(s, Type::Unknown, Impl::Unknown, x, ts)),
             es,
         )
-    }
-
-    /// Indirect call
-    pub(super) fn call(s: Span, e: Expr, es: Vec<Expr>) -> Expr {
-        Expr::Call(s, Type::Unknown, Rc::new(e), es)
     }
 
     pub(super) fn lambda<const N: usize>(s: Span, x: [Name; N], e: Expr) -> Expr {

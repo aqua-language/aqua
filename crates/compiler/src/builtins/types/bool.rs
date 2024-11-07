@@ -30,7 +30,7 @@ fn declare(ctx: &mut Context) {
                     java: "(a) -> !a",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_bool();
                     (!v0).into()
                 },

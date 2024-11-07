@@ -3,7 +3,7 @@ use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::Type;
 use crate::span::Span;
-use crate::traversal::visitor::AcceptVisitor;
+use crate::traversal::visitor::Visitable;
 use crate::traversal::visitor::Visitor;
 
 use super::Constraint;

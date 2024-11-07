@@ -1,0 +1,42 @@
+(sort StringSet (Set String))
+
+(function free (Expr) StringSet :merge (set-intersect old new))
+(function free_list (ExprList) StringSet :merge (set-intersect old new))
+(function free_map (ExprMap) StringSet :merge (set-intersect old new))
+
+(rule [(= e (ExprInt t v))] [(set (free e) (set-empty))])
+(rule [(= e (ExprFloat t v))] [(set (free e) (set-empty))])
+(rule [(= e (ExprBool t v))] [(set (free e) (set-empty))])
+(rule [(= e (ExprString t v))] [(set (free e) (set-empty))])
+(rule [(= e (ExprChar t v))] [(set (free e) (set-empty))])
+
+(rule [(= e (ExprTuple t es))] [(set (free e) (free_list es))])
+(rule [(= e (ExprRecord t es))] [(set (free e) (free_map es))])
+
+(rule [(= e (ExprIndex t e1 i))
+       (= (free e1) fv)]
+      [(set (free e) fv)])
+(rule [(= e (ExprField t e1 f))
+       (= (free e1) fv)]
+      [(set (free e) fv)])
+
+(rule [(= e (ExprVar t x))]
+      [(set (free e) (set-insert (set-empty) x))])
+(rule [(= e (ExprDef t x m))]
+      [(set (free e) (set-empty))])
+
+(rule [(= e (ExprCall t e1 es))
+       (= (free e1) fv1)
+       (= (free_list es) fv2)]
+      [(set (free e) (set-union fv1 fv2))])
+
+(rule [(= e (ExprIfElse t c e1 e2))
+       (= (free c) fv1)
+       (= (free e1) fv2)
+       (= (free e2) fv3)]
+      [(set (free e) (set-union fv1 (set-union fv2 fv3)))])
+
+(rule [(= e (ExprLetIn t x e1 e2))
+       (= (free e1) fv1)
+       (= (free e2) fv2)]
+      [(set (free e) (set-union fv1 (set-remove fv2 x)))])

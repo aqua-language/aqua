@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use ariadne::Cache as _;
 use smol_str::format_smolstr;
 
 use crate::ast::Expr;
@@ -9,15 +10,20 @@ use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Type;
+use crate::source::Cache;
+use crate::span::Span;
+use crate::splice::Splice;
+use crate::splice::SpliceIterator;
 use crate::token::Token;
 use crate::traversal::mapper::Mapper;
 
 use self::util::infix;
 use self::util::unop;
 
-#[derive(Debug, Default)]
-pub struct Context {
+#[derive(Debug)]
+pub struct Context<'a> {
     anons: Stack,
+    sources: &'a mut Cache,
 }
 
 #[derive(Debug, Default)]
@@ -25,13 +31,16 @@ pub struct Stack {
     pub scopes: Vec<Vec<Name>>,
 }
 
-impl Context {
-    pub fn new() -> Self {
-        Self::default()
-    }
+pub fn desugar(cache: &mut Cache, program: &Program) -> Program {
+    Context::new(cache).map_program(program)
+}
 
-    pub fn desugar(&mut self, program: &Program) -> Program {
-        self.map_program(program)
+impl<'a> Context<'a> {
+    pub fn new(cache: &'a mut Cache) -> Self {
+        Context {
+            anons: Stack::default(),
+            sources: cache,
+        }
     }
 
     pub fn arg(&mut self, e: &Expr) -> Expr {
@@ -52,7 +61,7 @@ impl Context {
     }
 }
 
-impl Mapper for Context {
+impl<'a> Mapper for Context<'a> {
     fn map_expr(&mut self, e: &Expr) -> Expr {
         let t = self.map_type(e.type_of());
         match e {
@@ -152,6 +161,20 @@ impl Mapper for Context {
             }
             // (a) => a
             Expr::Paren(_, _, e) => self.map_expr(e),
+            // "a ${b} c" => "a ".concat(b.toString()).concat(" c")
+            Expr::String(s, _, l) => {
+                let mut iter = SpliceIterator::new(l.as_str());
+                let s = s.shrink(1);
+                if let Some(splice) = iter.next() {
+                    let e = self.map_splice(splice, s);
+                    iter.fold(e, |e0, splice| {
+                        let e1 = self.map_splice(splice, s);
+                        infix(s, Type::Unknown, "String", "concat", e0, e1)
+                    })
+                } else {
+                    e.clone()
+                }
+            }
             Expr::Annotate(_, _, e) => {
                 let e = self.map_expr(e);
                 e.with_type(t)
@@ -176,6 +199,37 @@ impl Mapper for Context {
                 p.with_type(t)
             }
             _ => self._map_pattern(p),
+        }
+    }
+}
+
+impl<'a> Context<'a> {
+    fn map_splice(&mut self, splice: Splice, span: Span) -> Expr {
+        let range = splice.range();
+        let file = span.file().unwrap();
+        let start = span.start().unwrap() + range.start as u32;
+        let end = span.start().unwrap() + range.end as u32;
+        let span = Span::new(file, start..end);
+
+        match splice {
+            Splice::Text(s, _) => Expr::String(span, Type::Unknown, s.into()),
+            Splice::Delim(_, _) => {
+                // Only lex the part of the file that is the splice.
+                let source = &self.sources.fetch(&file).unwrap().text()[..end as usize];
+                let lexer = crate::lexer::Lexer::new_from(file, source, start as usize);
+                let mut parser = crate::parser::Parser::new(source, lexer);
+                if let Some(e) = parser.parse(|p, follow| p.expr(follow)) {
+                    let e = self.map_expr(&e);
+                    unop(span, Type::Unknown, "Display", "toString", e)
+                } else {
+                    // TODO: Report error
+                    Expr::Err(span, Type::Unknown)
+                }
+            }
+            Splice::Err(_, _) => {
+                // TODO: Report error
+                Expr::Err(span, Type::Unknown)
+            }
         }
     }
 }

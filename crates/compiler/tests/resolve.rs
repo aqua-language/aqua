@@ -14,6 +14,7 @@ use common::dsl::expr_tuple;
 use common::dsl::expr_unit;
 use common::dsl::expr_unresolved;
 use common::dsl::expr_var;
+use common::dsl::impl_type;
 use common::dsl::program;
 use common::dsl::stmt_def;
 use common::dsl::stmt_enum;
@@ -826,5 +827,12 @@ fn test_resolve_impl_generic() {
             [],
         ),
     ]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_impl_type() {
+    let a = resolve(aqua!("Path::new;")).unwrap();
+    let b = program([stmt_expr(expr_assoc(impl_type(ty("Path")), "new", []))]);
     check!(a, b);
 }

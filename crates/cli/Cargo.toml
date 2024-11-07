@@ -9,12 +9,14 @@ name = "aqua"
 path = "src/main.rs"
 
 [features]
-default = ["repl"]
+default = ["repl", "lsp"]
 
 [dependencies]
 compiler = { path = "../compiler" }
 repl = { path = "../repl", optional = true }
+lsp = { path = "../lsp", optional = true }
 config = { path = "../config", features = ["clap"] }
+colored = "2.1.0"
 
 anyhow = { version = "1.0.79" }
 tracing = { version = "0.1.40", features = ["release_max_level_warn"] }

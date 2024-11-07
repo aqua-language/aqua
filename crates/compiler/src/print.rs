@@ -1,17 +1,16 @@
 use crate::ast::Index;
 use crate::ast::Name;
-use crate::token::Token;
 use crate::symbol::Symbol;
+use crate::token::Token;
 
 pub trait Print<'b> {
     // Required methods
     fn fmt(&mut self) -> &mut std::fmt::Formatter<'b>;
-    fn get_indent(&mut self) -> &mut usize;
-    fn should_indent(&mut self) -> bool;
+    fn indent_mut(&mut self) -> &mut usize;
 
     // Default methods
     fn tab(&mut self) -> std::fmt::Result {
-        for _ in 0..*self.get_indent() {
+        for _ in 0..*self.indent_mut() {
             write!(self.fmt(), "    ")?;
         }
         Ok(())
@@ -34,9 +33,7 @@ pub trait Print<'b> {
     }
 
     fn newline(&mut self) -> std::fmt::Result {
-        if !self.should_indent() {
-            writeln!(self.fmt())?;
-        }
+        writeln!(self.fmt())?;
         self.tab()
     }
 
@@ -148,9 +145,9 @@ pub trait Print<'b> {
     }
 
     fn indented(&mut self, f: impl Fn(&mut Self) -> std::fmt::Result) -> std::fmt::Result {
-        *self.get_indent() += 1;
+        *self.indent_mut() += 1;
         f(self)?;
-        *self.get_indent() -= 1;
+        *self.indent_mut() -= 1;
         Ok(())
     }
 
@@ -168,6 +165,10 @@ pub trait Print<'b> {
 
     fn bars(&mut self, fun: impl Fn(&mut Self) -> std::fmt::Result) -> std::fmt::Result {
         self.group(fun, "|", "|")
+    }
+
+    fn angle(&mut self, fun: impl Fn(&mut Self) -> std::fmt::Result) -> std::fmt::Result {
+        self.group(fun, "<", ">")
     }
 
     fn if_nonempty<T>(

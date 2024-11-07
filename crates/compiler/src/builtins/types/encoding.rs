@@ -18,7 +18,7 @@ fn declare(ctx: &mut Context) {
         decls: &[ImplDecl::Def {
             aqua: "def csv(sep: char): Encoding;",
             codegen: None,
-            fun: |_ctx, v| {
+            eval: |_ctx, v| {
                 let v0 = v[0].as_char();
                 Encoding::csv(v0).into()
             },

@@ -6,7 +6,7 @@ use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::Type;
-use crate::traversal::mapper::AcceptMapper;
+use crate::traversal::mapper::Mappable;
 use crate::traversal::mapper::Mapper;
 
 use super::impl_var::ImplVarValue;

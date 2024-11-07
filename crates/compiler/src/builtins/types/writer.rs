@@ -16,39 +16,39 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Writer",
         decls: &[
             ImplDecl::Def {
-                aqua: "def stdout_writer(): Writer;",
+                aqua: "def stdout(): Writer;",
                 codegen: None,
-                fun: |_, _| Writer::stdout().into(),
+                eval: |_, _| Writer::stdout().into(),
             },
             ImplDecl::Def {
-                aqua: "def file_writer(path: Path): Writer;",
+                aqua: "def file(path: Path): Writer;",
                 codegen: None,
-                fun: |_, v| {
+                eval: |_, v| {
                     let v0 = v[0].as_path();
                     Writer::file(v0).into()
                 },
             },
             ImplDecl::Def {
-                aqua: "def http_writer(a0: Url): Writer;",
+                aqua: "def http(a0: Url): Writer;",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = _v[0].as_url();
                     // Writer::http(v0).into()
                 },
             },
             ImplDecl::Def {
-                aqua: "def tcp_writer(a0: SocketAddr): Writer;",
+                aqua: "def tcp(a0: SocketAddr): Writer;",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     let v0 = _v[0].as_socket_addr();
                     Writer::tcp(v0).into()
                 },
             },
             ImplDecl::Def {
-                aqua: "def kafka_writer(a0: SocketAddr, a1: String): Writer;",
+                aqua: "def kafka(a0: SocketAddr, a1: String): Writer;",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = _v[0].as_socket_addr();
                     // let v1 = _v[1].as_string();

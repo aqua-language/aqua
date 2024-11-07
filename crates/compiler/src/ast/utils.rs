@@ -59,6 +59,14 @@ impl StmtTrait {
     }
 }
 
+impl StmtTraitDef {
+    pub fn type_of(&self) -> Type {
+        let ts = self.params.values().cloned().collect();
+        let t = self.ty.clone();
+        Type::Lambda(ts, Rc::new(t))
+    }
+}
+
 impl StmtDef {
     pub fn type_of(&self) -> Type {
         let ts = self.params.values().cloned().collect();

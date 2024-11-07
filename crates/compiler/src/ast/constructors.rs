@@ -91,10 +91,6 @@ impl StmtTrait {
                 .iter()
                 .map(|x| Type::Generic(*x))
                 .collect::<Vec<_>>(),
-            self.types
-                .iter()
-                .map(|s| (s.name, Type::Unknown))
-                .collect::<Map<_, _>>(),
         ))
     }
 }
@@ -207,7 +203,7 @@ impl Segment {
     pub fn new(span: Span, name: Name, ts: Vec<Type>, xts: Map<Name, Type>) -> Self {
         Self {
             span,
-            name,
+            x: name,
             ts,
             xts,
         }
@@ -230,6 +226,15 @@ impl Name {
     }
 }
 
+impl From<Symbol> for Name {
+    fn from(data: Symbol) -> Name {
+        Name {
+            span: Span::Generated,
+            data,
+        }
+    }
+}
+
 impl Index {
     pub fn new(span: Span, index: usize) -> Index {
         Index { span, data: index }
@@ -237,10 +242,10 @@ impl Index {
 }
 
 impl Aggr {
-    pub fn new(x: Name, e0: Expr, e1: Expr, e2: Option<Expr>) -> Aggr {
+    pub fn new(x0: Name, x1: Name, e1: Expr, e2: Option<Expr>) -> Aggr {
         Aggr {
-            x,
-            e0: Rc::new(e0),
+            x0,
+            x1,
             e1: Rc::new(e1),
             e2: e2.map(Rc::new),
         }
@@ -248,7 +253,7 @@ impl Aggr {
 }
 
 impl Trait {
-    pub fn new(x: Name, ts: Vec<Type>, xts: Map<Name, Type>) -> Trait {
-        Trait { x, ts, xts }
+    pub fn new(x: Name, ts: Vec<Type>) -> Trait {
+        Trait { x, ts }
     }
 }

@@ -4,7 +4,7 @@ use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::Impl;
 use crate::ast::Type;
-use crate::traversal::mapper::AcceptMapper;
+use crate::traversal::mapper::Mappable;
 use crate::traversal::mapper::Mapper;
 
 use super::Constraint;
@@ -19,12 +19,13 @@ impl Expand {
 
 impl Mapper for Expand {
     fn map_type(&mut self, t0: &Type) -> Type {
-        if let Type::Assoc(b, x, _) = t0 {
-            if let Some(t1) = b.as_trait().unwrap().xts.get(x) {
-                t1.map(self)
-            } else {
-                t0.clone()
-            }
+        if let Type::Assoc(_b, _x, _) = t0 {
+            todo!()
+            // if let Some(t1) = b.as_trait().unwrap().xts.get(x) {
+            //     t1.map(self)
+            // } else {
+            //     t0.clone()
+            // }
         } else {
             self._map_type(t0)
         }

@@ -58,23 +58,6 @@ macro_rules! check {
     }};
 }
 
-trait TestUtils {
-    fn parse_expr(&self) -> Result<Value, Recovered<Value>>;
-    fn parse_stmt(&self) -> Result<Stmt, Recovered<Stmt>>;
-}
-
-impl TestUtils for &'static str {
-    fn parse_expr(&self) -> Result<Value, Recovered<Value>> {
-        Compiler::default().init().interpret("test", self)
-    }
-
-    fn parse_stmt(&self) -> Result<Stmt, Recovered<Stmt>> {
-        Compiler::default()
-            .init()
-            .parse("test", self, |p| p.parse(Parser::stmt).unwrap())
-    }
-}
-
 pub fn diff(a: String, b: String) -> String {
     let mut output = String::new();
     let diff = similar::TextDiff::from_lines(&a, &b);
@@ -139,8 +122,4 @@ pub fn monomorphise(input: &str) -> Result<Program, Recovered<Program>> {
 
 pub fn interpret(input: impl AsRef<str>) -> Result<Value, Recovered<Value>> {
     Compiler::default().init().interpret("test", input.as_ref())
-}
-
-pub fn codegen(input: &str) -> String {
-    Compiler::default().init().codegen_rust("test", input)
 }

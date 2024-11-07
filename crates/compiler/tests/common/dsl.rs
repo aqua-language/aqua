@@ -125,7 +125,7 @@ pub fn trait_bound<const N: usize, const M: usize>(
     ts: [Type; N],
     xts: [(&'static str, Type); M],
 ) -> Impl {
-    Impl::Trait(Trait::new(name(x), vec(ts), name_map(xts)))
+    Impl::Trait(Trait::new(name(x), vec(ts)))
 }
 
 pub fn bound_err() -> Impl {
@@ -589,6 +589,18 @@ pub fn expr_assoc<const N: usize>(b: Impl, x1: &'static str, ts1: [Type; N]) -> 
     Expr::Assoc(span(), Type::Unknown, b, name(x1), vec(ts1))
 }
 
+pub fn impl_unknown() -> Impl {
+    Impl::Unknown
+}
+
+pub fn impl_type(t: Type) -> Impl {
+    Impl::Type(Rc::new(t))
+}
+
+pub fn expr_assoc_unknown<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
+    expr_assoc(impl_unknown(), x, ts)
+}
+
 pub fn expr_assign(e0: Expr, e1: Expr) -> Expr {
     Expr::Assign(span(), Type::Unknown, Rc::new(e0), Rc::new(e1))
 }
@@ -838,13 +850,15 @@ pub fn expr_if(e0: Expr, b0: Block) -> Expr {
         span(),
         Type::Unknown,
         Rc::new(e0),
-        b0,
-        block([], expr_unit()),
+        Rc::new(Expr::Block(span(), Type::Unknown, b0)),
+        Rc::new(Expr::Block(span(), Type::Unknown, block([], expr_unit()))),
     )
 }
 
 pub fn expr_if_else(e0: Expr, b0: Block, b1: Block) -> Expr {
-    Expr::IfElse(span(), Type::Unknown, Rc::new(e0), b0, b1)
+    let e1 = Expr::Block(span(), Type::Unknown, b0);
+    let e2 = Expr::Block(span(), Type::Unknown, b1);
+    Expr::IfElse(span(), Type::Unknown, Rc::new(e0), Rc::new(e1), Rc::new(e2))
 }
 
 pub fn expr_def<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
@@ -994,16 +1008,17 @@ pub fn query_over_compute<const N: usize>(e: Expr, aggs: [Aggr; N]) -> Query {
     Query::OverCompute(span(), Rc::new(e), vec(aggs))
 }
 
-pub fn aggr(x: &'static str, e0: Expr, e1: Expr) -> Aggr {
-    Aggr::new(name(x), e0, e1, None)
+pub fn aggr(x0: &'static str, x1: &'static str, e: Expr) -> Aggr {
+    Aggr::new(name(x0), name(x1), e, None)
 }
 
-pub fn aggr_if(x: &'static str, e0: Expr, e1: Expr, e2: Expr) -> Aggr {
-    Aggr::new(name(x), e0, e1, Some(e2))
+pub fn aggr_if(x0: &'static str, x1: &'static str, e1: Expr, e2: Expr) -> Aggr {
+    Aggr::new(name(x0), name(x1), e1, Some(e2))
 }
 
 pub fn expr_while(e: Expr, b: Block) -> Expr {
-    Expr::While(span(), Type::Unknown, Rc::new(e), b)
+    let e1 = Expr::Block(span(), Type::Unknown, b);
+    Expr::While(span(), Type::Unknown, Rc::new(e), Rc::new(e1))
 }
 
 pub fn span() -> Span {

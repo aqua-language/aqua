@@ -26,167 +26,29 @@ use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
 use crate::ast::TypeVar;
-use crate::infer::Constraint;
+use crate::infer::solver::Constraint;
 use crate::print::Print;
 
-impl std::fmt::Display for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Pretty::new(f).expr(self)
-    }
-}
-
-impl std::fmt::Display for ExprBody {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Pretty::new(f).expr_body(self)
-    }
-}
-
-impl std::fmt::Display for Block {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Pretty::new(f).block(self)
-    }
-}
-
-impl std::fmt::Display for Program {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Pretty::new(f).program(self)
-    }
-}
-
-impl std::fmt::Display for Path {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Pretty::new(f).path(self)
-    }
-}
-
-impl std::fmt::Display for Stmt {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).stmt(self)
-    }
-}
-
-impl std::fmt::Display for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).ty(self)
-    }
-}
-
-impl std::fmt::Display for Name {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).name(self)
-    }
-}
-
-impl std::fmt::Display for Index {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).index(self)
-    }
-}
-
-impl std::fmt::Display for Pat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).pat(self)
-    }
-}
-
-impl std::fmt::Display for Impl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).imp(self)
-    }
-}
-
-impl std::fmt::Display for Query {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).query_clause(self)
-    }
-}
-
-impl std::fmt::Display for StmtImpl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).stmt_impl(self)
-    }
-}
-
-impl std::fmt::Display for StmtDef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).stmt_def(self)
-    }
-}
-
-impl std::fmt::Display for StmtVar {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).stmt_var(self)
-    }
-}
-
-impl std::fmt::Display for StmtStruct {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).stmt_struct(self)
-    }
-}
-
-impl std::fmt::Display for StmtTraitDef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).stmt_def_decl(self)
-    }
-}
-
-impl std::fmt::Display for TypeVar {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl std::fmt::Display for ImplVar {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl std::fmt::Display for StmtTrait {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).stmt_trait(self)
-    }
-}
-
-impl std::fmt::Display for Constraint {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).constraint(self)
-    }
-}
-
-impl std::fmt::Display for Trait {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).tr(self)
-    }
-}
-
-impl<'a, 'b> Print<'b> for Pretty<'a, 'b> {
-    fn fmt(&mut self) -> &mut std::fmt::Formatter<'b> {
-        self.f
-    }
-
-    fn get_indent(&mut self) -> &mut usize {
-        &mut self.indent_level
-    }
-
-    fn should_indent(&mut self) -> bool {
-        self.noindent
-    }
-}
-
-pub struct Pretty<'a, 'b> {
+struct Printer<'a, 'b> {
     f: &'a mut std::fmt::Formatter<'b>,
-    noindent: bool,
     indent_level: usize,
     verbose: bool,
 }
 
-impl<'a, 'b> Pretty<'a, 'b> {
-    fn new(f: &'a mut std::fmt::Formatter<'b>) -> Pretty<'a, 'b> {
-        Pretty {
+impl<'a, 'b> Print<'b> for Printer<'a, 'b> {
+    fn fmt(&mut self) -> &mut std::fmt::Formatter<'b> {
+        self.f
+    }
+
+    fn indent_mut(&mut self) -> &mut usize {
+        &mut self.indent_level
+    }
+}
+
+impl<'a, 'b> Printer<'a, 'b> {
+    fn new(f: &'a mut std::fmt::Formatter<'b>) -> Printer<'a, 'b> {
+        Printer {
             f,
-            noindent: false,
             indent_level: 0,
             verbose: false,
         }
@@ -457,7 +319,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Expr::Struct(_, _, name, ts, xes) => {
                 self.name(name)?;
                 self.type_args(ts)?;
-                self.fields(xes.as_ref(), Self::assign)?;
+                self.fields(xes.as_ref(), Self::expr_field)?;
             }
             Expr::Enum(_, _, name, ts, x, e) => {
                 self.name(name)?;
@@ -569,27 +431,27 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.space()?;
                 self.comma_scope(arms, Self::arm)?;
             }
-            Expr::While(_, _, e0, b) => {
+            Expr::While(_, _, e0, e1) => {
                 self.kw("while")?;
                 self.space()?;
                 self.expr(e0)?;
                 self.space()?;
-                self.block(b)?;
+                self.expr(e1)?;
             }
             Expr::Record(_, _, xts) => {
                 self.kw("record")?;
-                self.fields(xts.as_ref(), Self::assign)?;
+                self.fields(xts.as_ref(), Self::expr_field)?;
             }
-            Expr::For(_, _, x, e, b) => {
+            Expr::For(_, _, x, e0, e1) => {
                 self.kw("for")?;
                 self.space()?;
                 self.name(x)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
-                self.expr(e)?;
+                self.expr(e0)?;
                 self.space()?;
-                self.block(b)?;
+                self.expr(e1)?;
             }
             Expr::Char(_, _, c) => {
                 self.char(*c)?;
@@ -625,16 +487,16 @@ impl<'a, 'b> Pretty<'a, 'b> {
                 self.type_args(ts)?;
                 self.paren(|this| this.comma_sep(es, Self::expr))?;
             }
-            Expr::IfElse(_, _, e, b0, b1) => {
+            Expr::IfElse(_, _, e0, e1, e2) => {
                 self.kw("if")?;
                 self.space()?;
-                self.expr(e)?;
+                self.expr(e0)?;
                 self.space()?;
-                self.block(b0)?;
+                self.expr(e1)?;
                 self.space()?;
                 self.kw("else")?;
                 self.space()?;
-                self.block(b1)?;
+                self.expr(e2)?;
             }
             Expr::IntSuffix(_, _, v, x) => {
                 self.lit(v)?;
@@ -735,13 +597,13 @@ impl<'a, 'b> Pretty<'a, 'b> {
         Ok(())
     }
 
-    fn assign(&mut self, (x, e): &(Name, Expr)) -> std::fmt::Result {
+    fn expr_field(&mut self, (x, e): &(Name, Expr)) -> std::fmt::Result {
         self.name(x)?;
         self.punct(" = ")?;
         self.expr(e)
     }
 
-    fn bind(&mut self, (p, e): &(Name, Pat)) -> std::fmt::Result {
+    fn pat_field(&mut self, (p, e): &(Name, Pat)) -> std::fmt::Result {
         self.name(p)?;
         self.punct("=")?;
         self.pat(e)
@@ -782,7 +644,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Query::Select(_, xes) => {
                 self.kw("select")?;
                 self.space()?;
-                self.comma_scope(xes.as_ref(), Self::assign)?;
+                self.comma_scope(xes.as_ref(), Self::expr_field)?;
             }
             Query::GroupOverCompute(_, x, e0, e1, aggrs) => {
                 self.kw("group")?;
@@ -864,9 +726,9 @@ impl<'a, 'b> Pretty<'a, 'b> {
     }
 
     fn aggr(&mut self, a: &Aggr) -> std::fmt::Result {
-        self.name(&a.x)?;
+        self.name(&a.x0)?;
         self.punct("=")?;
-        self.expr(&a.e0)?;
+        self.name(&a.x1)?;
         self.space()?;
         self.kw("of")?;
         self.space()?;
@@ -882,22 +744,8 @@ impl<'a, 'b> Pretty<'a, 'b> {
 
     fn tr(&mut self, tr: &Trait) -> std::fmt::Result {
         self.name(&tr.x)?;
-        if !tr.ts.is_empty() || !tr.xts.is_empty() {
-            self.brack(|this| {
-                this.if_nonempty(&tr.ts, |this, ts| this.comma_sep(ts, Self::ty))?;
-                this.if_nonempty(&tr.xts, |this, xts| {
-                    if !tr.ts.is_empty() {
-                        this.punct(",")?;
-                        this.space()?;
-                    }
-                    this.comma_sep(xts, |this, (x, t)| {
-                        this.name(x)?;
-                        this.punct("=")?;
-                        this.ty(t)
-                    })
-                })?;
-                Ok(())
-            })?;
+        if !tr.ts.is_empty() {
+            self.brack(|this| this.if_nonempty(&tr.ts, |this, ts| this.comma_sep(ts, Self::ty)))?;
         }
         Ok(())
     }
@@ -1044,7 +892,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
             Pat::Struct(_, _, name, ts, xps) => {
                 self.name(name)?;
                 self.type_args(ts)?;
-                self.fields(xps, Self::bind)?;
+                self.fields(xps, Self::pat_field)?;
             }
             Pat::Enum(_, _, name, ts, x1, p) => {
                 self.name(name)?;
@@ -1058,7 +906,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
             }
             Pat::Record(_, _, xps) => {
                 self.kw("record")?;
-                self.fields(xps, Self::bind)?;
+                self.fields(xps, Self::pat_field)?;
             }
             Pat::Or(_, _, p0, p1) => {
                 self.pat(p0)?;
@@ -1088,7 +936,7 @@ impl<'a, 'b> Pretty<'a, 'b> {
     }
 
     fn segment(&mut self, seg: &Segment) -> std::fmt::Result {
-        self.name(&seg.name)?;
+        self.name(&seg.x)?;
         if !seg.ts.is_empty() || !seg.xts.is_empty() {
             self.brack(|this| {
                 this.if_nonempty(&seg.ts, |this, ts| this.comma_sep(ts, Self::ty))?;
@@ -1158,141 +1006,257 @@ impl<'a, 'b> Pretty<'a, 'b> {
     }
 }
 
-pub trait IntoVerbose {
-    fn verbose(&self) -> Verbose<&Self>;
-}
-
-impl IntoVerbose for Vec<Stmt> {
-    fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl IntoVerbose for Vec<Expr> {
-    fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
-impl IntoVerbose for Vec<Type> {
-    fn verbose(&self) -> Verbose<&Self> {
-        Verbose(self)
-    }
-}
-
 impl<'a> std::fmt::Display for Verbose<&'a Vec<Stmt>> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Pretty::new(f).verbose().stmts(self.0)
+        Printer::new(f).verbose().stmts(self.0)
     }
 }
 
 impl<'a> std::fmt::Display for Verbose<&'a Vec<Expr>> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Pretty::new(f).verbose().expr_args(self.0)
+        Printer::new(f).verbose().expr_args(self.0)
     }
 }
 
 impl<'a> std::fmt::Display for Verbose<&'a Vec<Type>> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Pretty::new(f).verbose().type_args(self.0)
+        Printer::new(f).verbose().type_args(self.0)
     }
 }
 
-pub struct Verbose<T>(T);
+impl std::fmt::Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Printer::new(f).expr(self)
+    }
+}
+
+impl std::fmt::Display for ExprBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Printer::new(f).expr_body(self)
+    }
+}
+
+impl std::fmt::Display for Block {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Printer::new(f).block(self)
+    }
+}
+
+impl std::fmt::Display for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Printer::new(f).program(self)
+    }
+}
+
+impl std::fmt::Display for Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        Printer::new(f).path(self)
+    }
+}
+
+impl std::fmt::Display for Stmt {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).stmt(self)
+    }
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).ty(self)
+    }
+}
+
+impl std::fmt::Display for Name {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).name(self)
+    }
+}
+
+impl std::fmt::Display for Index {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).index(self)
+    }
+}
+
+impl std::fmt::Display for Pat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).pat(self)
+    }
+}
+
+impl std::fmt::Display for Impl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).imp(self)
+    }
+}
+
+impl std::fmt::Display for Query {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).query_clause(self)
+    }
+}
+
+impl std::fmt::Display for StmtImpl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).stmt_impl(self)
+    }
+}
+
+impl std::fmt::Display for StmtDef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).stmt_def(self)
+    }
+}
+
+impl std::fmt::Display for StmtVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).stmt_var(self)
+    }
+}
+
+impl std::fmt::Display for StmtStruct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).stmt_struct(self)
+    }
+}
+
+impl std::fmt::Display for StmtTraitDef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).stmt_def_decl(self)
+    }
+}
+
+impl std::fmt::Display for TypeVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::fmt::Display for ImplVar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::fmt::Display for StmtTrait {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).stmt_trait(self)
+    }
+}
+
+impl std::fmt::Display for Constraint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).constraint(self)
+    }
+}
+
+impl std::fmt::Display for Trait {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).tr(self)
+    }
+}
+
+struct Verbose<T>(T);
 
 impl Program {
-    pub fn verbose(&self) -> Verbose<&Self> {
+    pub fn verbose(&self) -> impl std::fmt::Display + '_ {
         Verbose(self)
     }
 }
 
 impl Expr {
-    pub fn verbose(&self) -> Verbose<&Self> {
+    pub fn verbose(&self) -> impl std::fmt::Display + '_ {
         Verbose(self)
     }
 }
 
 impl Pat {
-    pub fn verbose(&self) -> Verbose<&Self> {
+    pub fn verbose(&self) -> impl std::fmt::Display + '_ {
         Verbose(self)
     }
 }
 
 impl Stmt {
-    pub fn verbose(&self) -> Verbose<&Self> {
+    pub fn verbose(&self) -> impl std::fmt::Display + '_ {
         Verbose(self)
     }
 }
 
 impl Type {
-    pub fn verbose(&self) -> Verbose<&Self> {
+    pub fn verbose(&self) -> impl std::fmt::Display + '_ {
         Verbose(self)
     }
 }
 
 impl Path {
-    pub fn verbose(&self) -> Verbose<&Self> {
+    pub fn verbose(&self) -> impl std::fmt::Display + '_ {
         Verbose(self)
     }
 }
 
 impl StmtTraitDef {
-    pub fn verbose(&self) -> Verbose<&Self> {
+    pub fn verbose(&self) -> impl std::fmt::Display + '_ {
         Verbose(self)
     }
 }
 
 impl StmtTrait {
-    pub fn verbose(&self) -> Verbose<&Self> {
+    pub fn verbose(&self) -> impl std::fmt::Display + '_ {
         Verbose(self)
     }
 }
 
 impl StmtImpl {
-    pub fn verbose(&self) -> Verbose<&Self> {
+    pub fn verbose(&self) -> impl std::fmt::Display + '_ {
         Verbose(self)
     }
 }
 
 impl Impl {
-    pub fn verbose(&self) -> Verbose<&Self> {
+    pub fn verbose(&self) -> impl std::fmt::Display + '_ {
         Verbose(self)
     }
 }
 
 impl<'a> std::fmt::Display for Verbose<&'a Program> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().program(self.0)
+        Printer::new(f).verbose().program(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&StmtImpl> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().stmt_impl(self.0)
+        Printer::new(f).verbose().stmt_impl(self.0)
+    }
+}
+
+impl std::fmt::Display for Verbose<&StmtTrait> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).verbose().stmt_trait(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&Expr> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().expr(self.0)
+        Printer::new(f).verbose().expr(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&Pat> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().pat(self.0)
+        Printer::new(f).verbose().pat(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&Stmt> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().stmt(self.0)
+        Printer::new(f).verbose().stmt(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&Type> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut p = Pretty::new(f);
+        let mut p = Printer::new(f);
         p.verbose = true;
         p.ty(self.0)
     }
@@ -1300,18 +1264,18 @@ impl std::fmt::Display for Verbose<&Type> {
 
 impl std::fmt::Display for Verbose<&Path> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().path(self.0)
+        Printer::new(f).verbose().path(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&StmtTraitDef> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().stmt_def_decl(self.0)
+        Printer::new(f).verbose().stmt_def_decl(self.0)
     }
 }
 
 impl std::fmt::Display for Verbose<&Impl> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Pretty::new(f).verbose().imp(self.0)
+        Printer::new(f).verbose().imp(self.0)
     }
 }

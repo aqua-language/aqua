@@ -24,7 +24,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def logpath(inst: Instance): Path;",
                 codegen: None,
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let v0 = v[0].as_instance();
                     // v0.log.into()
@@ -33,7 +33,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def wait(inst: Instance): ();",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_instance();
                     if let Err(e) = v0.wait() {
                         eprintln!("{e}")
@@ -44,7 +44,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def stop(inst: Instance): ();",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_instance();
                     if let Err(e) = v0.stop() {
                         eprintln!("{e}")

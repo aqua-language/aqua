@@ -27,7 +27,7 @@ fn declare(ctx: &mut Context) {
                 java: "Set.new",
                 egglog: None,
             }),
-            fun: |_ctx, _v| Set::new().into(),
+            eval: |_ctx, _v| Set::new().into(),
         }],
     });
 }

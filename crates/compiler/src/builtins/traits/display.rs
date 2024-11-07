@@ -8,8 +8,8 @@ use linkme::distributed_slice;
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
         aqua: "trait Display[T] {
-             def toString(v:T): String;
-         }",
+                   def toString(v: T): String;
+               }",
     });
 }
 

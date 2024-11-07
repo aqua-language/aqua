@@ -1,0 +1,4 @@
+def f(): i32 = 1;
+def y(a:i32): i32 = a;
+y(10);
+var x: String = "foo";

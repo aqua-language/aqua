@@ -1,76 +1,49 @@
-(include "data.egg")
-(include "desugar.egg")
-(include "row.egg")
-(include "arith.egg")
-(include "logic.egg")
-(include "if-else.egg")
-(include "compare.egg")
-(include "env.egg")
-(include "eval.egg")
-(include "freevars.egg")
-(include "dataflow.egg")
+(sort Stmt)
+(sort StmtList)
+(sort Expr)
+(sort ExprList)
+(sort ExprMap)
+(sort Type)
+(sort TypeList)
+(sort TypeMap)
 
-; Check if an expression contains an expression
-(relation Expr-contains-Expr (Expr Expr))
-(rule ((= e1 (Value v))) ((Expr-contains-Expr e1 v)))
-(rule ((= e1 (Unary op e2))) ((Expr-contains-Expr e1 e2)))
-(rule ((= e1 (Binary op e2 e3))) ((Expr-contains-Expr e1 e2) (Expr-contains-Expr e1 e3)))
+(function ExprListCons (Expr ExprList) ExprList)
+(function ExprListNil () ExprList)
+(function ExprMapCons (String Expr ExprMap) ExprMap)
+(function ExprMapNil () ExprMap)
 
-(relation Expr-is-pure (Expr))
-(rule ((= e (Value _))) ((Expr-is-pure e)))
-(rule ((= e (Unary op e1)) (Expr-is-pure e1)) ((Expr-is-pure e)))
-(rule ((= e (Binary op e1 e2)) (Expr-is-pure e1) (Expr-is-pure e2)) ((Expr-is-pure e)))
+(function TypeListCons (Type TypeList) TypeList)
+(function TypeListNil () TypeList)
+(function TypeMapCons (String Type TypeMap) TypeMap)
+(function TypeMapNil () TypeMap)
 
-;(declare FieldNil FieldList)
-;(function FieldCons (String Expr) FieldList)
+(function ExprInt (Type i64) Expr)
+(function ExprFloat (Type f64) Expr)
+(function ExprBool (Type bool) Expr)
+(function ExprString (Type String) Expr)
+(function ExprChar (Type String) Expr)
+(function ExprTuple (Type ExprList) Expr)
+(function ExprRecord (Type ExprMap) Expr)
+(function ExprIndex (Type Expr i64) Expr)
+(function ExprField (Type Expr String) Expr)
+(function ExprVar (Type String) Expr)
+; Includes both the egg name and the mangled name. For example:
+; (ExprDef "add" "addi32" (TypeLambda
+;   (TypeListCons (TypeCons "i32") (TypeListCons i32 TypeListNil))
+(function ExprDef (Type String String) Expr)
+(function ExprCall (Type Expr ExprList) Expr)
+(function ExprIfElse (Type Expr Expr Expr) Expr)
+(function ExprLetIn (Type String Expr Expr) Expr)
 
-;; ----------------------------------------------------------------------------
+(function TypeCons (String TypeList) Type)
+(function TypeLambda (TypeList Type) Type)
+(function TypeTuple (TypeList) Type)
+(function TypeRecord (TypeMap) Type)
 
-;;; 2 * (x + 3) = 6 + 2 * x
-(let a0 (Mul (I64 2) (Add (Var "x") (I64 3))))
-(let b0 (Add (I64 6) (Mul (I64 2) (Var "x"))))
+(function StmtListCons (Stmt StmtList) StmtList)
+(function StmtListNil () StmtList)
+(function StmtDef (TypeMap Type String Expr) Stmt)
 
-;; 6 + 2 * 3 = 12
-(let a1 (Add (I64 6) (Mul (I64 2) (I64 3))))
-(let b1 (I64 12))
-
-;; 1 + 2 = 3
-(let a2 (Add (I64 1) (I64 2)))
-(let b2 (I64 3))
-
-;; 1 - 2 = -1
-(let a3 (Sub (I64 1) (I64 2)))
-(let b3 (I64 -1))
-
-;; 1 * 2 = 2
-(let a4 (Mul (I64 1) (I64 2)))
-(let b4 (I64 2))
-
-;; 1 / 2 = 0
-(let a5 (Div (I64 1) (I64 2)))
-(let b5 (I64 0))
-
-;; x + 1 = 1 + x
-(let a6 (Add (Var "x") (I64 1)))
-(let b6 (Add (I64 1) (Var "x")))
-
-;; ----------------------------------------------------------------------------
-
-(run-schedule
-  (saturate
-    (seq
-      (run desugar)
-      (run arith)
-      (run logic)
-      (run if-else)
-      (run compare)
-      (run eval)
-      (run dataflow))))
-
-(check (= a0 b0))
-(check (= a1 b1))
-(check (= a2 b2))
-(check (= a3 b3))
-(check (= a4 b4))
-(check (= a5 b5))
-(check (= a6 b6))
+(include "typeof.egg")
+(include "sugar.egg")
+(include "free.egg")

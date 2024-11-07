@@ -4,19 +4,14 @@ use linkme::distributed_slice;
 use runtime::builtins::encoding::Encoding;
 use runtime::builtins::writer::Writer;
 
+use crate::backend::runtime::flink::package::FLINK_WORKSPACE;
+use crate::backend::runtime::native::package::NATIVE_WORKSPACE;
 use crate::builtins::types::stream::Stream;
 use crate::builtins::value::Value;
 use crate::builtins::Context;
 use crate::builtins::Decl;
 use crate::builtins::ImplDecl;
 use crate::builtins::DECLS;
-use crate::codegen::runtime::flink::package::FLINK_WORKSPACE;
-use crate::codegen::runtime::flink::DisplayFlink;
-use crate::codegen::runtime::native::package::NATIVE_WORKSPACE;
-use crate::codegen::runtime::native::DisplayNative;
-use crate::codegen::Codegen;
-
-use super::backend::Backend;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Dataflow {
@@ -45,7 +40,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def collocate(a:Dataflow, b:Dataflow): Dataflow;",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_dataflow();
                     let v1 = v[1].as_dataflow();
                     Dataflow::Collocate(Rc::new(v0), Rc::new(v1)).into()
@@ -54,29 +49,23 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def run(df:Dataflow, backend:Backend): Instance;",
                 codegen: None,
-                fun: |ctx, v| {
+                eval: |ctx, v| {
                     let v0 = v[0].as_dataflow();
                     let v1 = v[1].as_backend();
-                    let source = Codegen::new(&ctx.decls, &v0);
                     match v1 {
-                        Backend::Native => {
-                            let package = NATIVE_WORKSPACE.new_package(source.native()).unwrap();
+                        super::backend::Backend::Native => {
+                            let source = v0.native(&ctx.decls);
+                            let package = NATIVE_WORKSPACE.new_package(source).unwrap();
                             let executable = package.compile().unwrap();
                             let instance = executable.run_locally().unwrap();
                             Value::Instance(instance).into()
                         }
-                        Backend::Flink => {
-                            let package = FLINK_WORKSPACE.new_package(source.flink()).unwrap();
+                        super::backend::Backend::Flink => {
+                            let source = v0.flink(&ctx.decls);
+                            let package = FLINK_WORKSPACE.new_package(source).unwrap();
                             let executable = package.compile().unwrap();
                             let instance = executable.run().unwrap();
                             Value::Instance(instance).into()
-                        }
-                        Backend::Spark => {
-                            todo!()
-                            // let package = FLINK_WORKSPACE.new_package(source.spark()).unwrap();
-                            // let executable = package.compile().unwrap();
-                            // let instance = executable.run().unwrap();
-                            // Value::Instance(instance).into()
                         }
                     }
                 },

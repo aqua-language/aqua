@@ -4,9 +4,14 @@ use egglog::ast::GenericCommand;
 use egglog::ast::GenericFact;
 use egglog::ast::GenericRunConfig;
 use egglog::ast::GenericSchedule;
+use egglog::Term;
+use egglog::TermDag;
 use symbol_table::GlobalSymbol;
 
-const LIB: &str = include_str!("opt/lib.egg");
+pub mod from_egg;
+pub mod into_egg;
+
+const LIB: &str = include_str!("lib.egg");
 
 pub struct Optimiser {
     egraph: egglog::EGraph,
@@ -57,8 +62,39 @@ impl Optimiser {
             Err(e) => panic!("unexpected error: {:?}", e),
         }
     }
-    
-    pub fn optimise(&mut self, _a: Expr) -> Expr {
-        todo!()
+
+    pub fn opt(&mut self, e: Expr) -> (TermDag, Term) {
+        let x = "_0".into();
+        self.egraph
+            .run_program(vec![
+                GenericCommand::Action(GenericAction::Let((), x, e)),
+                GenericCommand::RunSchedule(
+                    GenericSchedule::Run(GenericRunConfig {
+                        ruleset: "".into(),
+                        until: None,
+                    })
+                    .saturate(),
+                ),
+            ])
+            .unwrap();
+        let (sort, value) = self
+            .egraph
+            .eval_expr(&egglog::ast::Expr::Var((), x.into()))
+            .unwrap();
+        let mut termdag = TermDag::default();
+        let (_, term) = self.egraph.extract(value, &mut termdag, &sort);
+        (termdag, term)
     }
+
+    pub fn transaction<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.egraph
+            .run_program(vec![GenericCommand::Push(1)])
+            .unwrap();
+        let v = f(self);
+        self.egraph
+            .run_program(vec![GenericCommand::Pop(1)])
+            .unwrap();
+        v
+    }
+
 }

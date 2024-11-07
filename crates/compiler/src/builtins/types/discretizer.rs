@@ -19,7 +19,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def tumbling(): Assigner;",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let a0 = v[0].as_duration();
                     Assigner::tumbling(a0).into()
                 },
@@ -27,7 +27,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def sliding(): Assigner;",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let a0 = v[0].as_duration();
                     let a1 = v[1].as_duration();
                     Assigner::sliding(a0, a1).into()
@@ -36,7 +36,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def session(): Assigner;",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let a0 = v[0].as_duration();
                     Assigner::session(a0).into()
                 },
@@ -44,7 +44,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def counting(): Assigner;",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let a0 = v[0].as_i32();
                     Assigner::counting(a0).into()
                 },
@@ -52,7 +52,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def moving(): Assigner;",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let a0 = v[0].as_i32();
                     let a1 = v[1].as_i32();
                     Assigner::moving(a0, a1).into()

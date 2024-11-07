@@ -1,6 +1,6 @@
 use crate::ast::Impl;
 use crate::ast::Type;
-use crate::traversal::mapper::AcceptMapper;
+use crate::traversal::mapper::Mappable;
 use crate::traversal::mapper::Mapper;
 
 use super::Constraint;

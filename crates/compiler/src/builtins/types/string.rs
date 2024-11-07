@@ -27,7 +27,7 @@ fn declare(ctx: &mut Context) {
                     java: "String.new",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // String::new().into()
                 },
@@ -39,7 +39,7 @@ fn declare(ctx: &mut Context) {
                     java: "String.with_capacity",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let a0 = v[0].as_usize();
                     // String::with_capacity(a0).into()
@@ -52,7 +52,7 @@ fn declare(ctx: &mut Context) {
                     java: "String.push",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let a0 = v[0].as_string();
                     // let a1 = v[1].as_char();
@@ -66,7 +66,7 @@ fn declare(ctx: &mut Context) {
                     java: "String.push",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let a0 = v[0].as_string();
                     // let a1 = v[1].as_string();
@@ -80,7 +80,7 @@ fn declare(ctx: &mut Context) {
                     java: "String.remove",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let a0 = v[0].as_string();
                     // let a1 = v[1].as_usize();
@@ -95,7 +95,7 @@ fn declare(ctx: &mut Context) {
                     java: "String.insert",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let a0 = v[0].as_string();
                     // let a1 = v[1].as_usize();
@@ -110,7 +110,7 @@ fn declare(ctx: &mut Context) {
                     java: "String.isEmpty",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let a0 = v[0].as_string();
                     // a0.is_empty().into()
@@ -123,7 +123,7 @@ fn declare(ctx: &mut Context) {
                     java: "String.splitOff",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let a0 = v[0].as_string();
                     // let a1 = v[1].as_usize();
@@ -138,10 +138,9 @@ fn declare(ctx: &mut Context) {
                     java: "String.clear",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
-                    todo!()
-                    // let a0 = v[0].as_string();
-                    // a0.clear().into()
+                eval: |_ctx, v| {
+                    let a0 = v[0].as_string();
+                    a0.clear().into()
                 },
             },
             ImplDecl::Def {
@@ -151,10 +150,22 @@ fn declare(ctx: &mut Context) {
                     java: "String.len",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
-                    todo!()
-                    // let a0 = v[0].as_string();
-                    // a0.len().into()
+                eval: |_ctx, v| {
+                    let a0 = v[0].as_string();
+                    a0.len().into()
+                },
+            },
+            ImplDecl::Def {
+                aqua: "def concat(a: String, b: String): String;",
+                codegen: Some(Codegen {
+                    rust: "String::concat",
+                    java: "String::concat",
+                    egglog: None,
+                }),
+                eval: |_ctx, v| {
+                    let a0 = v[0].as_string();
+                    let a1 = v[1].as_string();
+                    a0.concat(&a1).into()
                 },
             },
             // ImplDecl::Def {
@@ -183,7 +194,7 @@ fn declare(ctx: &mut Context) {
                     java: "String.lines",
                     egglog: None,
                 }),
-                fun: |_ctx, _v| {
+                eval: |_ctx, _v| {
                     todo!()
                     // let a0 = v[0].as_string();
                     // let a0: Vec<_> = a0
@@ -196,5 +207,18 @@ fn declare(ctx: &mut Context) {
                 },
             },
         ],
+    });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl Display[String]",
+        decls: &[ImplDecl::Def {
+            aqua: "def toString(s: String): String;",
+            codegen: Some(Codegen {
+                rust: "String::to_string",
+                java: "String.toString",
+                egglog: None,
+            }),
+            eval: |_ctx, v| v[0].as_string().into(),
+        }],
     });
 }

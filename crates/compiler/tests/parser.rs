@@ -1,5 +1,6 @@
 #[macro_use]
 mod common;
+use common::dsl::expr_assoc_unknown;
 use common::dsl::query_join_on;
 use common::dsl::sugared::expr_anonymous;
 use common::passes::parse_expr;
@@ -1373,9 +1374,9 @@ fn test_parser_expr_query8() {
             query_over_compute(
                 expr_call_direct("tumbling", [], [expr_int("60")]),
                 [
-                    aggr("total", expr_var("sum"), expr_var("x")),
-                    aggr("lowest", expr_var("min"), expr_var("x")),
-                    aggr("highest", expr_var("max"), expr_var("x")),
+                    aggr("total", "sum", expr_var("x")),
+                    aggr("lowest", "min", expr_var("x")),
+                    aggr("highest", "max", expr_var("x")),
                 ],
             ),
             query_select([("x", expr_int("1")), ("y", expr_int("2"))]),
@@ -1496,8 +1497,8 @@ fn test_parser_expr_query12() {
                 expr_tuple([expr_var("x"), expr_var("y")]),
                 expr_call_direct("tumbling", [], [expr_int("60")]),
                 [
-                    aggr("xsum", expr_var("sum"), expr_var("x")),
-                    aggr("ymin", expr_var("min"), expr_var("y")),
+                    aggr("xsum", "sum", expr_var("x")),
+                    aggr("ymin", "min", expr_var("y")),
                 ],
             ),
         ],
@@ -1811,9 +1812,16 @@ fn test_parser_expr_break0() {
 }
 
 #[test]
-fn test_parser_anonymous() {
+fn test_parser_anonymous_var() {
     let a = parse_expr(aqua!("_")).unwrap();
     let b = expr_anonymous();
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_anonymous_impl() {
+    let a = parse_expr(aqua!("_::x[i32]")).unwrap();
+    let b = expr_assoc_unknown("x", [ty("i32")]);
     check!(a, b);
 }
 

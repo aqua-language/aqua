@@ -1,10 +1,16 @@
 #![no_main]
 
-use compiler::source::SourceId;
+use std::rc::Rc;
+
+use compiler::lexer::Lexer;
+use compiler::source::Cache;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
     if let Ok(s) = std::str::from_utf8(data) {
-        for _ in compiler::lexer::Lexer::new(SourceId::new("file0", s), s) {}
+        let mut cache = Cache::new();
+        let s: Rc<str> = s.into();
+        let id = cache.add("test", s.clone());
+        for _ in Lexer::new(id, &s) {}
     }
 });

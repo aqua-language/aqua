@@ -27,7 +27,7 @@ fn declare(ctx: &mut Context) {
                     java: "Duration.seconds",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     Duration::from_seconds(v0 as i64).into()
                 },
@@ -39,7 +39,7 @@ fn declare(ctx: &mut Context) {
                     java: "Duration.milliseconds",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     Duration::from_milliseconds(v0 as i64).into()
                 },
@@ -51,7 +51,7 @@ fn declare(ctx: &mut Context) {
                     java: "Duration.microseconds",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     Duration::from_microseconds(v0 as i64).into()
                 },
@@ -63,9 +63,21 @@ fn declare(ctx: &mut Context) {
                     java: "Duration.nanoseconds",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i32();
                     Duration::from_nanoseconds(v0 as i64).into()
+                },
+            },
+            ImplDecl::Def {
+                aqua: "def postfix_min(v:i32): Duration;",
+                codegen: Some(Codegen {
+                    rust: "Duration::minutes",
+                    java: "Duration.minutes",
+                    egglog: None,
+                }),
+                eval: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    Duration::from_minutes(v0 as i64).into()
                 },
             },
             ImplDecl::Def {
@@ -75,7 +87,7 @@ fn declare(ctx: &mut Context) {
                     java: "Duration.fromSeconds",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i64();
                     Duration::from_seconds(v0).into()
                 },
@@ -87,7 +99,7 @@ fn declare(ctx: &mut Context) {
                     java: "Duration.fromMilliseconds",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i64();
                     Duration::from_milliseconds(v0).into()
                 },
@@ -99,7 +111,7 @@ fn declare(ctx: &mut Context) {
                     java: "Duration.fromMicroseconds",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i64();
                     Duration::from_microseconds(v0).into()
                 },
@@ -111,7 +123,7 @@ fn declare(ctx: &mut Context) {
                     java: "Duration.fromNanoseconds",
                     egglog: None,
                 }),
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_i64();
                     Duration::from_nanoseconds(v0).into()
                 },

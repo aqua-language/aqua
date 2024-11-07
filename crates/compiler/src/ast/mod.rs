@@ -1,6 +1,5 @@
 mod constructors;
 mod downcasts;
-pub mod into_egg;
 mod span_of;
 mod type_of;
 mod upcasts;
@@ -46,7 +45,7 @@ pub struct Path {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Segment {
     pub span: Span,
-    pub name: Name,
+    pub x: Name,
     pub ts: Vec<Type>,
     pub xts: Map<Name, Type>,
 }
@@ -93,15 +92,14 @@ pub enum Impl {
     Err,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct ImplVar(pub u32);
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Trait {
     pub x: Name,
     pub ts: Vec<Type>,
-    pub xts: Map<Name, Type>,
 }
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct ImplVar(pub u32);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Send, Sync)]
 pub enum Type {
@@ -118,8 +116,7 @@ pub enum Type {
     Never,
     Paren(Rc<Type>),
     Err,
-    // A placeholder for a type that has not been annotated yet.
-    Unknown,
+    Unknown, // A placeholder for a type that has not been annotated yet.
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -220,7 +217,16 @@ pub struct BuiltinDef {
 pub struct Codegen {
     pub rust: &'static str,
     pub java: &'static str,
-    pub egglog: Option<&'static str>,
+    pub egglog: Option<Egglog>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Egglog {
+    pub name: &'static str,
+    pub code: for<'a> fn(
+        &str,
+        &'a mut std::fmt::Formatter<'a>,
+    ) -> std::result::Result<(), std::fmt::Error>,
 }
 
 impl PartialEq for BuiltinDef {
@@ -238,6 +244,15 @@ pub struct BuiltinType {
 pub struct Index {
     pub span: Span,
     pub data: usize,
+}
+
+impl From<usize> for Index {
+    fn from(data: usize) -> Self {
+        Index {
+            span: Span::Generated,
+            data,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -276,15 +291,15 @@ pub enum Expr {
     ),
     Assoc(Span, Type, Impl, Name, Vec<Type>),
     Match(Span, Type, Rc<Expr>, Map<Pat, Expr>),
-    IfElse(Span, Type, Rc<Expr>, Block, Block),
+    IfElse(Span, Type, Rc<Expr>, Rc<Expr>, Rc<Expr>),
     Array(Span, Type, Vec<Expr>),
     Assign(Span, Type, Rc<Expr>, Rc<Expr>),
     Return(Span, Type, Rc<Expr>),
     Continue(Span, Type),
     Break(Span, Type),
-    While(Span, Type, Rc<Expr>, Block),
+    While(Span, Type, Rc<Expr>, Rc<Expr>),
     Lambda(Span, Type, Map<Name, Type>, Type, Rc<Expr>),
-    For(Span, Type, Name, Rc<Expr>, Block),
+    For(Span, Type, Name, Rc<Expr>, Rc<Expr>),
     Err(Span, Type),
     InfixBinaryOp(Span, Type, Token, Rc<Expr>, Rc<Expr>),
     PrefixUnaryOp(Span, Type, Token, Rc<Expr>),
@@ -347,11 +362,11 @@ pub enum Query {
 }
 
 /// An aggregation function.
-/// x = e0 of e1
+/// x0 = x1 of e [if e2]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Aggr {
-    pub x: Name,
-    pub e0: Rc<Expr>,
+    pub x0: Name,
+    pub x1: Name,
     pub e1: Rc<Expr>,
     pub e2: Option<Rc<Expr>>,
 }

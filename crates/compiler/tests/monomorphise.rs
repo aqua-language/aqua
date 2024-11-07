@@ -190,7 +190,10 @@ fn test_monomorphise_add_sub() {
 #[test]
 fn test_infer_vec_i32_display() {
     let a = monomorphise(aqua!("Display[Vec[i32]]::toString(Vec[i32]::new());")).unwrap();
-    let b = monomorphise(aqua!("Display[Vec[i32]]::toString(Vec[i32]::new()):String;")).unwrap();
+    let b = monomorphise(aqua!(
+        "Display[Vec[i32]]::toString(Vec[i32]::new()):String;"
+    ))
+    .unwrap();
     check!(a, b);
 }
 

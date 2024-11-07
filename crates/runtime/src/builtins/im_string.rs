@@ -55,3 +55,20 @@ impl From<std::string::String> for String {
         Self(SmolStr::from(s))
     }
 }
+
+impl String {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn clear(&self) -> Self {
+        String::from("")
+    }
+
+    pub fn concat(&self, other: &Self) -> Self {
+        let mut s = std::string::String::with_capacity(self.0.len() + other.0.len());
+        s.push_str(&self.0);
+        s.push_str(&other.0);
+        Self::from(s)
+    }
+}

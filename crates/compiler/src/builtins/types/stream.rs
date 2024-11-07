@@ -35,7 +35,7 @@ fn declare(ctx: &mut Context) {
                      ): Stream[T];"
                 },
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_reader();
                     let v1 = v[1].as_encoding();
                     let v2 = v[2].as_function();
@@ -47,7 +47,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def sink(s: Stream[T], w: Writer, e: Encoding): Dataflow;",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
                     let v1 = v[1].as_writer();
                     let v2 = v[2].as_encoding();
@@ -57,7 +57,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def take(s: Stream[T], n: i32): Stream[T];",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
                     let v1 = v[1].as_i32();
                     Stream(Rc::new(Operator::Take(v0, v1))).into()
@@ -66,7 +66,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def map[U](s: Stream[T], f: T => U): Stream[U];",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
                     let v1 = v[1].as_function();
                     Stream(Rc::new(Operator::Map(v0, v1))).into()
@@ -75,7 +75,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def filter(s: Stream[T], f: T => bool): Stream[T];",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
                     let v1 = v[1].as_function();
                     Stream(Rc::new(Operator::Filter(v0, v1))).into()
@@ -84,7 +84,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def flatmap[U](s: Stream[T], f: T => Vec[U]): Stream[U];",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
                     let v1 = v[1].as_function();
                     Stream(Rc::new(Operator::FlatMap(v0, v1))).into()
@@ -93,7 +93,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua: "def flatten(s: Stream[Vec[T]]): Stream[T];",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
                     Stream(Rc::new(Operator::Flatten(v0))).into()
                 },
@@ -101,7 +101,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua:"def window[U](s: Stream[T], a: Assigner, f: Vec[T] => U): Stream[U];",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
                     let v1 = v[1].as_assigner();
                     let v2 = v[2].as_function();
@@ -111,7 +111,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua:"def incrWindow[P,U](s: Stream[T], a: Assigner, f1: T=>P, f2: (P,P)=>P, f2: P=>U): Stream[U];",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
                     let v1 = v[1].as_assigner();
                     let v2 = v[2].as_function();
@@ -123,7 +123,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua:"def keyby[K](s: Stream[T], f: T => K): KeyedStream[K, T];",
                 codegen: None,
-                fun: |_ctx, v| {
+                eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
                     let v1 = v[1].as_function();
                     Stream(Rc::new(Operator::Keyby(v0, v1))).into()
@@ -132,7 +132,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua:"def merge(s1: Stream[T], s2: Stream[T]): Stream[T];",
                 codegen: None,
-                fun: |_, v| {
+                eval: |_, v| {
                     let v0 = v[0].as_stream();
                     let v1 = v[1].as_stream();
                     Stream(Rc::new(Operator::Merge(v0, v1))).into()
@@ -141,7 +141,7 @@ fn declare(ctx: &mut Context) {
             ImplDecl::Def {
                 aqua:"def collect(s: Stream[T]): Vec[T];",
                 codegen: None,
-                fun: |ctx, v| {
+                eval: |ctx, v| {
                     let v0 = v[0].as_stream();
                     v0.collect(ctx).into()
                 },

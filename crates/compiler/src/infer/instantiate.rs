@@ -5,6 +5,8 @@ use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
+use crate::ast::StmtTrait;
+use crate::ast::StmtTraitDef;
 use crate::ast::Type;
 use crate::traversal::mapper::Mapper;
 
@@ -80,6 +82,24 @@ impl StmtStruct {
     pub fn instantiate(&self, ts: &[Type]) -> StmtStruct {
         let sub = gsub(&self.generics, ts);
         let mut this = Instantiate::new(&sub).map_stmt_struct(self);
+        this.generics.clear();
+        this
+    }
+}
+
+impl StmtTrait {
+    pub fn instantiate(&self, ts: &[Type]) -> StmtTrait {
+        let sub = gsub(&self.generics, ts);
+        let mut this = Instantiate::new(&sub).map_stmt_trait(self);
+        this.generics.clear();
+        this
+    }
+}
+
+impl StmtTraitDef {
+    pub fn instantiate(&self, ts: &[Type]) -> StmtTraitDef {
+        let sub = gsub(&self.generics, ts);
+        let mut this = Instantiate::new(&sub).map_stmt_trait_def(self);
         this.generics.clear();
         this
     }

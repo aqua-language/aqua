@@ -26,12 +26,12 @@ pub struct ReplConfig {
 #[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "clap", derive(clap::Parser))]
 pub struct CompilerConfig {
-    /// Read source from file
+    /// Read source from file.
     pub file: Option<PathBuf>,
     /// Loads file statement-by-statement into the REPL.
     #[cfg_attr(feature = "clap", clap(long))]
     pub interactive: bool,
-    /// Print version
+    /// Print version.
     #[cfg_attr(feature = "clap", clap(long))]
     pub version: bool,
     #[cfg_attr(feature = "clap", clap(subcommand))]
@@ -47,7 +47,9 @@ pub enum Command {
     #[cfg_attr(feature = "clap", clap(name = "fmt"))]
     Format,
     /// Run program.
-    Run
+    Run,
+    /// Start language-server.
+    Lsp,
 }
 
 #[cfg(feature = "clap")]
