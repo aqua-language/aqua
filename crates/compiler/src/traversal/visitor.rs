@@ -1033,6 +1033,12 @@ pub(crate) trait Visitor {
                 self.visit_span(s);
                 self.visit_impl(i);
             }
+            Constraint::Field(s, t0, t1, x) => {
+                self.visit_span(s);
+                self.visit_type(t0);
+                self.visit_type(t1);
+                self.visit_name(x);
+            }
         }
     }
 }

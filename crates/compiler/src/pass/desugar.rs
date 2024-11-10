@@ -10,6 +10,7 @@ use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Type;
+use crate::pass::Pass;
 use crate::source::Cache;
 use crate::span::Span;
 use crate::splice::Splice;
@@ -21,9 +22,14 @@ use self::util::infix;
 use self::util::unop;
 
 #[derive(Debug)]
-pub struct Context<'a> {
+pub struct Context {
     anons: Stack,
-    sources: &'a mut Cache,
+}
+
+impl Pass for Context {
+    fn run(&mut self, program: &Program) -> Program {
+        self.map_program(program)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -31,15 +37,10 @@ pub struct Stack {
     pub scopes: Vec<Vec<Name>>,
 }
 
-pub fn desugar(cache: &mut Cache, program: &Program) -> Program {
-    Context::new(cache).map_program(program)
-}
-
-impl<'a> Context<'a> {
-    pub fn new(cache: &'a mut Cache) -> Self {
+impl Context {
+    pub fn new(cache: &mut Cache) -> Self {
         Context {
             anons: Stack::default(),
-            sources: cache,
         }
     }
 
@@ -61,7 +62,7 @@ impl<'a> Context<'a> {
     }
 }
 
-impl<'a> Mapper for Context<'a> {
+impl Mapper for Context {
     fn map_expr(&mut self, e: &Expr) -> Expr {
         let t = self.map_type(e.type_of());
         match e {
@@ -203,7 +204,7 @@ impl<'a> Mapper for Context<'a> {
     }
 }
 
-impl<'a> Context<'a> {
+impl Context {
     fn map_splice(&mut self, splice: Splice, span: Span) -> Expr {
         let range = splice.range();
         let file = span.file().unwrap();
@@ -213,11 +214,12 @@ impl<'a> Context<'a> {
 
         match splice {
             Splice::Text(s, _) => Expr::String(span, Type::Unknown, s.into()),
-            Splice::Delim(_, _) => {
+            Splice::Delim(s, _) => {
                 // Only lex the part of the file that is the splice.
-                let source = &self.sources.fetch(&file).unwrap().text()[..end as usize];
-                let lexer = crate::lexer::Lexer::new_from(file, source, start as usize);
-                let mut parser = crate::parser::Parser::new(source, lexer);
+                // let source = &self.sources.fetch(&file).unwrap().text()[..end as usize];
+                // let lexer = crate::lexer::Lexer::new_from(file, source, start as usize);
+                let mut lexer = crate::lexer::Lexer::new_from(file, s, start as usize);
+                let mut parser = crate::parser::Parser::new(s, lexer);
                 if let Some(e) = parser.parse(|p, follow| p.expr(follow)) {
                     let e = self.map_expr(&e);
                     unop(span, Type::Unknown, "Display", "toString", e)

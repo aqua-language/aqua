@@ -4,12 +4,12 @@ use smol_str::format_smolstr;
 
 use crate::ast::Block;
 use crate::ast::Expr;
+use crate::ast::ExprBody;
 use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
-use crate::ast::ExprBody;
 use crate::ast::StmtVar;
 use crate::span::Span;
 use crate::traversal::mapper::Mapper;

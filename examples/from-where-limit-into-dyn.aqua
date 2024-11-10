@@ -1,10 +1,13 @@
 struct Data(time:Time, key:String, value:i32);
 
-var v =
-  from x in Stream[Data]::source(
+var v: Vec[Data] =
+  from x:Data in Stream[Data]::source(
     Reader::file(Path::new("data.csv"), false),
-    Format::csv(','),
-    (x, t) => x.time, 0s, 1s)
+    Encoding::csv(','),
+    (x:Data, t:Time) => x.time,
+    1min,
+    1s
+  )
   where x.value < 50
   limit 100
   into collect();

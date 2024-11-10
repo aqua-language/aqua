@@ -27,7 +27,7 @@ impl Iterator for TestLexer {
             // let byte0 = self.cache.get_byte(self.lexer.file, pos0);
             // let byte1 = self.cache.get_byte(self.lexer.file, pos1);
             // assert_eq!(range, byte0..byte1);
-            let text = r.text(self.lexer.input());
+            let text = r.text(self.lexer.input);
             let token = r.v;
             Some((range, token, text))
         } else {

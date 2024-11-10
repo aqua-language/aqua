@@ -976,6 +976,13 @@ pub(crate) trait Mapper {
                 let i = self.map_impl(i);
                 Constraint::WhereClause(s, i)
             }
+            Constraint::Field(s, t0, t1, x) => {
+                let s = self.map_span(s);
+                let t0 = self.map_type(t0);
+                let t1 = self.map_type(t1);
+                let x = self.map_name(x);
+                Constraint::Field(s, t0, t1, x)
+            }
         }
     }
 }

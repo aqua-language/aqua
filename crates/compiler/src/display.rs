@@ -415,7 +415,11 @@ impl<'a, 'b> Printer<'a, 'b> {
             }
             Expr::Lambda(_, _, ps, _, e) => {
                 if ps.len() == 1 {
-                    self.param(&ps[0])?;
+                    if ps[0].1 == Type::Unknown {
+                        self.name(&ps[0].0)?;
+                    } else {
+                        self.paren(|this| this.param(&ps[0]))?;
+                    }
                 } else {
                     self.paren(|this| this.comma_sep(ps, Self::param))?;
                 }
@@ -1000,6 +1004,15 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.punct(":")?;
                 self.space()?;
                 self.imp(i)?;
+            }
+            Constraint::Field(_, t0, t1, x) => {
+                self.ty(t0)?;
+                self.punct(".")?;
+                self.name(x)?;
+                self.space()?;
+                self.punct(":")?;
+                self.space()?;
+                self.ty(t1)?;
             }
         }
         Ok(())

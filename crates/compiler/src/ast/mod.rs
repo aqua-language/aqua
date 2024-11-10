@@ -289,6 +289,7 @@ pub enum Expr {
         Vec<Type>,
         Vec<Expr>,
     ),
+    // TODO: Decide how to define type args
     Assoc(Span, Type, Impl, Name, Vec<Type>),
     Match(Span, Type, Rc<Expr>, Map<Pat, Expr>),
     IfElse(Span, Type, Rc<Expr>, Rc<Expr>, Rc<Expr>),

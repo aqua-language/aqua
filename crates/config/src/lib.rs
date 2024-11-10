@@ -26,8 +26,6 @@ pub struct ReplConfig {
 #[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "clap", derive(clap::Parser))]
 pub struct CompilerConfig {
-    /// Read source from file.
-    pub file: Option<PathBuf>,
     /// Loads file statement-by-statement into the REPL.
     #[cfg_attr(feature = "clap", clap(long))]
     pub interactive: bool,
@@ -38,18 +36,76 @@ pub struct CompilerConfig {
     pub command: Option<Command>,
 }
 
-#[derive(Debug, Clone, Copy)]
+impl CompilerConfig {
+    pub fn file(&self) -> Option<&PathBuf> {
+        self.command.as_ref().and_then(|c| match c {
+            Command::Check(sub) => sub.file.as_ref(),
+            Command::Format(sub) => sub.file.as_ref(),
+            Command::Run(sub) => sub.file.as_ref(),
+            Command::Inspect(sub) => sub.file.as_ref(),
+            _ => None,
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "clap", derive(clap::Parser))]
 pub enum Command {
     /// Check program for errors.
-    Check,
+    Check(Check),
     /// Format program.
     #[cfg_attr(feature = "clap", clap(name = "fmt"))]
-    Format,
+    Format(Format),
     /// Run program.
-    Run,
+    Run(Run),
+    /// Inspect intermediate AST.
+    Inspect(Inspect),
     /// Start language-server.
     Lsp,
+}
+
+#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
+pub struct Check {
+    /// Read source from file.
+    pub file: Option<PathBuf>,
+}
+
+#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
+pub struct Format {
+    /// Read source from file.
+    #[cfg_attr(feature = "clap", clap(long))]
+    pub desugared: bool,
+    /// Read source from file.
+    #[cfg_attr(feature = "clap", clap(long))]
+    pub typed: bool,
+    /// Read source from file.
+    pub file: Option<PathBuf>,
+}
+
+#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
+pub struct Run {
+    /// Read source from file.
+    pub file: Option<PathBuf>,
+}
+
+#[derive(Debug, Default, Clone)]
+#[cfg_attr(feature = "clap", derive(clap::Parser))]
+pub struct Inspect {
+    #[cfg_attr(feature = "clap", clap(long))]
+    pub mode: InspectMode,
+    /// Read source from file.
+    pub file: Option<PathBuf>,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+pub enum InspectMode {
+    #[default]
+    Desugar,
+    Type,
 }
 
 #[cfg(feature = "clap")]

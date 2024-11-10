@@ -36,6 +36,8 @@ pub mod span;
 pub mod spanned;
 pub mod splice;
 pub mod token;
+pub mod loops;
+pub mod pass;
 pub mod traversal {
     pub mod mapper;
     pub mod visitor;
@@ -73,11 +75,10 @@ fn timed<O>(name: &str, f: impl FnOnce() -> O) -> O {
 #[derive(Debug)]
 pub struct Compiler {
     pub sources: source::Cache,
+    pub desugar: desugar::Context,
     pub query: query::Context,
     pub resolve: resolve::Context,
-    #[allow(unused)]
     pub flatten: flatten::Context,
-    #[allow(unused)]
     pub lift: lift::Context,
     pub infer: infer::Context,
     pub interpret: interpret::Context,
@@ -113,6 +114,7 @@ impl Compiler {
             interpret: interpret::Context::new(),
             report: Report::new(),
             config,
+            desugar: todo!(),
         }
     }
 

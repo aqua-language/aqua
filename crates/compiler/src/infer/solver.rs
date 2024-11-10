@@ -23,6 +23,8 @@ pub enum Constraint {
     ExprAssoc(Span, Type, Impl, Name, Vec<Type>),
     // Generated when referring to an associated type.
     TypeAssoc(Span, Type, Impl, Name, Vec<Type>),
+    // Generated when referring to a field.
+    Field(Span, Type, Type, Name),
 }
 
 impl Context {
@@ -152,9 +154,13 @@ impl Context {
             Constraint::TypeAssoc(_, _, _, _, _) => {
                 todo!();
             }
+            Constraint::Field(_s, _t0, _t1, _x) => {
+                todo!()
+            }
         }
     }
 
+    // Sometimes the type arguments are unknown
     fn solve_def(
         &mut self,
         def_type: &Type,

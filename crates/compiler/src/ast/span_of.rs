@@ -1,3 +1,4 @@
+use crate::infer::solver::Constraint;
 use crate::span::Span;
 
 use super::Expr;
@@ -107,6 +108,17 @@ impl Stmt {
             Stmt::Type(s) => s.span,
             Stmt::Expr(s) => s.span_of(),
             Stmt::Err(s) => *s,
+        }
+    }
+}
+
+impl Constraint {
+    pub fn span_of(&self) -> &Span {
+        match self {
+            Constraint::WhereClause(s, _) => s,
+            Constraint::ExprAssoc(s, ..) => s,
+            Constraint::TypeAssoc(s, ..) => s,
+            Constraint::Field(s, ..) => s,
         }
     }
 }

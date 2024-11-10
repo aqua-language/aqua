@@ -10,6 +10,7 @@ use compiler::Compiler;
 use config::Command;
 use config::CompilerConfig;
 use config::Config;
+use config::InspectMode;
 use repl::Repl;
 
 fn main() -> Result<()> {
@@ -24,8 +25,8 @@ fn main() -> Result<()> {
 
     let mut compiler = Compiler::new(config.compiler);
 
-    match compiler.config.command {
-        Some(Command::Check) => {
+    match &compiler.config.command {
+        Some(Command::Check(_)) => {
             let (name, source) = read(&compiler.config)?;
             message("Checking", format_args!("{name}"));
             let time = std::time::Instant::now();
@@ -45,7 +46,7 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
-        Some(Command::Format) => {
+        Some(Command::Format(_)) => {
             let (_, source) = read(&compiler.config)?;
             match Program::parse(&source) {
                 Ok(program) => println!("{}", program),
@@ -53,10 +54,27 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
-        Some(Command::Run) => {
+        Some(Command::Run(_)) => {
             let (name, source) = read(&compiler.config)?;
             compiler.init();
             compiler.run(name, &source)
+        }
+        Some(Command::Inspect(cmd)) => {
+            let (name, source) = read(&compiler.config)?;
+            match cmd.mode {
+                InspectMode::Desugar => match compiler.querycomp(&name, &source) {
+                    Ok(program) => println!("{}", program),
+                    Err(_) => print!("{}", source),
+                },
+                InspectMode::Type => {
+                    compiler.init();
+                    match compiler.infer(&name, &source) {
+                        Ok(program) => println!("{}", program.verbose()),
+                        Err(_) => print!("{}", source),
+                    }
+                }
+            }
+            Ok(())
         }
         Some(Command::Lsp) => {
             if let Err(e) = lsp::start() {
@@ -67,7 +85,7 @@ fn main() -> Result<()> {
         None => {
             compiler.init();
             let mut repl = Repl::new(config.repl, compiler);
-            if let Some(path) = &repl.compiler.config.file {
+            if let Some(path) = &repl.compiler.config.file() {
                 let (name, source) = input::read_file(path)?;
                 if repl.compiler.config.interactive {
                     repl.run(Some(source))
@@ -89,7 +107,7 @@ fn message(label: &str, content: std::fmt::Arguments) {
 }
 
 fn read(config: &CompilerConfig) -> Result<(String, String)> {
-    if let Some(path) = &config.file {
+    if let Some(path) = &config.file() {
         input::read_file(path)
     } else {
         input::read_stdin()

@@ -1,5 +1,4 @@
 use crate::infer::solver::Constraint;
-use crate::span::Span;
 
 use super::BuiltinDef;
 use super::BuiltinType;
@@ -238,31 +237,24 @@ impl TypeBody {
     pub fn as_udt(&self) -> Option<&Type> {
         match self {
             TypeBody::UserDefined(t) => Some(t),
-            TypeBody::Builtin(_) => unreachable!(),
+            TypeBody::Builtin(_) => None,
         }
     }
     pub fn as_bit(&self) -> Option<&BuiltinType> {
         match self {
-            TypeBody::UserDefined(_) => unreachable!(),
+            TypeBody::UserDefined(_) => None,
             TypeBody::Builtin(b) => Some(b),
         }
     }
 }
 
 impl Constraint {
-    pub fn impl_of(&self) -> &Impl {
+    pub fn impl_of(&self) -> Option<&Impl> {
         match self {
-            Constraint::WhereClause(_, i) => i,
-            Constraint::ExprAssoc(_, _, i, ..) => i,
-            Constraint::TypeAssoc(_, _, i, ..) => i,
-        }
-    }
-
-    pub fn span_of(&self) -> &Span {
-        match self {
-            Constraint::WhereClause(s, _) => s,
-            Constraint::ExprAssoc(s, ..) => s,
-            Constraint::TypeAssoc(s, ..) => s,
+            Constraint::WhereClause(_, i) => Some(i),
+            Constraint::ExprAssoc(_, _, i, ..) => Some(i),
+            Constraint::TypeAssoc(_, _, i, ..) => Some(i),
+            Constraint::Field(..) => None,
         }
     }
 }
