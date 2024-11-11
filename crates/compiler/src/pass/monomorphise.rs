@@ -18,14 +18,17 @@ use crate::ast::StmtStruct;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeVar;
-use crate::declare;
-use crate::infer::type_var::TypeVarKind;
-use crate::infer::type_var::TypeVarValue;
+use crate::analysis::declare;
+use crate::diag::Report;
+use crate::pass::infer::type_var::TypeVarKind;
+use crate::pass::infer::type_var::TypeVarValue;
 use crate::span::Span;
 use crate::traversal::mapper::Mappable;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitable;
 use mangle::Mangler;
+
+use super::Pass;
 
 #[derive(Debug, Default)]
 pub struct Context {
@@ -33,6 +36,17 @@ pub struct Context {
     decls: declare::Context,
     stmts: Vec<Stmt>,
     type_table: InPlaceUnificationTable<TypeVar>,
+    report: Report,
+}
+
+impl Pass for Context {
+    fn run(&mut self, p: &Program) -> Program {
+        let p = self.monomorphise(p);
+        Program::new(p.span, self.stmts.clone())
+    }
+    fn report(&mut self) -> &mut Report {
+        &mut self.report
+    }
 }
 
 impl Context {

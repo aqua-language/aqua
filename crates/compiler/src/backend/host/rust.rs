@@ -23,7 +23,7 @@ impl Program {
     }
 }
 
-impl crate::declare::Context {
+impl crate::analysis::declare::Context {
     pub fn rust(&self) -> impl std::fmt::Display + '_ {
         Wrapper(self, 0)
     }
@@ -42,7 +42,7 @@ impl<'a> std::fmt::Display for Wrapper<&'a Program> {
     }
 }
 
-impl<'a> std::fmt::Display for Wrapper<&'a crate::declare::Context> {
+impl<'a> std::fmt::Display for Wrapper<&'a crate::analysis::declare::Context> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut p = Printer::new(f);
         for stmt in self.0.defs.values() {

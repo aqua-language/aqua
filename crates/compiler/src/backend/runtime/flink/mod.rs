@@ -9,11 +9,11 @@ use runtime::builtins::path::Path;
 use runtime::builtins::reader::Reader;
 use runtime::builtins::writer::Writer;
 
+use crate::analysis::declare;
 use crate::builtins::types::stream::Operator;
 use crate::builtins::value::Dataflow;
 use crate::builtins::value::Fun;
 use crate::builtins::value::Stream;
-use crate::declare;
 use crate::print::Print;
 
 struct Wrapper<T>(T, usize);

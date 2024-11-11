@@ -1,7 +1,7 @@
 use crate::ast::Expr;
 use crate::ast::Type;
 use crate::builtins::value::Dataflow;
-use crate::declare;
+use crate::analysis::declare;
 use crate::traversal::visitor::Visitor;
 
 pub struct Context<'a> {

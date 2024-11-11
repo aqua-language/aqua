@@ -8,9 +8,9 @@ pub mod impl_var;
 pub mod instantiate;
 pub mod intrinstics;
 pub mod local;
+pub mod solver;
 pub mod type_var;
 pub mod unify;
-pub mod solver;
 
 use std::rc::Rc;
 
@@ -18,6 +18,7 @@ use ena::unify::InPlaceUnificationTable;
 use impl_var::ImplVarValue;
 use solver::Constraint;
 
+use crate::analysis::declare;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Impl;
@@ -32,7 +33,6 @@ use crate::ast::Type;
 use crate::ast::TypeVar;
 use crate::collections::map::Map;
 use crate::collections::set::Set;
-use crate::declare;
 use crate::diag::Report;
 use crate::span::Span;
 use crate::traversal::mapper::Mappable;
@@ -47,6 +47,8 @@ use intrinstics::unit;
 use self::type_var::TypeVarKind;
 use self::type_var::TypeVarValue;
 
+use super::Pass;
+
 #[derive(Debug)]
 pub struct Context {
     expr_stack: Vec<ExprScope>,
@@ -54,7 +56,18 @@ pub struct Context {
     pub report: Report,
     pub decls: declare::Context,
     pub depth: usize,
-    pub commit: bool
+    pub commit: bool,
+}
+
+impl Pass for Context {
+    fn run(&mut self, program: &Program) -> Program {
+        program.visit(&mut self.decls);
+        program.map(self)
+    }
+
+    fn report(&mut self) -> &mut Report {
+        &mut self.report
+    }
 }
 
 impl Default for Context {
@@ -99,7 +112,7 @@ impl Context {
             report: Report::new(),
             decls: declare::Context::default(),
             depth: 0,
-            commit: false
+            commit: false,
         }
     }
 
@@ -122,11 +135,6 @@ impl Context {
             .iter()
             .flat_map(|s| s.where_clause.clone())
             .collect()
-    }
-
-    pub fn infer(&mut self, p: &Program) -> Program {
-        p.visit(&mut self.decls);
-        p.map(self)
     }
 
     pub fn type_scope(&mut self) -> &mut TypeScope {

@@ -2,11 +2,11 @@ use crate::ast::Impl;
 use crate::ast::Program;
 use crate::ast::StmtDef;
 use crate::ast::Type;
-use crate::infer::intrinstics::default_float;
-use crate::infer::intrinstics::default_int;
-use crate::infer::type_var::TypeVarKind;
-use crate::infer::type_var::TypeVarValue;
-use crate::infer::Context;
+use crate::pass::infer::intrinstics::default_float;
+use crate::pass::infer::intrinstics::default_int;
+use crate::pass::infer::type_var::TypeVarKind;
+use crate::pass::infer::type_var::TypeVarValue;
+use crate::pass::infer::Context;
 use crate::traversal::visitor::Visitor;
 
 use super::Constraint;

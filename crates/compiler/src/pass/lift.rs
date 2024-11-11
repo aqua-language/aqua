@@ -28,12 +28,24 @@ use crate::diag::Report;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 
+use super::Pass;
+
 #[derive(Debug)]
 pub struct Context {
     stack: Stack,
     pub top: Vec<Stmt>,
     pub unique: HashMap<Name, usize>,
     pub report: Report,
+}
+
+impl Pass for Context {
+    fn run(&mut self, program: &Program) -> Program {
+        self.lift(program)
+    }
+
+    fn report(&mut self) -> &mut Report {
+        &mut self.report
+    }
 }
 
 #[derive(Debug)]

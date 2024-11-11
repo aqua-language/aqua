@@ -10,7 +10,7 @@ use compiler::builtins::types::array::Array;
 use compiler::builtins::types::record::Record;
 use compiler::builtins::types::tuple::Tuple;
 use compiler::builtins::value::Value;
-use compiler::declare::Context;
+use compiler::analysis::declare::Context;
 
 fn seed(t: Type) -> Seed {
     Seed::new(t, Context::default())

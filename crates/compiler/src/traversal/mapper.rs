@@ -26,7 +26,7 @@ use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
-use crate::infer::solver::Constraint;
+use crate::pass::infer::solver::Constraint;
 use crate::span::Span;
 
 pub(crate) trait Mapper {

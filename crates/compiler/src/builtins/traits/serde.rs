@@ -94,15 +94,15 @@ impl<'de> Deserialize<'de> for Value {
 }
 
 #[derive(Send, Sync, Clone)]
-pub struct Seed(Type, Rc<crate::declare::Context>);
+pub struct Seed(Type, Rc<crate::analysis::declare::Context>);
 
 impl Seed {
-    pub fn new(type_tag: Type, decls: crate::declare::Context) -> Self {
+    pub fn new(type_tag: Type, decls: crate::analysis::declare::Context) -> Self {
         Self(type_tag, Rc::new(decls))
     }
 }
 
-struct TupleVisitor(Vec<Type>, Rc<crate::declare::Context>);
+struct TupleVisitor(Vec<Type>, Rc<crate::analysis::declare::Context>);
 
 impl<'de> Visitor<'de> for TupleVisitor {
     type Value = Value;
@@ -123,7 +123,7 @@ impl<'de> Visitor<'de> for TupleVisitor {
     }
 }
 
-struct RecordVisitor(Map<Name, Type>, Rc<crate::declare::Context>);
+struct RecordVisitor(Map<Name, Type>, Rc<crate::analysis::declare::Context>);
 
 impl<'de> Visitor<'de> for RecordVisitor {
     type Value = Value;
@@ -165,7 +165,7 @@ impl<'de> Visitor<'de> for RecordVisitor {
     }
 }
 
-struct DictVisitor(Type, Type, Rc<crate::declare::Context>);
+struct DictVisitor(Type, Type, Rc<crate::analysis::declare::Context>);
 impl<'de> Visitor<'de> for DictVisitor {
     type Value = Value;
 
@@ -189,7 +189,7 @@ impl<'de> Visitor<'de> for DictVisitor {
     }
 }
 
-struct SetVisitor(Type, Rc<crate::declare::Context>);
+struct SetVisitor(Type, Rc<crate::analysis::declare::Context>);
 impl<'de> Visitor<'de> for SetVisitor {
     type Value = Value;
 
@@ -210,7 +210,7 @@ impl<'de> Visitor<'de> for SetVisitor {
     }
 }
 
-struct OptionVisitor(Type, Rc<crate::declare::Context>);
+struct OptionVisitor(Type, Rc<crate::analysis::declare::Context>);
 impl<'de> Visitor<'de> for OptionVisitor {
     type Value = Value;
 
@@ -233,7 +233,7 @@ impl<'de> Visitor<'de> for OptionVisitor {
     }
 }
 
-struct ResultVisitor(Type, Rc<crate::declare::Context>);
+struct ResultVisitor(Type, Rc<crate::analysis::declare::Context>);
 impl<'de> Visitor<'de> for ResultVisitor {
     type Value = Value;
 
@@ -263,7 +263,7 @@ impl<'de> Visitor<'de> for ResultVisitor {
     }
 }
 
-struct VecVisitor(Type, Rc<crate::declare::Context>);
+struct VecVisitor(Type, Rc<crate::analysis::declare::Context>);
 impl<'de> Visitor<'de> for VecVisitor {
     type Value = Value;
 
@@ -361,7 +361,7 @@ impl<'de> DeserializeSeed<'de> for Seed {
             },
             Type::Generic(_) => unreachable!(),
             Type::Array(t, n) => {
-                struct ArrayVisitor(Type, Rc<crate::declare::Context>);
+                struct ArrayVisitor(Type, Rc<crate::analysis::declare::Context>);
                 impl<'de> Visitor<'de> for ArrayVisitor {
                     type Value = Value;
 

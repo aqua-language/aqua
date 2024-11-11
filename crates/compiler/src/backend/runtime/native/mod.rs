@@ -13,7 +13,7 @@ use crate::builtins::types::stream::Operator;
 use crate::builtins::value::Dataflow;
 use crate::builtins::value::Fun;
 use crate::builtins::value::Stream;
-use crate::declare;
+use crate::analysis::declare;
 use crate::print::Print;
 
 struct Wrapper<T>(T, usize);

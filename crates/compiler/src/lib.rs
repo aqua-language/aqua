@@ -1,8 +1,8 @@
 use anyhow::Result;
+use pass::Pass as _;
 use std::rc::Rc;
 
 use ast::Program;
-use builtins::value::Value;
 use config::CompilerConfig;
 use diag::Report;
 use lexer::Lexer;
@@ -13,31 +13,24 @@ pub mod ast;
 pub mod backend;
 pub mod diag;
 pub mod display;
-pub mod flatten;
+pub mod pass;
+pub mod analysis {
+    pub mod check;
+    pub mod declare;
+    pub mod lookup;
+    pub mod reachable;
+}
 // pub mod ffi;
 pub mod builtins;
-pub mod check;
-pub mod controlflow;
-pub mod declare;
-pub mod desugar;
-pub mod infer;
 pub mod interpret;
 pub mod lexer;
-#[allow(unused)]
-pub mod lift;
-pub mod lookup;
 pub mod parser;
 pub mod print;
-pub mod query;
-pub mod reachable;
-pub mod resolve;
 pub mod source;
 pub mod span;
 pub mod spanned;
 pub mod splice;
 pub mod token;
-pub mod loops;
-pub mod pass;
 pub mod traversal {
     pub mod mapper;
     pub mod visitor;
@@ -48,7 +41,6 @@ pub mod collections {
     pub mod ordmap;
     pub mod set;
 }
-pub mod monomorphise;
 #[cfg(feature = "optimiser")]
 pub mod opt;
 pub mod symbol;
@@ -60,29 +52,18 @@ macro_rules! aqua {
     };
 }
 
-fn timed<O>(name: &str, f: impl FnOnce() -> O) -> O {
-    if std::env::var("AQUA_TIMED").is_ok() {
-        let start = std::time::Instant::now();
-        let result = f();
-        let elapsed = start.elapsed();
-        eprintln!("{}: {:?}", name, elapsed);
-        result
-    } else {
-        f()
-    }
-}
-
 #[derive(Debug)]
 pub struct Compiler {
     pub sources: source::Cache,
-    pub desugar: desugar::Context,
-    pub query: query::Context,
-    pub resolve: resolve::Context,
-    pub flatten: flatten::Context,
-    pub lift: lift::Context,
-    pub infer: infer::Context,
+    // pub passes: Vec<Box<dyn pass::Pass>>,
+    pub desugar: pass::desugar::Context,
+    pub query: pass::query_desugar::Context,
+    pub resolve: pass::resolve::Context,
+    pub flatten: pass::flatten::Context,
+    pub lift: pass::lift::Context,
+    pub infer: pass::infer::Context,
+    pub monomorphise: pass::monomorphise::Context,
     pub interpret: interpret::Context,
-    pub monomorphise: monomorphise::Context,
     pub report: Report,
     pub config: CompilerConfig,
 }
@@ -105,42 +86,34 @@ impl Compiler {
     pub fn new(config: CompilerConfig) -> Self {
         Compiler {
             sources: source::Cache::default(),
-            query: query::Context::new(),
-            resolve: resolve::Context::new(),
-            infer: infer::Context::new(),
-            flatten: flatten::Context::new(),
-            lift: lift::Context::new(),
-            monomorphise: monomorphise::Context::new(),
+            desugar: pass::desugar::Context::new(),
+            query: pass::query_desugar::Context::new(),
+            resolve: pass::resolve::Context::new(),
+            infer: pass::infer::Context::new(),
+            flatten: pass::flatten::Context::new(),
+            lift: pass::lift::Context::new(),
+            monomorphise: pass::monomorphise::Context::new(),
             interpret: interpret::Context::new(),
             report: Report::new(),
             config,
-            desugar: todo!(),
         }
     }
 
     pub fn init(&mut self) -> &mut Self {
         let stmts = crate::builtins::declare(&mut self.sources);
         let program = Program::new(Span::default(), stmts);
-        let program = desugar::desugar(&mut self.sources, &program);
-        let program = self.query.querycomp(&program);
-        let program = self.resolve.resolve(&program);
-        self.report.append(&mut self.resolve.report);
-        // let program = self.flatten.flatten(&program);
-        // let program = self.lift.lift(&program);
-        // self.report.merge(&mut self.lift.report);
-        let program = self.infer.infer(&program);
-        self.report.append(&mut self.infer.report);
+        let program = self.desugar.run(&program);
+        let program = self.query.run(&program);
+        let program = self.resolve.run(&program);
+        let program = self.infer.run(&program);
         let _program = self.monomorphise.monomorphise(&program);
+        self.report.append(&mut self.resolve.report);
+        self.report.append(&mut self.infer.report);
         self.interpret.interpret(&program);
         if !self.report.is_empty() {
             self.print_report();
         }
         self
-        // let result = self.inferrer.infer(&result);
-        // let result = self.inferrer.infer(&result);
-        // self.interpreter.interpret(&result);
-        // assert!(self.inferrer.report.is_empty());
-        // assert!(self.interpreter.report.is_empty());
     }
 
     pub fn check(&mut self, name: impl ToString, input: &str) -> Result<()> {
@@ -149,11 +122,11 @@ impl Compiler {
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
         let program = parser.parse(Parser::program).unwrap();
-        let program = desugar::desugar(&mut self.sources, &program);
-        let program = self.query.querycomp(&program);
-        let program = self.resolve.resolve(&program);
-        let program = self.infer.infer(&program);
-        let mut report = check::check(&program);
+        let program = self.desugar.run(&program);
+        let program = self.query.run(&program);
+        let program = self.resolve.run(&program);
+        let program = self.infer.run(&program);
+        let mut report = analysis::check::check(&program);
         self.report.append(&mut parser.report);
         self.report.append(&mut lexer.report);
         self.report.append(&mut self.resolve.report);
@@ -171,151 +144,35 @@ impl Compiler {
         let id = self.sources.add(name, input.clone());
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
-        let program = timed("parse", || parser.parse(Parser::program).unwrap());
-        let program = timed("desugar", || desugar::desugar(&mut self.sources, &program));
-        let program = timed("querycomp", || self.query.querycomp(&program));
-        let program = timed("resolve", || self.resolve.resolve(&program));
-        let program = timed("infer", || self.infer.infer(&program));
-        let mut report = timed("check", || check::check(&program));
+        let program = parser.parse(Parser::program).unwrap();
+        let program = self.desugar.run(&program);
+        let program = self.query.run(&program);
+        let program = self.resolve.run(&program);
+        let program = self.infer.run(&program);
+        let mut report = analysis::check::check(&program);
         self.report.append(&mut parser.report);
         self.report.append(&mut lexer.report);
         self.report.append(&mut self.resolve.report);
         self.report.append(&mut self.infer.report);
         self.report.append(&mut report);
         if self.report.is_empty() {
-            let program = timed("monomorphise", || self.monomorphise.monomorphise(&program));
-            timed("interpret", || self.interpret.interpret(&program));
+            let program = self.monomorphise.monomorphise(&program);
+            self.interpret.interpret(&program);
             Ok(())
         } else {
             Err(anyhow::anyhow!("Compilation failed"))
         }
     }
 
-    pub fn parse<T>(
-        &mut self,
-        name: impl ToString,
-        input: &str,
-        f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>) -> T,
-    ) -> Result<T, Recovered<T>> {
-        let input: Rc<str> = Rc::from(input);
-        let id = self.sources.add(name, input.clone());
-        let mut lexer = Lexer::new(id, input.as_ref());
-        let mut parser = Parser::new(&input, &mut lexer);
-        let result = f(&mut parser);
-        self.report.append(&mut parser.report);
-        self.report.append(&mut lexer.report);
-        self.recover(result)
-    }
-
-    pub fn desugar(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.parse(name, input, |parser| parser.parse(Parser::program).unwrap())?;
-        let result = desugar::desugar(&mut self.sources, &program);
-        self.recover(result)
-    }
-
-    pub fn querycomp(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.desugar(name, input)?;
-        let result = self.query.querycomp(&program);
-        self.recover(result)
-    }
-
-    pub fn resolve(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.querycomp(name, input)?;
-        let result = self.resolve.resolve(&program);
-        self.report.append(&mut self.resolve.report);
-        self.recover(result)
-    }
-
-    pub fn flatten(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.resolve(name, input)?;
-        let result = self.flatten.flatten(&program);
-        self.recover(result)
-    }
-
-    pub fn lift(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.resolve(name, input)?;
-        let program = self.lift.lift(&program);
-        self.recover(program)
-    }
-
-    pub fn infer(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
-        let result = self.resolve(name, input)?;
-        let result = self.infer.infer(&result);
-        self.report.append(&mut self.infer.report);
-        self.recover(result)
-    }
-
-    pub fn monomorphise(&mut self, name: &str, input: &str) -> Result<Program, Recovered<Program>> {
-        let result = self.infer(name, input)?;
-        let result = self.monomorphise.monomorphise(&result);
-        self.recover(result)
-    }
-
-    pub fn interpret(&mut self, name: &str, input: &str) -> Result<Value, Recovered<Value>> {
-        let mut result = self.monomorphise(name, input).unwrap();
-        let last_stmt = result.stmts.pop().unwrap();
-        let last_expr = last_stmt.as_expr().unwrap();
-        self.interpret.interpret(&result);
-        let value = self.interpret.eval_expr(last_expr);
-        self.recover(value)
-    }
-
     pub fn add_report(&mut self, report: &mut Report) {
         self.report.append(report);
     }
 
-    pub fn recover<T>(&mut self, result: T) -> Result<T, Recovered<T>> {
-        if self.report.is_empty() {
-            Ok(result)
-        } else {
-            Err(Recovered::new(result, self.report_to_string()))
-        }
-    }
-
     pub fn report_to_string(&mut self) -> String {
-        trim(&self.report.string(&mut self.sources).unwrap())
+        self.report.string(&mut self.sources).unwrap()
     }
 
     pub fn print_report(&mut self) {
         self.report.print(&mut self.sources).unwrap();
-    }
-}
-
-pub fn trim(s: &str) -> String {
-    // Trim space right before \n on each line
-    s.trim_end()
-        .lines()
-        .map(|line| line.trim_end().to_string())
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-pub struct Recovered<T> {
-    pub val: T,
-    pub msg: String,
-}
-
-impl<T> Recovered<T> {
-    pub fn new(value: T, report: String) -> Self {
-        Self {
-            val: value,
-            msg: report,
-        }
-    }
-}
-
-impl<T: std::fmt::Display> std::fmt::Debug for Recovered<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.val)?;
-        write!(f, "\n{}", &self.msg)
-    }
-}
-
-impl Program {
-    pub fn parse(input: &str) -> Result<Program, Recovered<Program>> {
-        let mut compiler = Compiler::default();
-        compiler.parse("test", input, |parser| {
-            parser.parse(Parser::program).unwrap()
-        })
     }
 }

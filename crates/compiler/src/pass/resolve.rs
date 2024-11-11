@@ -26,6 +26,8 @@ use crate::diag::Report;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 
+use super::Pass;
+
 #[derive(Debug)]
 pub struct Stack(Vec<Scope>);
 
@@ -59,6 +61,16 @@ impl Stack {
 pub struct Context {
     stack: Stack,
     pub report: Report,
+}
+
+impl Pass for Context {
+    fn run(&mut self, program: &Program) -> Program {
+        self.map_program(program)
+    }
+
+    fn report(&mut self) -> &mut Report {
+        &mut self.report
+    }
 }
 
 impl Default for Context {
@@ -526,10 +538,6 @@ impl Context {
             stack: Stack(vec![Scope::default()]),
             report: Report::new(),
         }
-    }
-
-    pub fn resolve(&mut self, program: &Program) -> Program {
-        self.map_program(&program)
     }
 
     fn not_found(&mut self, name: &Name, expected: &'static str) {

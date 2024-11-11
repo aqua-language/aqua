@@ -15,10 +15,22 @@ use crate::span::Span;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 
+use super::Pass;
+
 #[derive(Debug)]
 pub struct Context {
     stack: Vec<Scope>,
     uid_counter: u32,
+}
+
+impl Pass for Context {
+    fn run(&mut self, program: &Program) -> Program {
+        self.flatten(program)
+    }
+
+    fn report(&mut self) -> &mut crate::diag::Report {
+        unimplemented!()
+    }
 }
 
 #[derive(Debug)]

@@ -14,7 +14,7 @@ use crate::ast::StmtVar;
 use crate::ast::Type;
 use crate::backend::codegen::Codegen;
 use crate::builtins::value::Fun;
-use crate::declare;
+use crate::analysis::declare;
 use crate::print::Print;
 
 // This wrapper causes the underlying structure to be printed as Java code.

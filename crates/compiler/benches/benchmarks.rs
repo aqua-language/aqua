@@ -4,6 +4,7 @@ use std::rc::Rc;
 use compiler::aqua;
 use compiler::lexer::Lexer;
 use compiler::parser::Parser;
+use compiler::pass::Pass as _;
 use compiler::source::Cache;
 use compiler::Compiler;
 use divan::Bencher;
@@ -248,10 +249,12 @@ fn desugar(bencher: Bencher, arg: Input) {
             let lexer = Lexer::new(id, &code);
             let mut parser = Parser::new(&code, lexer);
             let program = parser.parse(Parser::program).unwrap();
-            (cache, program)
+            let ctx = compiler::pass::desugar::Context::new();
+            (ctx, program)
         })
-        .bench_local_values(|(mut cache, program)| {
-            compiler::desugar::desugar(&mut cache, &program)
+        .bench_local_values(|(mut ctx, program)| {
+            ctx.run(&program);
+            program
         });
 }
 
@@ -266,7 +269,7 @@ fn querycomp(bencher: Bencher, arg: Input) {
             let program = parser.parse(Parser::program).unwrap();
             (compiler, program)
         })
-        .bench_local_values(|(mut compiler, program)| compiler.query.querycomp(&program));
+        .bench_local_values(|(mut compiler, program)| compiler.query.run(&program));
 }
 
 fn resolve(bencher: Bencher, arg: Input) {
@@ -278,10 +281,10 @@ fn resolve(bencher: Bencher, arg: Input) {
             let lexer = Lexer::new(id, &code);
             let mut parser = Parser::new(&code, lexer);
             let program = parser.parse(Parser::program).unwrap();
-            let program = compiler::desugar::desugar(&mut compiler.sources, &program);
+            let program = compiler.desugar.run(&program);
             (compiler, program)
         })
-        .bench_local_values(|(mut compiler, program)| compiler.resolve.resolve(&program));
+        .bench_local_values(|(mut compiler, program)| compiler.resolve.run(&program));
 }
 
 fn infer(bencher: Bencher, arg: Input) {
@@ -293,12 +296,12 @@ fn infer(bencher: Bencher, arg: Input) {
             let lexer = Lexer::new(id, &code);
             let mut parser = Parser::new(&code, lexer);
             let program = parser.parse(Parser::program).unwrap();
-            let program = compiler::desugar::desugar(&mut compiler.sources, &program);
-            let program = compiler.query.querycomp(&program);
-            let program = compiler.resolve.resolve(&program);
+            let program = compiler.desugar.run(&program);
+            let program = compiler.query.run(&program);
+            let program = compiler.resolve.run(&program);
             (compiler, program)
         })
-        .bench_local_values(|(mut compiler, program)| compiler.infer.infer(&program));
+        .bench_local_values(|(mut compiler, program)| compiler.infer.run(&program));
 }
 
 fn check(bencher: Bencher, arg: Input) {
@@ -310,13 +313,13 @@ fn check(bencher: Bencher, arg: Input) {
             let lexer = Lexer::new(id, &code);
             let mut parser = Parser::new(&code, lexer);
             let program = parser.parse(Parser::program).unwrap();
-            let program = compiler::desugar::desugar(&mut compiler.sources, &program);
-            let program = compiler.query.querycomp(&program);
-            let program = compiler.resolve.resolve(&program);
-            let program = compiler.infer.infer(&program);
+            let program = compiler.desugar.run(&program);
+            let program = compiler.query.run(&program);
+            let program = compiler.resolve.run(&program);
+            let program = compiler.infer.run(&program);
             program
         })
-        .bench_local_values(|program| compiler::check::check(&program))
+        .bench_local_values(|program| compiler::analysis::check::check(&program))
 }
 
 // #[allow(dead_code)]

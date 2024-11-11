@@ -39,7 +39,7 @@ use crate::builtins::value::Stream;
 use crate::builtins::value::Tuple;
 use crate::builtins::value::Value;
 use crate::builtins::value::Variant;
-use crate::infer::solver::Constraint;
+use crate::pass::infer::solver::Constraint;
 use crate::span::Span;
 
 pub(crate) trait Visitor {

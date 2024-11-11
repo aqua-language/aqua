@@ -4,18 +4,37 @@
 // =>
 // var e0.fold(|x, record(y)| e1)
 use crate::ast::Expr;
+use crate::ast::Program;
+use crate::diag::Report;
 use crate::traversal::mapper::Mapper;
 
-struct Context {}
+use super::Pass;
+
+#[derive(Debug)]
+pub struct Context {
+    _report: Report,
+}
+
+impl Pass for Context {
+    fn run(&mut self, program: &Program) -> Program {
+        self.map_program(program)
+    }
+
+    fn report(&mut self) -> &mut crate::diag::Report {
+        unimplemented!()
+    }
+}
 
 impl Mapper for Context {
     fn map_expr(&mut self, expr: &Expr) -> Expr {
         match expr {
-            Expr::For(s, t, x, e0, e1) => {
-                
+            Expr::For(_s, _t, _x, _e0, _e1) => {
+                todo!()
             }
-            Expr::While(s, t, e0, e1) => {}
-            _ => todo!()
+            Expr::While(_s, _t, _e0, _e1) => {
+                todo!()
+            }
+            _ => todo!(),
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::infer::solver::Constraint;
+use crate::pass::infer::solver::Constraint;
 use crate::span::Span;
 
 use super::Expr;

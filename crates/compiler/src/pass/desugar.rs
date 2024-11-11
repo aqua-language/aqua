@@ -1,6 +1,5 @@
 use std::rc::Rc;
 
-use ariadne::Cache as _;
 use smol_str::format_smolstr;
 
 use crate::ast::Expr;
@@ -11,7 +10,6 @@ use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Type;
 use crate::pass::Pass;
-use crate::source::Cache;
 use crate::span::Span;
 use crate::splice::Splice;
 use crate::splice::SpliceIterator;
@@ -24,11 +22,16 @@ use self::util::unop;
 #[derive(Debug)]
 pub struct Context {
     anons: Stack,
+    _report: crate::diag::Report,
 }
 
 impl Pass for Context {
     fn run(&mut self, program: &Program) -> Program {
         self.map_program(program)
+    }
+
+    fn report(&mut self) -> &mut crate::diag::Report {
+        unimplemented!()
     }
 }
 
@@ -38,9 +41,10 @@ pub struct Stack {
 }
 
 impl Context {
-    pub fn new(cache: &mut Cache) -> Self {
+    pub fn new() -> Self {
         Context {
             anons: Stack::default(),
+            _report: crate::diag::Report::new(),
         }
     }
 
@@ -218,7 +222,7 @@ impl Context {
                 // Only lex the part of the file that is the splice.
                 // let source = &self.sources.fetch(&file).unwrap().text()[..end as usize];
                 // let lexer = crate::lexer::Lexer::new_from(file, source, start as usize);
-                let mut lexer = crate::lexer::Lexer::new_from(file, s, start as usize);
+                let lexer = crate::lexer::Lexer::new_from(file, s, start as usize);
                 let mut parser = crate::parser::Parser::new(s, lexer);
                 if let Some(e) = parser.parse(|p, follow| p.expr(follow)) {
                     let e = self.map_expr(&e);

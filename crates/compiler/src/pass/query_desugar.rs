@@ -16,6 +16,7 @@ use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Query;
 use crate::ast::Type;
+use crate::diag::Report;
 use crate::span::Span;
 use crate::traversal::mapper::Mapper;
 
@@ -27,9 +28,22 @@ use self::util::record;
 use self::util::relation;
 use self::util::relation_expr;
 
+use super::Pass;
+
 #[derive(Debug)]
 pub struct Context {
     stack: Vec<Scope>,
+    report: Report,
+}
+
+impl Pass for Context {
+    fn run(&mut self, program: &Program) -> Program {
+        self.map_program(program)
+    }
+
+    fn report(&mut self) -> &mut Report {
+        &mut self.report
+    }
 }
 
 #[derive(Debug)]
@@ -37,11 +51,10 @@ struct Scope(Vec<Name>);
 
 impl Context {
     pub fn new() -> Self {
-        Self { stack: vec![] }
-    }
-
-    pub fn querycomp(&mut self, program: &Program) -> Program {
-        self.map_program(program)
+        Self {
+            stack: vec![],
+            report: Report::new(),
+        }
     }
 
     fn bind_relational_var(&mut self, x: Name) {

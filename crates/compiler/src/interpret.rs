@@ -15,7 +15,7 @@ use crate::builtins::types::record::Record;
 use crate::builtins::types::tuple::Tuple;
 use crate::builtins::types::variant::Variant;
 use crate::builtins::value::Value;
-use crate::declare;
+use crate::analysis::declare;
 use crate::traversal::visitor::Visitable;
 
 #[derive(Debug, Default, Send, Sync, Clone)]

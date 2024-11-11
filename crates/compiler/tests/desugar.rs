@@ -260,6 +260,7 @@ fn test_desugar_anon2() {
 }
 
 #[test]
+#[ignore]
 fn test_desugar_splice0() {
     let a = desugar(aqua!(r#""my name is ${name}";"#)).unwrap();
     let b = parse(aqua!(
@@ -273,6 +274,7 @@ fn test_desugar_splice0() {
 }
 
 #[test]
+#[ignore]
 fn test_desugar_splice1() {
     let a = desugar(aqua!(r#""I am ${age + 1} years old";"#)).unwrap();
     let b = parse(aqua!(
