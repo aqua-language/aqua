@@ -47,6 +47,10 @@ impl Expr {
             Expr::Update(_, t, ..) => t,
             Expr::Anonymous(_, t) => t,
             Expr::Closure(_, t, ..) => t,
+            Expr::Ref(_, _) => todo!(),
+            Expr::RefMut(_, _) => todo!(),
+            Expr::Place(_, _) => todo!(),
+            Expr::Deref(_, _, _) => todo!(),
         }
     }
 }

@@ -22,6 +22,17 @@ impl Mangler {
         m.finish()
     }
 
+    pub(crate) fn mangle_record(xts: &[(Name, Type)]) -> Name {
+        let mut m = Mangler::new();
+        m.write("Record");
+        xts.into_iter().for_each(|(x, t)| {
+            m.write(x);
+            m.mangle_type(t);
+        });
+        m.write("End");
+        m.finish()
+    }
+
     pub(crate) fn mangle_struct(x: Name, ts: &[Type]) -> Name {
         let mut m = Mangler::new();
         m.write(x);
@@ -60,11 +71,10 @@ impl Mangler {
     fn mangle_type(&mut self, t: &Type) {
         match t {
             Type::Path(_) => unreachable!(),
-            Type::Cons(x, ts) => {
+            Type::Builtin(x, ts) => {
                 self.write(x);
                 ts.into_iter().for_each(|t| self.mangle_type(t));
             }
-            Type::Alias(_, _) => unreachable!(),
             Type::Assoc(_, _, _) => unreachable!(),
             Type::Var(_) => unreachable!(),
             Type::Generic(_) => unreachable!(),
@@ -92,10 +102,15 @@ impl Mangler {
                 self.mangle_type(t);
                 self.write("End");
             }
+            Type::Struct(_, _) => todo!(),
+            Type::Enum(_, _) => todo!(),
             Type::Never => unreachable!(),
             Type::Paren(_) => unreachable!(),
             Type::Err => unreachable!(),
             Type::Unknown => unreachable!(),
+            Type::Alias(..) => unreachable!(),
+            Type::Ref(_, _) => todo!(),
+            Type::RefMut(_, _) => todo!(),
         }
     }
 }

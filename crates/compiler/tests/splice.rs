@@ -1,5 +1,5 @@
-use compiler::splice::Splice;
-use compiler::splice::SpliceIterator;
+use compiler::syntax::splice::Splice;
+use compiler::syntax::splice::SpliceIterator;
 
 #[test]
 fn test_basic_extraction() {

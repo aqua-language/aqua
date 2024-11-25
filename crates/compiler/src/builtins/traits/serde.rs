@@ -8,8 +8,8 @@ use crate::builtins::value::Value;
 use crate::builtins::Context;
 use crate::builtins::Decl;
 use crate::builtins::DECLS;
-use crate::span::Span;
-use crate::symbol::Symbol;
+use crate::syntax::span::Span;
+use crate::syntax::symbol::Symbol;
 use linkme::distributed_slice;
 use runtime::prelude::Send;
 use runtime::prelude::Sync;
@@ -25,6 +25,7 @@ use std::rc::Rc;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
+        docs: "",
         aqua: "trait Serde[T] { }",
     });
 }
@@ -40,9 +41,9 @@ impl Serialize for Value {
             Value::Bool(v) => v.serialize(serializer),
             Value::Char(v) => v.serialize(serializer),
             Value::Dict(v) => v.serialize(serializer),
-            Value::Assigner(v) => v.serialize(serializer),
+            Value::Window(v) => v.serialize(serializer),
             Value::Duration(v) => v.serialize(serializer),
-            Value::Encoding(v) => v.serialize(serializer),
+            Value::Format(v) => v.serialize(serializer),
             Value::F32(v) => v.serialize(serializer),
             Value::F64(v) => v.serialize(serializer),
             Value::File(_) => unreachable!(),
@@ -62,6 +63,7 @@ impl Serialize for Value {
             Value::Set(v) => v.serialize(serializer),
             Value::SocketAddr(v) => v.serialize(serializer),
             Value::Stream(_) => unreachable!(),
+            Value::KeyedStream(_) => unreachable!(),
             Value::String(v) => v.serialize(serializer),
             Value::Time(v) => v.serialize(serializer),
             Value::Tuple(v) => v.serialize(serializer),
@@ -80,6 +82,8 @@ impl Serialize for Value {
             Value::Ordering(_) => unreachable!(),
             Value::Backend(_) => unreachable!(),
             Value::Range(v) => v.serialize(serializer),
+            Value::Iterator(_) => unreachable!(),
+            Value::Storage(v) => v.serialize(serializer),
         }
     }
 }
@@ -300,7 +304,9 @@ impl<'de> DeserializeSeed<'de> for Seed {
             Type::Record(xts) => {
                 deserializer.deserialize_map(RecordVisitor(xts.into_iter().collect(), self.1))
             }
-            Type::Cons(x, ts) => match x.data.as_str() {
+            Type::Struct(_, _) => todo!(),
+            Type::Enum(_, _) => todo!(),
+            Type::Builtin(x, ts) => match x.data.as_str() {
                 "i8" => i8::deserialize(deserializer).map(Value::from),
                 "i16" => i16::deserialize(deserializer).map(Value::from),
                 "i32" => i32::deserialize(deserializer).map(Value::from),
@@ -390,11 +396,13 @@ impl<'de> DeserializeSeed<'de> for Seed {
                 "Attempted to deserialize a type variable",
             )),
             Type::Err => unreachable!(),
-            Type::Alias(_, _) => unreachable!(),
             Type::Assoc(_, _, _) => unreachable!(),
             Type::Unknown => unreachable!(),
             Type::Path(_) => unreachable!(),
             Type::Paren(_) => unreachable!(),
+            Type::Alias(..) => unreachable!(),
+            Type::Ref(_, _) => todo!(),
+            Type::RefMut(_, _) => todo!(),
         }
     }
 }

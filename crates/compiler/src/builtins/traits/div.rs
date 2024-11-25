@@ -7,6 +7,7 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
+        docs: "",
         aqua: "trait Div[A,B] {
              type Output;
              def div(a:A, b:B): Div[A,B]::Output;

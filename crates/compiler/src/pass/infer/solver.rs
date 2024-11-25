@@ -3,15 +3,40 @@ use crate::ast::Name;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::collections::set::Set;
-use crate::span::Span;
+use crate::syntax::span::Span;
 
 use super::impl_var::ImplVarValue;
 use super::Context;
 
 #[derive(Debug)]
-enum TraitSolverError {
-    NoSolution,
-    MultipleSolutions(Vec<Impl>),
+enum Error {
+    Fatal(FatalError),
+    Recoverable(RecoverableError),
+}
+
+impl From<FatalError> for Error {
+    fn from(e: FatalError) -> Self {
+        Error::Fatal(e)
+    }
+}
+
+impl From<RecoverableError> for Error {
+    fn from(e: RecoverableError) -> Self {
+        Error::Recoverable(e)
+    }
+}
+
+#[derive(Debug)]
+enum FatalError {
+    ImplNotFound,
+    FieldNotFound(Name, Type),
+    NotAStruct(Type),
+}
+
+#[derive(Debug)]
+enum RecoverableError {
+    MultipleImplsFound(Vec<Impl>),
+    StructNotFound,
     MaxDepth,
 }
 
@@ -20,9 +45,9 @@ pub enum Constraint {
     // Generated when calling a function that has a where-clause.
     WhereClause(Span, Impl),
     // Generated when referring to an associated function.
-    ExprAssoc(Span, Type, Impl, Name, Vec<Type>),
+    AssocDef(Span, Type, Impl, Name, Vec<Type>),
     // Generated when referring to an associated type.
-    TypeAssoc(Span, Type, Impl, Name, Vec<Type>),
+    AssocType(Span, Type, Impl, Name, Vec<Type>),
     // Generated when referring to a field.
     Field(Span, Type, Type, Name),
 }
@@ -36,79 +61,112 @@ impl Context {
         loop {
             if fuel == 1 {
                 // Retry by applying defaults.
-                for constraint in constraints.iter() {
-                    constraint.defaults(self);
-                }
-            } else if fuel > 100 {
-                self.report.err(
-                    span,
-                    "Infinite loop detected",
-                    "Unable to solve constraints",
-                );
-                return;
+                constraints.iter().for_each(|c| c.defaults(self));
             }
             constraints = constraints
                 .iter()
                 .map(|c| c.apply(self).expand().canonicalize(self))
                 .collect::<Set<_>>();
-            let num_constraints = constraints.len();
-            for constraint in constraints {
-                match self.solve_constraint(&constraint, &premises) {
+            // Try to solve all constraints
+            let mut num_solved = 0;
+            for c in constraints {
+                match self.solve_constraint(&c, &premises) {
                     Ok(_) => {
-                        self.commit(|this| {
-                            this.solve_constraint(&constraint, &premises)
+                        num_solved += 1;
+                        self.with_commit(|this| {
+                            this.solve_constraint(&c, &premises)
                                 .expect("Constraint should be solvable");
                         });
                     }
-                    Err(TraitSolverError::NoSolution) => {
-                        self.report.err(
-                            *constraint.span_of(),
-                            "Unsatisfiable trait constraint",
-                            format!("No solution found for constraint {constraint}"),
-                        );
+                    Err(e @ Error::Fatal(_)) => {
+                        let c = c.apply(self);
+                        self.report_solver_error(&c, &e);
                     }
                     Err(e) => {
-                        retries.push((constraint, e));
+                        retries.push((c, e));
                     }
                 }
             }
-            if retries.is_empty() || num_constraints == retries.len() {
-                for (constraint, e) in retries {
-                    match e {
-                        TraitSolverError::NoSolution => unreachable!(),
-                        TraitSolverError::MultipleSolutions(candidates) => {
-                            let msg = candidates
-                                .iter()
-                                .enumerate()
-                                .map(|(i, c)| format!("{}: {}", i + 1, c))
-                                .collect::<Vec<_>>()
-                                .join("\n");
-                            self.report.err(
-                                *constraint.span_of(),
-                                "Ambiguous trait implementation",
-                                format!(
-                                    "Found multiple solutions for constraint {constraint}:\n{msg}"
-                                ),
-                            );
-                        }
-                        TraitSolverError::MaxDepth => {
-                            self.report.err(
-                                *constraint.span_of(),
-                                "Max depth reached",
-                                "Unable to solve constraints",
-                            );
-                        }
-                    }
-                }
+            // If all constraints are solved, we are done.
+            if retries.is_empty() {
                 break;
-            } else {
-                fuel += 1;
-                constraints = retries.drain(..).map(|(c, _)| c).collect();
+            }
+            // If we did not solve any constraints, we failed.
+            if num_solved == 0 && fuel > 0 {
+                retries
+                    .iter()
+                    .for_each(|(c, e)| self.report_solver_error(c, e));
+                break;
+            }
+            if fuel == 100 {
+                self.report.err(
+                    span,
+                    "Infinite loop detected",
+                    "Unable to solve constraints",
+                );
+                break;
+            }
+            // Retry solving the constraints that we failed to solve.
+            constraints = retries.drain(..).map(|(c, _)| c).collect();
+            fuel += 1;
+        }
+    }
+
+    fn report_solver_error(&mut self, c: &Constraint, e: &Error) {
+        match e {
+            Error::Recoverable(RecoverableError::MultipleImplsFound(candidates)) => {
+                let msg = candidates
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| format!("{}: {}", i + 1, c))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                self.report.err(
+                    *c.span_of(),
+                    "Ambiguous trait implementation",
+                    format!("Found multiple solutions for constraint {c}:\n{msg}"),
+                );
+            }
+            Error::Recoverable(RecoverableError::MaxDepth) => {
+                self.report.err(
+                    *c.span_of(),
+                    "Trait solver timed out",
+                    "The trait solver reached the maximum recursion depth",
+                );
+            }
+            Error::Recoverable(RecoverableError::StructNotFound) => {
+                self.report.err(
+                    *c.span_of(),
+                    "Could not infer which struct is being accessed.",
+                    "Please provide a type annotation.",
+                );
+            }
+            Error::Fatal(FatalError::ImplNotFound) => {
+                self.report.err(
+                    *c.span_of(),
+                    "Unsatisfiable trait constraint",
+                    format!("No solution found for constraint {c}"),
+                );
+            }
+            Error::Fatal(FatalError::NotAStruct(t)) => {
+                self.report.err(
+                    *c.span_of(),
+                    "Not a struct or record",
+                    format!("Attempted to index into {t} which is not a struct or record"),
+                );
+            }
+            Error::Fatal(FatalError::FieldNotFound(x, t)) => {
+                let t = t.apply(self);
+                self.report.err(
+                    *c.span_of(),
+                    "Field not found",
+                    format!("Field {x} not found in type {t}"),
+                );
             }
         }
     }
 
-    fn commit<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+    fn with_commit<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
         self.commit = true;
         let v = f(self);
         self.commit = false;
@@ -119,55 +177,100 @@ impl Context {
         &mut self,
         constraint: &Constraint,
         premises: &[Impl],
-    ) -> Result<Impl, TraitSolverError> {
+    ) -> Result<(), Error> {
         match &constraint {
             Constraint::WhereClause(_, i) => {
                 let tr = i.as_trait().unwrap();
-                self.solve_trait_impl(tr, premises)
+                self.solve_trait_impl(tr, premises).map(|_| ())
             }
-            Constraint::ExprAssoc(_, def_type, imp, def_name, def_type_args) => match imp {
-                Impl::Trait(impl_trait) => self.solve_trait_impl_def(
-                    impl_trait,
-                    def_type,
-                    def_name,
-                    def_type_args,
-                    premises,
-                ),
-                Impl::Var(v) => {
-                    if let ImplVarValue::Known(i) = self.get_impl_value(*v) {
-                        Ok(i)
-                    } else {
-                        let i1 = self.solve_def(def_type, def_name, def_type_args, premises)?;
-                        if self.commit {
-                            self.union_impl_value(*v, i1.clone());
-                        }
-                        Ok(i1)
-                    }
-                }
-                Impl::Type(impl_type) => {
-                    self.solve_type_impl_def(impl_type, def_type, def_name, def_type_args, premises)
-                }
-                Impl::Err => Err(TraitSolverError::NoSolution),
-                Impl::Unknown => unreachable!(),
-                Impl::Path(..) => unreachable!(),
-            },
-            Constraint::TypeAssoc(_, _, _, _, _) => {
+            Constraint::AssocDef(_, def_type, imp, def_name, def_type_args) => self
+                .solve_assoc_def(&def_type, imp, def_name, def_type_args)
+                .map(|_| ()),
+            Constraint::AssocType(_, _, _, _, _) => {
                 todo!();
             }
-            Constraint::Field(_s, _t0, _t1, _x) => {
-                todo!()
-            }
+            Constraint::Field(s, t0, t1, x) => self.solve_field(s, t0, t1, x).map(|_| ()),
         }
     }
 
-    // Sometimes the type arguments are unknown
+    fn solve_assoc_def(
+        &mut self,
+        def_type: &Type,
+        imp: &Impl,
+        def_name: &Name,
+        def_type_args: &[Type],
+    ) -> Result<(), Error> {
+        match imp {
+            Impl::Trait(impl_trait) => self
+                .solve_trait_impl_def(impl_trait, def_type, def_name, def_type_args, &[])
+                .map(|_| ()),
+            Impl::Var(v) => {
+                if let ImplVarValue::Unknown = self.get_impl_value(*v) {
+                    let i = self.solve_def(def_type, def_name, def_type_args, &[])?;
+                    if self.commit {
+                        self.union_impl_value(*v, i.clone());
+                    }
+                }
+                Ok(())
+            }
+            Impl::Type(impl_type) => self
+                .solve_type_impl_def(impl_type, def_type, def_name, def_type_args, &[])
+                .map(|_| ()),
+            Impl::Err => Ok(()),
+            Impl::Unknown => unreachable!(),
+            Impl::Path(..) => unreachable!(),
+        }
+    }
+
+    fn solve_field(&mut self, s: &Span, t0: &Type, t1: &Type, x: &Name) -> Result<(), Error> {
+        match t1 {
+            Type::Struct(x0, ts) => {
+                if let Some(stmt) = self.decls.structs.get(&x0) {
+                    let stmt = stmt.clone().instantiate(ts);
+                    let t2 = stmt
+                        .fields
+                        .iter()
+                        .find_map(|(x1, t)| (x1 == x).then_some(t));
+                    if let Some(t2) = t2 {
+                        if self.commit {
+                            self.unify(*s, *s, t0, t2);
+                        } else {
+                            self.try_unify(t0, t2).ok();
+                        }
+                        Ok(())
+                    } else {
+                        Err(FatalError::FieldNotFound(*x, t1.clone()).into())
+                    }
+                } else {
+                    Err(FatalError::NotAStruct(t1.clone()).into())
+                }
+            }
+            Type::Record(xts) => {
+                let t2 = xts.iter().find_map(|(x1, t)| (x1 == x).then_some(t));
+                if let Some(t2) = t2 {
+                    if self.commit {
+                        self.unify(*s, *s, t0, t2);
+                    } else {
+                        self.try_unify(t0, t2).ok();
+                    }
+                    Ok(())
+                } else {
+                    Err(FatalError::FieldNotFound(*x, t1.clone()).into())
+                }
+            }
+            Type::Var(_) => Err(RecoverableError::StructNotFound.into()),
+            _ => Err(FatalError::NotAStruct(t1.clone()).into()),
+        }
+    }
+
+    // ::def_name[def_type_args] : def_type
     fn solve_def(
         &mut self,
         def_type: &Type,
         def_name: &Name,
         def_type_args: &[Type],
         premises: &[Impl],
-    ) -> Result<Impl, TraitSolverError> {
+    ) -> Result<Impl, Error> {
         let mut solutions = vec![];
 
         for i in premises {
@@ -275,11 +378,11 @@ impl Context {
     fn solve_type_impl_def(
         &mut self,
         impl_type0: &Type,
-        def_type: &Type,
+        def_type0: &Type,
         def_name: &Name,
         def_type_args: &[Type],
         premises: &[Impl],
-    ) -> Result<Impl, TraitSolverError> {
+    ) -> Result<Impl, Error> {
         let mut solutions = vec![];
 
         for impl_stmt in self.decls.type_impls.clone() {
@@ -297,9 +400,10 @@ impl Context {
                     .unwrap()
                     .instantiate(&def_type_args);
                 let impl_type1 = impl_stmt.head.as_type().unwrap();
+                let def_type1 = def_stmt.type_of().apply(this);
 
                 let satisfied = this.try_unify(impl_type0, impl_type1).is_ok()
-                    && this.try_unify(def_type, &def_stmt.type_of()).is_ok()
+                    && this.try_unify(def_type0, &def_type1).is_ok()
                     && this.solve_where_clauses(&def_stmt.where_clause, premises)?
                     && this.solve_where_clauses(&impl_stmt.where_clause, premises)?;
 
@@ -318,15 +422,22 @@ impl Context {
         &mut self,
         where_clause: &[Impl],
         premises: &[Impl],
-    ) -> Result<bool, TraitSolverError> {
+    ) -> Result<bool, Error> {
         self.depth += 1;
         let result = if self.depth > 10 {
-            Err(TraitSolverError::MaxDepth)
+            Err(RecoverableError::MaxDepth.into())
         } else {
-            Ok(where_clause.iter().all(|i| {
-                let tr = i.as_trait().unwrap();
-                self.solve_trait_impl(tr, premises).is_ok()
-            }))
+            for i in where_clause {
+                let impl_trait = i.as_trait().unwrap();
+                match self.solve_trait_impl(impl_trait, premises) {
+                    Err(e) => {
+                        self.depth -= 1;
+                        return Err(e);
+                    }
+                    Ok(_) => {}
+                }
+            }
+            Ok(true)
         };
         self.depth -= 1;
         result
@@ -339,19 +450,16 @@ impl Context {
         def_name: &Name,
         def_type_args: &[Type],
         premises: &[Impl],
-    ) -> Result<Impl, TraitSolverError> {
+    ) -> Result<Impl, Error> {
         let mut solutions = vec![];
 
         for i in premises {
             self.transaction(|this| {
                 let impl_trait1 = i.as_trait().unwrap();
-
                 let satisfied = this.traits_match(impl_trait0, impl_trait1);
-
                 if satisfied {
                     solutions.push(i.clone());
                 }
-
                 Ok(satisfied)
             })?;
         }
@@ -391,12 +499,34 @@ impl Context {
 
     // Solve a trait impl constraint. This occurs for example when calling a function with
     // where-clauses, e.g., def f[T](x:T) where Trait[T] = ...; f(1);
-    fn solve_trait_impl(
-        &mut self,
-        impl_trait0: &Trait,
-        premises: &[Impl],
-    ) -> Result<Impl, TraitSolverError> {
+    fn solve_trait_impl(&mut self, impl_trait0: &Trait, premises: &[Impl]) -> Result<Impl, Error> {
         let mut solutions = vec![];
+
+        if impl_trait0.ts.len() == 1 {
+            let t = impl_trait0.ts.first().unwrap();
+            let t = t.apply(self);
+            match t {
+                Type::Record(xts) => {
+                    if xts.iter().all(|(_, t)| {
+                        let tr = Trait::new(impl_trait0.x, vec![t.clone()]);
+                        self.solve_trait_impl(&tr, premises).is_ok()
+                    }) {
+                        return Ok(Impl::Trait(impl_trait0.clone()));
+                    }
+                }
+                Type::Struct(x, ts) => {
+                    let stmt = self.decls.structs.get(&x).unwrap().instantiate(&ts);
+                    let xts = stmt.fields;
+                    if xts.iter().all(|(_, t)| {
+                        let tr = Trait::new(impl_trait0.x, vec![t.clone()]);
+                        self.solve_trait_impl(&tr, premises).is_ok()
+                    }) {
+                        return Ok(Impl::Trait(impl_trait0.clone()));
+                    }
+                }
+                _ => (),
+            }
+        }
 
         for i in premises {
             self.transaction(|this| {
@@ -450,18 +580,18 @@ impl Context {
                 .all(|(t0, t1)| self.try_unify(t0, t1).is_ok())
     }
 
-    fn check_solutions(&self, solutions: Vec<Impl>) -> Result<Impl, TraitSolverError> {
+    fn check_solutions(&self, solutions: Vec<Impl>) -> Result<Impl, Error> {
         match solutions.len() {
-            0 => Err(TraitSolverError::NoSolution),
+            0 => Err(FatalError::ImplNotFound.into()),
             1 => Ok(solutions.first().unwrap().clone()),
-            _ => Err(TraitSolverError::MultipleSolutions(solutions)),
+            _ => Err(RecoverableError::MultipleImplsFound(solutions).into()),
         }
     }
 
     fn transaction(
         &mut self,
-        f: impl FnOnce(&mut Self) -> Result<bool, TraitSolverError>,
-    ) -> Result<(), TraitSolverError> {
+        f: impl FnOnce(&mut Self) -> Result<bool, Error>,
+    ) -> Result<(), Error> {
         let type_snapshot = self.type_scope().type_table.snapshot();
         match f(self) {
             Ok(satisfied) => {

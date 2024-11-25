@@ -34,7 +34,7 @@ use crate::ast::TypeVar;
 use crate::collections::map::Map;
 use crate::collections::set::Set;
 use crate::diag::Report;
-use crate::span::Span;
+use crate::syntax::span::Span;
 use crate::traversal::mapper::Mappable;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitable;
@@ -52,7 +52,7 @@ use super::Pass;
 #[derive(Debug)]
 pub struct Context {
     expr_stack: Vec<ExprScope>,
-    type_stack: Vec<TypeScope>,
+    type_stack: Vec<StmtScope>,
     pub report: Report,
     pub decls: declare::Context,
     pub depth: usize,
@@ -80,16 +80,16 @@ impl Default for Context {
 pub struct ExprScope(Map<Name, (Span, Type)>);
 
 #[derive(Debug)]
-pub struct TypeScope {
+pub struct StmtScope {
     pub type_table: InPlaceUnificationTable<TypeVar>,
     pub impl_table: InPlaceUnificationTable<ImplVar>,
     constraints: Set<Constraint>,
     pub where_clause: Vec<Impl>,
 }
 
-impl TypeScope {
-    pub fn new(where_clause: Vec<Impl>) -> TypeScope {
-        TypeScope {
+impl StmtScope {
+    pub fn new(where_clause: Vec<Impl>) -> StmtScope {
+        StmtScope {
             type_table: InPlaceUnificationTable::new(),
             impl_table: InPlaceUnificationTable::new(),
             constraints: vec![].into(),
@@ -108,7 +108,7 @@ impl Context {
     pub fn new() -> Context {
         Context {
             expr_stack: vec![ExprScope::new()],
-            type_stack: vec![TypeScope::new(vec![])],
+            type_stack: vec![StmtScope::new(vec![])],
             report: Report::new(),
             decls: declare::Context::default(),
             depth: 0,
@@ -137,7 +137,7 @@ impl Context {
             .collect()
     }
 
-    pub fn type_scope(&mut self) -> &mut TypeScope {
+    pub fn type_scope(&mut self) -> &mut StmtScope {
         self.type_stack.last_mut().unwrap()
     }
 
@@ -205,7 +205,7 @@ impl Context {
         }
     }
 
-    pub fn try_unify(&mut self, t0: &Type, t1: &Type) -> Result<(), ()> {
+    pub fn try_unify(&mut self, t0: &Type, t1: &Type) -> Result<(), (Type, Type)> {
         match (t0, t1) {
             (Type::Var(x0), Type::Var(x1)) => {
                 match (self.get_type_value(*x0), self.get_type_value(*x1)) {
@@ -230,7 +230,7 @@ impl Context {
                         }
                         Ok(())
                     }
-                    _ => Err(()),
+                    _ => Err((t0.clone(), t1.clone())),
                 }
             }
             (Type::Var(x1), t3) | (t3, Type::Var(x1)) => match self.get_type_value(*x1) {
@@ -239,12 +239,17 @@ impl Context {
                     self.union_type_value(*x1, t3.clone());
                     Ok(())
                 }
-                _ => Err(()),
+                _ => Err((t0.clone(), t1.clone())),
             },
-            (Type::Cons(x0, ts0), Type::Cons(x1, ts1)) if x0 == x1 && ts0.len() == ts1.len() => ts0
-                .iter()
-                .zip(ts1.iter())
-                .try_for_each(|(t0, t1)| self.try_unify(t0, t1)),
+            (Type::Builtin(x0, ts0), Type::Builtin(x1, ts1))
+            | (Type::Struct(x0, ts0), Type::Struct(x1, ts1))
+            | (Type::Enum(x0, ts0), Type::Enum(x1, ts1))
+                if x0 == x1 && ts0.len() == ts1.len() =>
+            {
+                ts0.iter()
+                    .zip(ts1.iter())
+                    .try_for_each(|(t0, t1)| self.try_unify(t0, t1))
+            }
             (Type::Tuple(ts0), Type::Tuple(ts1)) if ts0.len() == ts1.len() => ts0
                 .iter()
                 .zip(ts1.iter())
@@ -262,7 +267,7 @@ impl Context {
                         .zip(xts1.values())
                         .try_for_each(|(t0, t1)| self.try_unify(t0, t1))
                 } else {
-                    Err(())
+                    Err((t0.clone(), t1.clone()))
                 }
             }
             (Type::Generic(x0), Type::Generic(x1)) if x0 == x1 => Ok(()),
@@ -284,7 +289,7 @@ impl Context {
                     }
                     (Impl::Err, _) | (_, Impl::Err) => Ok(()),
                     (Impl::Path(..), _) | (_, Impl::Path(..)) => unreachable!(),
-                    _ => Err(()),
+                    _ => Err((t0.clone(), t1.clone())),
                 }
             }
             (Type::Assoc(_b, _x, _), _t0) | (_t0, Type::Assoc(_b, _x, _)) => {
@@ -298,7 +303,7 @@ impl Context {
             (Type::Err, _) | (_, Type::Err) => Ok(()),
             (Type::Never, _) | (_, Type::Never) => Ok(()),
             (Type::Unknown, Type::Unknown) => Ok(()),
-            _ => Err(()),
+            _ => Err((t0.clone(), t1.clone())),
         }
     }
 
@@ -382,7 +387,7 @@ impl Mapper for Context {
     }
 
     fn map_stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
-        self.type_stack.push(TypeScope::new(s.where_clause.clone()));
+        self.type_stack.push(StmtScope::new(s.where_clause.clone()));
         let generics = s.generics.clone();
         let head = s.head.clone();
         let defs = s
@@ -399,7 +404,7 @@ impl Mapper for Context {
     fn map_stmt_def(&mut self, s: &StmtDef) -> StmtDef {
         match &s.body {
             ExprBody::UserDefined(e) => {
-                self.type_stack.push(TypeScope::new(s.where_clause.clone()));
+                self.type_stack.push(StmtScope::new(s.where_clause.clone()));
                 for (x, t) in &s.params {
                     self.bind(*x, (x.span, t.clone()));
                 }
@@ -477,7 +482,7 @@ impl Visitor for Context {
                     self.visit_expr(&e);
                     self.unify(e.span_of(), stmt.span, e.type_of(), &t2);
                 }
-                let t1 = Type::Cons(*x, ts.clone());
+                let t1 = Type::Struct(*x, ts.clone());
                 self.unify(*s, stmt.span, t0, &t1);
             }
             Expr::Enum(s, t0, x, ts, x1, e) => {
@@ -496,7 +501,7 @@ impl Visitor for Context {
                     .instantiate(&gsub);
                 self.visit_expr(e);
                 self.unify(e.span_of(), stmt.span, e.type_of(), &t2);
-                let t1 = Type::Cons(*x, ts.clone());
+                let t1 = Type::Enum(*x, ts.clone());
                 self.unify(*s, stmt.span, t0, &t1);
             }
             Expr::Tuple(s, t0, es) => {
@@ -543,56 +548,7 @@ impl Visitor for Context {
             }
             Expr::Field(s, t0, e, x) => {
                 self.visit_expr(e);
-                let t = e.type_of().apply(self);
-                match t {
-                    Type::Cons(x0, ts) => {
-                        let stmt = self.decls.structs.get(&x0).unwrap().clone();
-                        let gsub = stmt
-                            .generics
-                            .clone()
-                            .into_iter()
-                            .zip(ts.clone())
-                            .collect::<Map<_, _>>();
-                        let t1 = stmt
-                            .fields
-                            .iter()
-                            .find_map(|(x1, t)| (x1 == x).then_some(t));
-                        if let Some(t1) = t1 {
-                            let t1 = t1.instantiate(&gsub);
-                            self.unify(*s, e.span_of(), t0, &t1);
-                        } else {
-                            self.report.err(
-                                *s,
-                                "Unknown field",
-                                format!("Field {x} not found in {x0}"),
-                            );
-                            self.unify(*s, e.span_of(), t0, &Type::Err);
-                        }
-                    }
-                    Type::Record(xts) => {
-                        let t1 = xts.iter().find_map(|(x1, t)| (x1 == x).then_some(t));
-                        let Some(t1) = t1 else {
-                            let t = e.type_of().apply(self);
-                            self.report.err(
-                                *s,
-                                "Unknown field",
-                                format!("Field {x} not found in record {t}"),
-                            );
-                            self.unify(*s, e.span_of(), t0, &Type::Err);
-                            return;
-                        };
-                        self.unify(*s, e.span_of(), t0, t1);
-                    }
-                    _ => {
-                        let t = e.type_of().apply(self);
-                        self.report.err(
-                            *s,
-                            "Unknown type",
-                            format!("Type {t} must be known at this point."),
-                        );
-                        self.unify(*s, e.span_of(), t0, &Type::Err);
-                    }
-                }
+                self.add_constraint(Constraint::Field(*s, t0.clone(), e.type_of().clone(), *x));
             }
             Expr::Index(s, t0, e, i) => {
                 self.visit_expr(e);
@@ -624,7 +580,7 @@ impl Visitor for Context {
                 for e in es.iter() {
                     self.unify(*s, e.span_of(), e.type_of(), &t1)
                 }
-                let t2 = Type::Cons(Name::from("Array"), vec![t1]);
+                let t2 = Type::Builtin(Name::from("Array"), vec![t1]);
                 self.unify(*s, *s, t0, &t2);
             }
             Expr::Err(_, _) => {}
@@ -673,7 +629,7 @@ impl Visitor for Context {
                 self.unify(*s, *s, t0, &e1.type_of());
             }
             Expr::Assoc(s, t, i, x1, ts1) => {
-                self.type_scope().constraints.insert(Constraint::ExprAssoc(
+                self.type_scope().constraints.insert(Constraint::AssocDef(
                     *s,
                     t.clone(),
                     i.clone(),
@@ -706,6 +662,10 @@ impl Visitor for Context {
             Expr::Closure(_, _, _xts0, _xts1, _t, _e) => {
                 todo!()
             }
+            Expr::Ref(..) => todo!(),
+            Expr::RefMut(..) => todo!(),
+            Expr::Place(..) => todo!(),
+            Expr::Deref(..) => todo!(),
         }
     }
 }

@@ -9,6 +9,7 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
+        docs: "",
         aqua: "trait Hash[T] {}",
     });
 }
@@ -20,9 +21,9 @@ impl Hash for Value {
             Value::Blob(_) => unreachable!(),
             Value::Bool(v) => v.hash(state),
             Value::Char(v) => v.hash(state),
-            Value::Assigner(_) => unreachable!(),
+            Value::Window(_) => unreachable!(),
             Value::Duration(v) => v.hash(state),
-            Value::Encoding(_) => unreachable!(),
+            Value::Format(_) => unreachable!(),
             Value::F64(_) => unreachable!(),
             Value::File(_) => unreachable!(),
             Value::Fun(_) => unreachable!(),
@@ -37,6 +38,7 @@ impl Hash for Value {
             Value::Result(v) => v.hash(state),
             Value::SocketAddr(_) => unreachable!(),
             Value::Stream(_) => unreachable!(),
+            Value::KeyedStream(_) => unreachable!(),
             Value::String(v) => v.hash(state),
             Value::Time(v) => v.hash(state),
             Value::Tuple(v) => v.hash(state),
@@ -62,6 +64,8 @@ impl Hash for Value {
             Value::Ordering(v) => v.hash(state),
             Value::Backend(v) => v.hash(state),
             Value::Range(v) => v.hash(state),
+            Value::Iterator(_) => unreachable!(),
+            Value::Storage(_) => todo!(),
         }
     }
 }

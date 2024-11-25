@@ -1,5 +1,4 @@
-use crate::span::Span;
-
+use crate::syntax::span::Span;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Spanned<T> {
@@ -44,4 +43,3 @@ impl<T> Spanned<Option<T>> {
         }
     }
 }
-

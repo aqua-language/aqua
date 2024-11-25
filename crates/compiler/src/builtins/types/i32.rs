@@ -10,6 +10,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "A 32-bit signed integer.",
         aqua: "type i32;",
         codegen: Some(Codegen {
             rust: "i32",
@@ -24,6 +25,7 @@ fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Impl {
         aqua: "impl i32",
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def abs(a:i32): i32;",
             codegen: Some(Codegen {
                 rust: "i32::abs",
@@ -38,12 +40,19 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
+        aqua: "impl Serde[i32]",
+        decls: &[],
+    });
+
+    ctx.declare(Decl::Impl {
         aqua: "impl Add[i32,i32]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = i32;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def add(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a+b",
@@ -72,9 +81,11 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Sub[i32,i32]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = i32;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def sub(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a-b",
@@ -94,9 +105,11 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Mul[i32,i32]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = i32;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def mul(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a*b",
@@ -116,9 +129,11 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Div[i32,i32]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = i32;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def div(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a/b",
@@ -138,9 +153,11 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Neg[i32]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = i32;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def neg(a:i32): Neg[i32]::Output;",
                 codegen: Some(Codegen {
                     rust: "|a| -a",
@@ -158,6 +175,7 @@ fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Impl {
         aqua: "impl Display[i32]",
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def toString(v: i32): String;",
             codegen: Some(Codegen {
                 rust: "|v| v.to_string()",
@@ -172,8 +190,26 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
+        aqua: "impl Debug[i32]",
+        decls: &[ImplDecl::Def {
+            docs: "",
+            aqua: "def debug(v: i32): String;",
+            codegen: Some(Codegen {
+                rust: r#"|v| format!("{:?}", v")"#,
+                java: "(v) -> v.toString()",
+                egglog: None,
+            }),
+            eval: |_ctx, v| {
+                let v0 = v[0].as_i32();
+                runtime::prelude::String::from(v0.to_string()).into()
+            },
+        }],
+    });
+
+    ctx.declare(Decl::Impl {
         aqua: "impl Default[i32]",
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def default(): i32;",
             codegen: Some(Codegen {
                 rust: "<i32 as Default>::default",
@@ -185,9 +221,10 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
-        aqua: "impl PartialEq[i32,i32]",
+        aqua: "impl PartialEq[i32]",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def eq(a:i32, b:i32): bool;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a == b",
@@ -201,6 +238,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def ne(a:i32, b:i32): bool;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a != b",
@@ -220,6 +258,7 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Ord[i32]",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def cmp(a:i32, b:i32): Ordering;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a.cmp(&b)",
@@ -233,6 +272,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def min(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a.min(b)",
@@ -246,6 +286,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def max(a:i32, b:i32): i32;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a.max(b)",
@@ -262,9 +303,10 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
-        aqua: "impl PartialOrd[i32, i32]",
+        aqua: "impl PartialOrd[i32]",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def partial_cmp(a: i32, b: i32): Option[Ordering];",
                 codegen: Some(Codegen {
                     rust: "|a,b| a.partial_cmp(&b)",
@@ -281,6 +323,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def lt(a: i32, b: i32): bool;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a < b",
@@ -294,6 +337,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def le(a: i32, b: i32): bool;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a <= b",
@@ -307,6 +351,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def gt(a: i32, b: i32): bool;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a > b",
@@ -320,6 +365,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def ge(a: i32, b: i32): bool;",
                 codegen: Some(Codegen {
                     rust: "|a,b| a >= b",

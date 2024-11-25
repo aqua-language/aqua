@@ -10,6 +10,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Time;",
         codegen: Some(Codegen {
             rust: "Time",
@@ -17,10 +18,17 @@ fn declare(ctx: &mut Context) {
             egglog: None,
         }),
     });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl Serde[Time]",
+        decls: &[],
+    });
+
     ctx.declare(Decl::Impl {
         aqua: "impl Time",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def now(): Time;",
                 codegen: Some(Codegen {
                     rust: "Time::now",
@@ -30,6 +38,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_ctx, _v| Time::now().into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def from_seconds(v0: i64): Time;",
                 codegen: Some(Codegen {
                     rust: "Time::from_seconds",
@@ -43,6 +52,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def from_nanoseconds(v0: i128): Time;",
                 codegen: Some(Codegen {
                     rust: "Time::from_nanoseconds",
@@ -56,6 +66,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def seconds(v0: Time): i64;",
                 codegen: Some(Codegen {
                     rust: "Time::seconds",
@@ -68,6 +79,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def nanoseconds(v0: Time): i128;",
                 codegen: Some(Codegen {
                     rust: "Time::nanoseconds",
@@ -80,6 +92,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def year(v0: Time): i32;",
                 codegen: Some(Codegen {
                     rust: "Time::year",
@@ -92,6 +105,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def from_string(v0: String, v1: String): Time;",
                 codegen: Some(Codegen {
                     rust: "Time::from_string",
@@ -106,6 +120,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def into_string(v0: Time, v1: String): String;",
                 codegen: Some(Codegen {
                     rust: "Time::to_string",

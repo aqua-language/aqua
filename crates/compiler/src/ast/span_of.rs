@@ -1,9 +1,9 @@
 use crate::pass::infer::solver::Constraint;
-use crate::span::Span;
+use crate::syntax::span::Span;
 
 use super::Expr;
 use super::Pat;
-use super::Query;
+use super::QueryOp;
 use super::Stmt;
 
 impl Expr {
@@ -51,6 +51,10 @@ impl Expr {
             Expr::Update(s, ..) => *s,
             Expr::Anonymous(s, ..) => *s,
             Expr::Closure(s, ..) => *s,
+            Expr::Ref(_, _) => todo!(),
+            Expr::RefMut(_, _) => todo!(),
+            Expr::Place(_, _) => todo!(),
+            Expr::Deref(_, _, _) => todo!(),
         }
     }
 }
@@ -77,21 +81,21 @@ impl Pat {
     }
 }
 
-impl Query {
+impl QueryOp {
     pub fn span_of(&self) -> Span {
         match self {
-            Query::From(s, ..) => *s,
-            Query::Where(s, ..) => *s,
-            Query::Union(s, ..) => *s,
-            Query::Limit(s, ..) => *s,
-            Query::Select(s, ..) => *s,
-            Query::JoinOn(s, ..) => *s,
-            Query::GroupOverCompute(s, ..) => *s,
-            Query::Var(s, ..) => *s,
-            Query::OverCompute(s, ..) => *s,
-            Query::JoinOverOn(s, ..) => *s,
-            Query::Err(s) => *s,
-            Query::Drop(s, ..) => *s,
+            QueryOp::From(s, ..) => *s,
+            QueryOp::Where(s, ..) => *s,
+            QueryOp::Union(s, ..) => *s,
+            QueryOp::Limit(s, ..) => *s,
+            QueryOp::Select(s, ..) => *s,
+            QueryOp::JoinOn(s, ..) => *s,
+            QueryOp::GroupOverCompute(s, ..) => *s,
+            QueryOp::Var(s, ..) => *s,
+            QueryOp::OverCompute(s, ..) => *s,
+            QueryOp::JoinOverOn(s, ..) => *s,
+            QueryOp::Err(s) => *s,
+            QueryOp::Drop(s, ..) => *s,
         }
     }
 }
@@ -116,8 +120,8 @@ impl Constraint {
     pub fn span_of(&self) -> &Span {
         match self {
             Constraint::WhereClause(s, _) => s,
-            Constraint::ExprAssoc(s, ..) => s,
-            Constraint::TypeAssoc(s, ..) => s,
+            Constraint::AssocDef(s, ..) => s,
+            Constraint::AssocType(s, ..) => s,
             Constraint::Field(s, ..) => s,
         }
     }

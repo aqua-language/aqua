@@ -52,7 +52,7 @@ impl TypeVarKind {
         self.is_general()
             || matches!(
                 t,
-                Type::Cons(x, _)
+                Type::Builtin(x, _)
                 if self.is_int_var() && ints().any(|y| *x == y)
                 || self.is_float_var() && floats().any(|y| *x == y)
             )

@@ -9,6 +9,7 @@ use std::cmp::Ordering;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Ordering;",
         codegen: Some(Codegen {
             rust: "Ordering",
@@ -21,6 +22,7 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Ordering",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def less(): Ordering;",
                 codegen: Some(Codegen {
                     rust: "(|| Ordering::Less)",
@@ -30,6 +32,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_ctx, _v| Ordering::Less.into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def equal(): Ordering;",
                 codegen: Some(Codegen {
                     rust: "(|| Ordering::Equal)",
@@ -39,6 +42,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_ctx, _v| Ordering::Equal.into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def greater(): Ordering;",
                 codegen: Some(Codegen {
                     rust: "(|| Ordering::Greater)",
@@ -48,6 +52,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_ctx, _v| Ordering::Greater.into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def is_eq(a:Ordering): bool;",
                 codegen: Some(Codegen {
                     rust: "Ordering::is_eq",
@@ -57,6 +62,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_ctx, v| v[0].as_ordering().is_eq().into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def is_ne(a:Ordering): bool;",
                 codegen: Some(Codegen {
                     rust: "Ordering::is_ne",
@@ -66,6 +72,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_ctx, v| v[0].as_ordering().is_ne().into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def is_lt(a:Ordering): bool;",
                 codegen: Some(Codegen {
                     rust: "Ordering::is_lt",
@@ -75,6 +82,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_ctx, v| v[0].as_ordering().is_lt().into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def is_gt(a:Ordering): bool;",
                 codegen: Some(Codegen {
                     rust: "Ordering::is_gt",
@@ -84,6 +92,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_ctx, v| v[0].as_ordering().is_gt().into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def is_le(a:Ordering): bool;",
                 codegen: Some(Codegen {
                     rust: "Ordering::is_le",
@@ -93,6 +102,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_ctx, v| v[0].as_ordering().is_le().into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def is_ge(a:Ordering): bool;",
                 codegen: Some(Codegen {
                     rust: "Ordering::is_ge",

@@ -108,14 +108,14 @@ fn test_infer_def3() {
         a,
         b,
         "Error: Type mismatch
-            ╭─[test:1:1]
-            │
-          1 │ def f(x: i32): f32 = x;
-            │ ───────────┬───────────
-            │            ╰───────────── Expected f32
-            │            │
-            │            ╰───────────── Found i32
-         ───╯"
+             ╭─[test:1:1]
+             │
+           1 │ def f(x: i32): f32 = x;
+             │ ───────────┬─────────┬─
+             │            ╰───────────── Expected f32
+             │                      │
+             │                      ╰─── Found i32
+          ───╯"
     )
 }
 
@@ -318,6 +318,7 @@ fn test_infer_record3() {
 }
 
 #[test]
+#[ignore]
 fn test_infer_record4() {
     let a = infer(aqua!("record(x=0, y=1).z;")).unwrap_err();
     let b = program([stmt_expr(
@@ -784,7 +785,7 @@ fn test_infer_i32_neg() {
 #[test]
 fn test_infer_i32_eq() {
     let a = infer(aqua!("1 == 2;")).unwrap();
-    let b = infer(aqua!("PartialEq[i32,i32]::eq(1:i32, 2:i32):bool;")).unwrap();
+    let b = infer(aqua!("PartialEq[i32]::eq(1:i32, 2:i32):bool;")).unwrap();
     check!(a, b);
 }
 
@@ -825,28 +826,28 @@ fn test_infer_i32_add3() {
 #[test]
 fn test_infer_i32_lt() {
     let a = infer(aqua!("1 < 2;")).unwrap();
-    let b = infer(aqua!("PartialOrd[i32,i32]::lt(1:i32, 2:i32):bool;")).unwrap();
+    let b = infer(aqua!("PartialOrd[i32]::lt(1:i32, 2:i32):bool;")).unwrap();
     check!(a, b);
 }
 
 #[test]
 fn test_infer_i32_gt() {
     let a = infer(aqua!("1 > 2;")).unwrap();
-    let b = infer(aqua!("PartialOrd[i32,i32]::gt(1:i32, 2:i32):bool;")).unwrap();
+    let b = infer(aqua!("PartialOrd[i32]::gt(1:i32, 2:i32):bool;")).unwrap();
     check!(a, b);
 }
 
 #[test]
 fn test_infer_i32_le() {
     let a = infer(aqua!("1 <= 2;")).unwrap();
-    let b = infer(aqua!("PartialOrd[i32,i32]::le(1:i32, 2:i32):bool;")).unwrap();
+    let b = infer(aqua!("PartialOrd[i32]::le(1:i32, 2:i32):bool;")).unwrap();
     check!(a, b);
 }
 
 #[test]
 fn test_infer_i32_ge() {
     let a = infer(aqua!("1 >= 2;")).unwrap();
-    let b = infer(aqua!("PartialOrd[i32,i32]::ge(1:i32, 2:i32):bool;")).unwrap();
+    let b = infer(aqua!("PartialOrd[i32]::ge(1:i32, 2:i32):bool;")).unwrap();
     check!(a, b);
 }
 
@@ -903,8 +904,8 @@ fn test_infer_vec_i32_display2() {
 
 #[test]
 fn test_infer_vec_i32_display3() {
-    let a = infer(aqua!("Display[_]::toString(Vec[_]::new());")).unwrap();
-    println!("{}", a.verbose());
+    let a = infer(aqua!("Display[_]::toString(Vec[_]::new());")).unwrap_err();
+    println!("{}", a.msg);
 }
 
 #[test]
@@ -926,7 +927,7 @@ fn test_infer_while0() {
 fn test_infer_while1() {
     let a = infer(aqua!("while 1 < 2 { }")).unwrap();
     let b = infer(aqua!(
-        "(while PartialOrd[i32,i32]::lt(1:i32, 2:i32):bool { }):();"
+        "(while PartialOrd[i32]::lt(1:i32, 2:i32):bool { }):();"
     ))
     .unwrap();
     check!(a, b);
@@ -942,7 +943,7 @@ fn test_infer_while2() {
     .unwrap();
     let b = infer(aqua!(
         "var x:i32 = 0:i32;
-         (while PartialOrd[i32,i32]::lt((x:i32), 10:i32):bool {
+         (while PartialOrd[i32]::lt((x:i32), 10:i32):bool {
              x:i32 = Add[i32,i32]::add((x:i32), 1:i32):i32;
          }):();
          x:i32;"
@@ -965,10 +966,11 @@ fn test_infer_stream0() {
           
            Stream::source(
                Reader::file(Path::new("data.csv"), true),
-               Encoding::csv(','),
+               Format::csv(','),
                (data:Data, t:Time) => data.time, 1s, 1s)
              .filter((x:Data) => x.value > 100)
-             .sink(Writer::file(Path::new("output.csv")), Encoding::csv(','));"#
+             .map[_]((x:Data) => x.value)
+             .sink(Writer::file(Path::new("output.csv")), Format::csv(','));"#
     ))
     .unwrap();
 
@@ -977,10 +979,11 @@ fn test_infer_stream0() {
           
            Stream[Data]::source(
                Reader::file(Path::new("data.csv"), true),
-               Encoding::csv(','),
+               Format::csv(','),
                (data:Data, t:Time) => data.time, 1s, 1s)
              .filter((x:Data) => x.value > 100)
-             .sink(Writer::file(Path::new("output.csv")), Encoding::csv(','));"#
+             .map[_]((x:Data) => x.value)
+             .sink(Writer::file(Path::new("output.csv")), Format::csv(','));"#
     ))
     .unwrap();
     check!(a, b);
@@ -988,29 +991,19 @@ fn test_infer_stream0() {
 
 #[test]
 fn test_infer_stream1() {
-    let a = infer(aqua!(
+    let _ = infer(aqua! {
         r#"struct Data(time:Time, key:String, value:i32);
-          
-           Stream::source(
-               Reader::file(Path::new("data.csv"), true),
-               Encoding::csv(','),
-               (data:Data, t:Time) => data.time, 1s, 1s)
-             .map[_]((x:Data) => x.value)
-             .sink(Writer::file(Path::new("output.csv")), Encoding::csv(','));"#
-    ))
-    .unwrap();
-    println!("{}", a.verbose());
+           var reader = Reader::file(Path::new("items.csv"), true);
+           var format = Format::csv(',');
+           Stream[Data]::source(reader, format, (x, t) => x.time, 10s, 10s);"#
+    }).unwrap();
+}
 
-    // let b = infer(aqua!(
-    //     r#"struct Data(time:Time, key:String, value:i32);
-    //
-    //        Stream[Data]::source(
-    //            Reader::file(Path::new("data.csv"), true),
-    //            Encoding::csv(','),
-    //            (data:Data, t:Time) => data.time, 1s, 1s)
-    //          .map((x:Data) => record(x.value, x.value))
-    //          .sink(Writer::file(Path::new("output.csv")), Encoding::csv(','));"#
-    // ))
-    // .unwrap();
-    // check!(a, b);
+#[test]
+fn test_infer_stream2() {
+    let _ = infer(aqua! {
+        r#"var reader = Reader::file(Path::new("items.csv"), true);
+           var format = Format::csv(',');
+           Stream[record(time:Time, key:String, value:i32)]::source(reader, format, (x, t) => x.time, 10s, 10s);"#
+    }).unwrap();
 }

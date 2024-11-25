@@ -11,7 +11,8 @@ use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtVar;
-use crate::span::Span;
+use crate::diag::Report;
+use crate::syntax::span::Span;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 
@@ -21,6 +22,8 @@ use super::Pass;
 pub struct Context {
     stack: Vec<Scope>,
     uid_counter: u32,
+    #[allow(dead_code)]
+    pub report: Report,
 }
 
 impl Pass for Context {
@@ -53,6 +56,7 @@ impl Context {
         Context {
             stack: vec![Scope::new()],
             uid_counter: 0,
+            report: Report::new(),
         }
     }
 

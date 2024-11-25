@@ -10,6 +10,7 @@ use runtime::builtins::duration::Duration;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Duration;",
         codegen: Some(Codegen {
             rust: "Duration",
@@ -17,10 +18,17 @@ fn declare(ctx: &mut Context) {
             egglog: None,
         }),
     });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl Serde[Duration]",
+        decls: &[],
+    });
+
     ctx.declare(Decl::Impl {
         aqua: "impl Duration",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def postfix_s(v:i32): Duration;",
                 codegen: Some(Codegen {
                     rust: "Duration::seconds",
@@ -33,6 +41,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def postfix_ms(v:i32): Duration;",
                 codegen: Some(Codegen {
                     rust: "Duration::milliseconds",
@@ -45,6 +54,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def postfix_us(v:i32): Duration;",
                 codegen: Some(Codegen {
                     rust: "Duration::microseconds",
@@ -57,6 +67,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def postfix_ns(v:i32): Duration;",
                 codegen: Some(Codegen {
                     rust: "Duration::nanoseconds",
@@ -69,6 +80,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def postfix_min(v:i32): Duration;",
                 codegen: Some(Codegen {
                     rust: "Duration::minutes",
@@ -81,6 +93,33 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
+                aqua: "def postfix_d(v:i32): Duration;",
+                codegen: Some(Codegen {
+                    rust: "Duration::days",
+                    java: "Duration.days",
+                    egglog: None,
+                }),
+                eval: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    Duration::from_days(v0 as i64).into()
+                },
+            },
+            ImplDecl::Def {
+                docs: "",
+                aqua: "def postfix_h(v:i32): Duration;",
+                codegen: Some(Codegen {
+                    rust: "Duration::hours",
+                    java: "Duration.hours",
+                    egglog: None,
+                }),
+                eval: |_ctx, v| {
+                    let v0 = v[0].as_i32();
+                    Duration::from_hours(v0 as i64).into()
+                },
+            },
+            ImplDecl::Def {
+                docs: "",
                 aqua: "def from_seconds(v:i32): Duration;",
                 codegen: Some(Codegen {
                     rust: "Duration::from_seconds",
@@ -93,6 +132,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def from_milliseconds(v:i32): Duration;",
                 codegen: Some(Codegen {
                     rust: "Duration::from_milliseconds",
@@ -105,6 +145,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def from_microseconds(v:i32): Duration;",
                 codegen: Some(Codegen {
                     rust: "Duration::from_microseconds",
@@ -117,6 +158,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def from_nanoseconds(v:i32): Duration;",
                 codegen: Some(Codegen {
                     rust: "Duration::from_nanoseconds",

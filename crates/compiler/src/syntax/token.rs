@@ -1,9 +1,10 @@
-use crate::spanned::Spanned;
+use crate::syntax::spanned::Spanned;
 
 #[bitmask_enum::bitmask(u128)]
 #[bitmask_config(vec_debug)]
 pub enum Token {
     // Punctuations
+    Ampersand,
     Bar,
     Colon,
     ColonColon,
@@ -52,6 +53,7 @@ pub enum Token {
     Into,
     Join,
     Match,
+    Mut,
     Let,
     Of,
     On,
@@ -145,6 +147,7 @@ impl Token {
 impl Token {
     fn as_str(self) -> &'static str {
         match self {
+            Token::Ampersand => "&",
             Token::Eq => "=",
             Token::EqEq => "==",
             Token::Not => "!",
@@ -191,6 +194,7 @@ impl Token {
             Token::Into => "into",
             Token::Join => "join",
             Token::Match => "match",
+            Token::Mut => "mut",
             Token::On => "on",
             Token::Or => "or",
             Token::Over => "over",

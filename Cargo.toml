@@ -1,6 +1,6 @@
 [workspace]
 members = ["crates/*", "crates/compiler/fuzz"]
-default-members = ["crates/cli"]
+default-members = ["crates/aqua"]
 resolver = "2"
 
 [workspace.package]

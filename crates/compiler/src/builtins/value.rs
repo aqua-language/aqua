@@ -1,10 +1,9 @@
 use runtime::builtins::url::Url;
-use runtime::prelude::Assigner;
 use runtime::prelude::Blob;
 use runtime::prelude::Dict;
 use runtime::prelude::Duration;
-use runtime::prelude::Encoding;
 use runtime::prelude::File;
+use runtime::prelude::Format;
 use runtime::prelude::Path;
 use runtime::prelude::Reader;
 use runtime::prelude::Send;
@@ -12,13 +11,16 @@ use runtime::prelude::Set;
 use runtime::prelude::SocketAddr;
 use runtime::prelude::Sync;
 use runtime::prelude::Time;
+use runtime::prelude::Window;
 use runtime::prelude::Writer;
 
 pub use super::types::array::Array;
-use super::types::backend::Backend;
+pub use super::types::backend::Backend;
 pub use super::types::dataflow::Dataflow;
-pub use super::types::function::Fun;
+pub use super::types::function::Function;
 pub use super::types::instance::Instance;
+pub use super::types::iterator::Adaptor;
+use super::types::keyed_stream::KeyedStream;
 pub use super::types::record::Record;
 pub use super::types::stream::Stream;
 pub use super::types::tuple::Tuple;
@@ -33,13 +35,13 @@ pub enum Value {
     Bool(bool),
     Char(char),
     Dict(Dict<Value, Value>),
-    Assigner(Assigner),
+    Window(Window),
     Duration(Duration),
-    Encoding(Encoding),
+    Format(Format),
     F32(f32),
     F64(f64),
     File(File),
-    Fun(Fun),
+    Fun(Function),
     I128(i128),
     I16(i16),
     I32(i32),
@@ -53,6 +55,7 @@ pub enum Value {
     Set(Set<Value>),
     SocketAddr(SocketAddr),
     Stream(Stream),
+    KeyedStream(KeyedStream),
     Dataflow(Dataflow),
     String(runtime::builtins::im_string::String),
     Time(Time),
@@ -71,6 +74,8 @@ pub enum Value {
     Ordering(std::cmp::Ordering),
     Backend(Backend),
     Range(runtime::builtins::range::Range<Rc<Value>>),
+    Iterator(Adaptor),
+    Storage(super::types::storage::Storage),
 }
 
 impl Value {

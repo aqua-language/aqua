@@ -1,4 +1,3 @@
-#![allow(unused)]
 use std::borrow::Cow;
 use std::fmt::Display;
 
@@ -47,6 +46,7 @@ impl SyntaxHighlighter {
             capture_group("numeric", word(join(NUMERICS))),
             capture_group("string", join(STRINGS)),
             capture_group("builtin", word(join(BUILTINS))),
+            capture_group("type", word(join(TYPES))),
             capture_group("comment", r"#.*"),
         ]);
         Self {
@@ -68,6 +68,8 @@ impl Highlighter for SyntaxHighlighter {
                 s.as_str().color(BUILTIN_COLOR).bold().to_string()
             } else if let Some(s) = caps.name("comment") {
                 s.as_str().color(COMMENT_COLOR).to_string()
+            } else if let Some(s) = caps.name("type") {
+                s.as_str().color(TYPE_COLOR).to_string()
             } else {
                 unreachable!()
             }
@@ -80,10 +82,10 @@ impl Highlighter for SyntaxHighlighter {
 }
 
 pub const KEYWORDS: &[&str] = &[
-    "mod", "and", "as", "break", "continue", "def", "desc", "else", "for", "from", "fun", "group",
-    "if", "in", "into", "join", "loop", "match", "not", "on", "or", "of", "return", "select",
-    "compute", "type", "val", "var", "where", "with", "while", "use", "union", "over", "roll",
-    "order", "enum",
+    "and", "as", "break", "continue", "def", "desc", "else", "for", "from", "fun", "group", "if",
+    "in", "into", "join", "loop", "match", "not", "on", "or", "of", "return", "select", "compute",
+    "type", "val", "var", "where", "with", "while", "use", "union", "over", "order", "enum",
+    "struct", "impl", "trait", "limit",
 ];
 
 pub const NUMERICS: &[&str] = &[
@@ -130,6 +132,10 @@ pub const TYPES: &[&str] = &[
     "Path",
     "Duration",
     "Time",
+    "Format",
+    "Reader",
+    "Writer",
+    "Window",
 ];
 
 use colored::Color;
@@ -143,7 +149,7 @@ pub const KEYWORD_COLOR: Color = rgb(0, 95, 135);
 pub const MACRO_COLOR: Color = rgb(95, 135, 0);
 pub const VAR_COLOR: Color = rgb(255, 0, 0);
 pub const VAL_COLOR: Color = rgb(68, 68, 68);
-pub const TYPE_COLOR: Color = rgb(0, 135, 0);
+pub const TYPE_COLOR: Color = rgb(135, 0, 175);
 pub const DEF_COLOR: Color = rgb(0, 135, 175);
 pub const NUMERIC_COLOR: Color = rgb(215, 95, 0);
 pub const VARIANT_COLOR: Color = rgb(0, 135, 0);

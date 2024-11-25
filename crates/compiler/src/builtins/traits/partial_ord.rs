@@ -6,12 +6,13 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
-        aqua: "trait PartialOrd[L,R] where PartialEq[L,R] {
-             def partial_cmp(a:L, b:R): Option[Ordering];
-             def lt(a:L, b:R): bool;
-             def le(a:L, b:R): bool;
-             def gt(a:L, b:R): bool;
-             def ge(a:L, b:R): bool;
+        docs: "",
+        aqua: "trait PartialOrd[T] where PartialEq[T] {
+             def partial_cmp(a:T, b:T): Option[Ordering];
+             def lt(a:T, b:T): bool;
+             def le(a:T, b:T): bool;
+             def gt(a:T, b:T): bool;
+             def ge(a:T, b:T): bool;
          }",
     });
 }

@@ -7,6 +7,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn decl(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
+        docs: "",
         aqua: "trait Copy[T] {}",
     });
 }

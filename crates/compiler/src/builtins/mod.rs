@@ -5,12 +5,12 @@ use crate::ast::BuiltinType;
 use crate::ast::Codegen;
 use crate::ast::Stmt;
 use crate::diag::Report;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
-use crate::source::Cache;
-use crate::span::Span;
-use crate::spanned::Spanned;
-use crate::token::Token;
+use crate::syntax::lexer::Lexer;
+use crate::syntax::parser::Parser;
+use crate::syntax::source::Cache;
+use crate::syntax::span::Span;
+use crate::syntax::spanned::Spanned;
+use crate::syntax::token::Token;
 use linkme::distributed_slice;
 use value::Value;
 
@@ -43,17 +43,17 @@ pub mod traits {
 pub mod types {
     pub mod array;
     pub mod backend;
+    pub mod bag;
     pub mod blob;
     pub mod bool;
     pub mod char;
     pub mod dataflow;
     pub mod dict;
-    pub mod discretizer;
     pub mod duration;
-    pub mod encoding;
     pub mod f32;
     pub mod f64;
     pub mod file;
+    pub mod format;
     pub mod function;
     pub mod i128;
     pub mod i16;
@@ -62,6 +62,7 @@ pub mod types {
     pub mod i8;
     pub mod image;
     pub mod instance;
+    pub mod iterator;
     pub mod keyed_stream;
     pub mod matrix;
     pub mod model;
@@ -75,6 +76,7 @@ pub mod types {
     pub mod result;
     pub mod set;
     pub mod socket;
+    pub mod storage;
     pub mod stream;
     pub mod string;
     pub mod time;
@@ -88,6 +90,7 @@ pub mod types {
     pub mod usize;
     pub mod variant;
     pub mod vec;
+    pub mod window;
     pub mod writer;
 }
 mod functions {
@@ -103,14 +106,16 @@ pub struct Context<'a> {
     pub sources: &'a mut Cache,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Decl {
     Def {
+        docs: &'static str,
         aqua: &'static str,
         fun: fn(&mut crate::interpret::Context, &[Value]) -> Value,
         codegen: Option<Codegen>,
     },
     Type {
+        docs: &'static str,
         aqua: &'static str,
         codegen: Option<Codegen>,
     },
@@ -119,6 +124,7 @@ pub enum Decl {
         decls: &'static [ImplDecl],
     },
     Trait {
+        docs: &'static str,
         aqua: &'static str,
     },
 }
@@ -126,9 +132,11 @@ pub enum Decl {
 #[derive(Debug, Clone)]
 pub enum ImplDecl {
     Type {
+        docs: &'static str,
         aqua: &'static str,
     },
     Def {
+        docs: &'static str,
         aqua: &'static str,
         eval: fn(&mut crate::interpret::Context, &[Value]) -> Value,
         codegen: Option<Codegen>,
@@ -137,14 +145,23 @@ pub enum ImplDecl {
 
 impl<'s> Context<'s> {
     pub fn declare(&mut self, decl: Decl) {
-        match decl.clone() {
-            Decl::Def { aqua, fun, codegen } => {
+        match decl {
+            Decl::Def {
+                docs: _,
+                aqua,
+                fun,
+                codegen,
+            } => {
                 let s = self.parse(aqua, |parser, follow| {
                     parser.stmt_def_builtin(follow, BuiltinDef { codegen, fun })
                 });
                 self.stmts.push(Stmt::Def(Rc::new(s)))
             }
-            Decl::Type { aqua, codegen } => {
+            Decl::Type {
+                docs: _,
+                aqua,
+                codegen,
+            } => {
                 let s = self.parse(aqua, |parser, follow| {
                     parser.stmt_type_builtin(follow, BuiltinType { codegen })
                 });
@@ -154,7 +171,7 @@ impl<'s> Context<'s> {
                 let mut aqua = aqua.to_string();
                 aqua.push_str(" {\n");
                 for v in decls.iter().map(|t| match t {
-                    ImplDecl::Type { aqua } => aqua,
+                    ImplDecl::Type { docs: _, aqua } => aqua,
                     ImplDecl::Def { aqua, .. } => aqua,
                 }) {
                     for line in v.lines() {
@@ -182,7 +199,7 @@ impl<'s> Context<'s> {
 
                 self.stmts.push(Stmt::Impl(Rc::new(s)))
             }
-            Decl::Trait { aqua } => {
+            Decl::Trait { docs: _, aqua } => {
                 let s = self.parse(aqua, |parser, follow| parser.stmt_trait(follow));
                 self.stmts.push(Stmt::Trait(Rc::new(s)))
             }

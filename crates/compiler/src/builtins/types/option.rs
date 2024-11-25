@@ -11,6 +11,7 @@ use runtime::builtins::option::Option;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Option[T];",
         codegen: Some(Codegen {
             rust: "Option",
@@ -20,9 +21,15 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
+        aqua: "impl[T] Serde[Option[T]] where Serde[T]",
+        decls: &[],
+    });
+
+    ctx.declare(Decl::Impl {
         aqua: "impl[T] Option[T]",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def some(v: T): Option[T];",
                 codegen: Some(Codegen {
                     rust: "Option::some",
@@ -35,6 +42,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def none(): Option[T];",
                 codegen: Some(Codegen {
                     rust: "Option::none",
@@ -44,6 +52,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_ctx, _v| Option::none().into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def is_some(v: Option[T]): bool;",
                 codegen: Some(Codegen {
                     rust: "Option::is_some",
@@ -56,6 +65,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def unwrap(v: Option[T]): T;",
                 codegen: Some(Codegen {
                     rust: "Option::unwrap",

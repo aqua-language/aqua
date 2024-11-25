@@ -9,6 +9,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type String;",
         codegen: Some(Codegen {
             rust: "String",
@@ -18,9 +19,15 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
+        aqua: "impl Serde[String]",
+        decls: &[],
+    });
+
+    ctx.declare(Decl::Impl {
         aqua: "impl String",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def new(): String;",
                 codegen: Some(Codegen {
                     rust: "String::new",
@@ -33,6 +40,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def with_capacity(cap: usize): String;",
                 codegen: Some(Codegen {
                     rust: "String::with_capacity",
@@ -46,6 +54,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def push_char(s: String, c: char): ();",
                 codegen: Some(Codegen {
                     rust: "String::push",
@@ -60,6 +69,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def push(s1: String, s2: String): ();",
                 codegen: Some(Codegen {
                     rust: "String::push_string",
@@ -74,6 +84,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def remove(s: String, idx: usize): char;",
                 codegen: Some(Codegen {
                     rust: "String::remove",
@@ -89,6 +100,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def insert(s: String, idx: usize, c: char): ();",
                 codegen: Some(Codegen {
                     rust: "String::insert",
@@ -104,6 +116,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def is_empty(s: String): bool;",
                 codegen: Some(Codegen {
                     rust: "String::is_empty",
@@ -117,6 +130,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def split_off(s: String, idx: usize): (String, String);",
                 codegen: Some(Codegen {
                     rust: "String::split_off",
@@ -132,6 +146,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def clear(s: String): ();",
                 codegen: Some(Codegen {
                     rust: "String::clear",
@@ -144,6 +159,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def len(s: String): usize;",
                 codegen: Some(Codegen {
                     rust: "String::len",
@@ -156,6 +172,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def concat(a: String, b: String): String;",
                 codegen: Some(Codegen {
                     rust: "String::concat",
@@ -169,25 +186,33 @@ fn declare(ctx: &mut Context) {
                 },
             },
             // ImplDecl::Def {
-            //    aqua: "def decode[T](s: String, e: Encoding): T;",
-            //    rust: "String::decode",
-            //    fun: |_ctx, _t, _v| {
-            //    todo!()
-            //    // let a0 = a[0].as_string().0;
-            //    // let a1 = a[1].as_encoding().0;
-            //    // a0.decode(a1)
-            //    },
-            //    },
-            //    ImplDecl::Def {
-            //    aqua: "def encode[T](s: T, e: Encoding): String;",
-            //    rust: "String::encode",
-            //    fun: |_ctx, _t, _v| {
-            //    todo!()
-            //    // let a0 = a[0].as_string().0;
-            //    // a0.encode(a[1].as_encoding())
-            //    },
-            //    },
+            //     docs: "",
+            //     aqua: "def decode[T](s: String, e: Format): Option[T];",
+            //     codegen: Some(Codegen {
+            //         rust: "String::decode",
+            //         java: "String.decode",
+            //         egglog: None,
+            //     }),
+            //     eval: |_ctx, v| {
+            //         let v0 = v[0].as_string();
+            //         let v1 = v[1].as_encoding();
+            //         v0.decode(v1)
+            //     },
+            // },
+            // ImplDecl::Def {
+            //     aqua: "def encode[T](s: T, e: Format): Option[String];",
+            //     codegen: Some(Codegen {
+            //         rust: "String::decode",
+            //         java: "String.decode",
+            //         egglog: None,
+            //     }),
+            //     eval: |_ctx, v| {
+            //         let v0 = v[0].as_string();
+            //         v0.encode(v[1].as_encoding())
+            //     },
+            // },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def lines[T](s: String): Vec[T];",
                 codegen: Some(Codegen {
                     rust: "String::lines",
@@ -212,6 +237,7 @@ fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Impl {
         aqua: "impl Display[String]",
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def toString(s: String): String;",
             codegen: Some(Codegen {
                 rust: "String::to_string",
@@ -221,4 +247,38 @@ fn declare(ctx: &mut Context) {
             eval: |_ctx, v| v[0].as_string().into(),
         }],
     });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl PartialEq[String]",
+        decls: &[
+            ImplDecl::Def {
+                docs: "",
+                aqua: "def eq(a: String, b: String): bool;",
+                codegen: Some(Codegen {
+                    rust: "|a,b| a==b",
+                    java: "String.eq",
+                    egglog: None,
+                }),
+                eval: |_ctx, v| {
+                    let a0 = v[0].as_string();
+                    let a1 = v[1].as_string();
+                    a0.eq(&a1).into()
+                },
+            },
+            ImplDecl::Def {
+                docs: "",
+                aqua: "def ne(a: String, b: String): bool;",
+                codegen: Some(Codegen {
+                    rust: "|a,b| a!=b",
+                    java: "String.ne",
+                    egglog: None,
+                }),
+                eval: |_ctx, v| {
+                    let a0 = v[0].as_string();
+                    let a1 = v[1].as_string();
+                    a0.ne(&a1).into()
+                },
+            },
+        ],
+    })
 }

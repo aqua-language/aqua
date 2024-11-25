@@ -26,7 +26,7 @@ impl Visitor for Context {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Int(s, t, v) => {
-                let Type::Cons(x, _) = t else { unreachable!() };
+                let Type::Builtin(x, _) = t else { unreachable!() };
                 let r = match x.data.as_str() {
                     "i8" => v.as_str().parse::<i8>().err().map(|e| e.to_string()),
                     "i16" => v.as_str().parse::<i16>().err().map(|e| e.to_string()),
@@ -43,7 +43,7 @@ impl Visitor for Context {
                 }
             }
             Expr::Float(s, t, v) => {
-                let Type::Cons(x, _) = t else { unreachable!() };
+                let Type::Builtin(x, _) = t else { unreachable!() };
                 let r = match x.data.as_str() {
                     "f32" => v.as_str().parse::<f32>().err().map(|e| e.to_string()),
                     "f64" => v.as_str().parse::<f64>().err().map(|e| e.to_string()),

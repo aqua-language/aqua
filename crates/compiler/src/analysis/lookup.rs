@@ -1,7 +1,7 @@
 use crate::ast::Expr;
 use crate::ast::Program;
 use crate::ast::Stmt;
-use crate::span::Span;
+use crate::syntax::span::Span;
 use crate::traversal::visitor::Visitor;
 
 pub struct Context {

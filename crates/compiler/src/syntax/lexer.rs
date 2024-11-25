@@ -1,8 +1,8 @@
 use crate::diag::Report;
-use crate::source::SourceId;
-use crate::span::Span;
-use crate::spanned::Spanned;
-use crate::token::Token;
+use crate::syntax::source::SourceId;
+use crate::syntax::span::Span;
+use crate::syntax::spanned::Spanned;
+use crate::syntax::token::Token;
 
 pub struct Lexer<'a> {
     pub input: &'a str,

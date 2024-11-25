@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::pass::infer::solver::Constraint;
 
 use super::BuiltinDef;
@@ -9,6 +11,7 @@ use super::Map;
 use super::Name;
 use super::Pat;
 use super::Path;
+use super::Place;
 use super::Stmt;
 use super::StmtDef;
 use super::StmtEnum;
@@ -231,6 +234,16 @@ impl Expr {
             _ => None,
         }
     }
+
+    pub fn as_place(&self) -> Option<Place> {
+        match self {
+            // x
+            Expr::Path(_, _, p) => Some(Place::Var(*p.as_name()?)),
+            // e.x
+            Expr::Field(_, _, e, x) => Some(Place::Field(Rc::new(e.as_place()?), *x)),
+            _ => None,
+        }
+    }
 }
 
 impl TypeBody {
@@ -252,8 +265,8 @@ impl Constraint {
     pub fn impl_of(&self) -> Option<&Impl> {
         match self {
             Constraint::WhereClause(_, i) => Some(i),
-            Constraint::ExprAssoc(_, _, i, ..) => Some(i),
-            Constraint::TypeAssoc(_, _, i, ..) => Some(i),
+            Constraint::AssocDef(_, _, i, ..) => Some(i),
+            Constraint::AssocType(_, _, i, ..) => Some(i),
             Constraint::Field(..) => None,
         }
     }

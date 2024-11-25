@@ -1,4 +1,3 @@
-mod standard;
 use smol_str::SmolStr;
 
 use serde::Deserialize;

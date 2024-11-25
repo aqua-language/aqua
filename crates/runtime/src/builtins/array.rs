@@ -15,7 +15,6 @@ use serde::Serialize;
 use serde::Serializer;
 
 use crate::HashMap;
-use crate::builtins::dict::Dict;
 use crate::builtins::set::Set;
 use crate::builtins::vec::Vec;
 use crate::traits::DeepClone;
@@ -74,11 +73,11 @@ where
     K: Clone + Eq + Hash,
     V: Clone,
 {
-    pub fn into_dict(self) -> Dict<K, V>
+    pub fn into_dict(self) -> HashMap<K, V>
     where
         V: Clone,
     {
-        Dict::from(self.0.into_iter().collect::<HashMap<_, _>>())
+        HashMap::from(self.0.into_iter().collect::<HashMap<_, _>>())
     }
 }
 

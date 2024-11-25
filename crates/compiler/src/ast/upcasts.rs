@@ -1,21 +1,21 @@
 use std::rc::Rc;
 
-use crate::span::Span;
-use crate::symbol::Symbol;
+use crate::syntax::span::Span;
+use crate::syntax::symbol::Symbol;
 
 use super::Expr;
+use super::ExprBody;
 use super::Name;
 use super::Stmt;
 use super::StmtDef;
-use super::ExprBody;
 use super::StmtEnum;
 use super::StmtImpl;
 use super::StmtStruct;
 use super::StmtTrait;
 use super::StmtType;
-use super::TypeBody;
 use super::StmtVar;
 use super::Type;
+use super::TypeBody;
 
 impl From<StmtVar> for Stmt {
     fn from(v: StmtVar) -> Stmt {

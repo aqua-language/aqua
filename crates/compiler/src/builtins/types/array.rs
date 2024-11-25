@@ -28,6 +28,7 @@ impl std::fmt::Display for Array {
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Def {
+        docs: "",
         aqua: "def array_get[T](array:[T;1], idx:usize): T;",
         codegen: Some(Codegen {
             rust: "Array::get",
@@ -56,6 +57,7 @@ fn declare(ctx: &mut Context) {
     // );
 
     ctx.declare(Decl::Def {
+        docs: "",
         aqua: "def array_into_vec[T](array:[T;1]): Vec[T];",
         codegen: Some(Codegen {
             rust: "Array::into_vec",
@@ -69,6 +71,7 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Def {
+        docs: "",
         aqua: "def array_into_set[T](array:[T;1]): Set[T];",
         codegen: Some(Codegen {
             rust: "Array::into_set",
@@ -85,6 +88,7 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Def {
+        docs: "",
         aqua: "def array_into_dict[K,V](array:[(K,V);1]): Dict[K,V];",
         codegen: Some(Codegen {
             rust: "Array::into_dict",

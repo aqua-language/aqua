@@ -1,7 +1,7 @@
 use crate::ast::Index;
 use crate::ast::Name;
-use crate::symbol::Symbol;
-use crate::token::Token;
+use crate::syntax::symbol::Symbol;
+use crate::syntax::token::Token;
 
 pub trait Print<'b> {
     // Required methods

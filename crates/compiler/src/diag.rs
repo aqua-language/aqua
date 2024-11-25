@@ -1,5 +1,5 @@
-use crate::source::Cache;
-use crate::span::Span;
+use crate::syntax::source::Cache;
+use crate::syntax::span::Span;
 use std::io::Write;
 
 use ariadne::Config;
@@ -29,17 +29,17 @@ impl Message {
     }
 }
 
-impl From<Diagnostic> for ariadne::Report<'static, Span> {
-    fn from(diag: Diagnostic) -> Self {
-        let span = diag.label.span;
-        let kind = ReportKind::Error;
-        let mut report = ariadne::Report::build(kind, span)
-            .with_message(diag.label.text)
-            .with_config(Config::default().with_color(false));
-        for msg in diag.messages {
-            report = report.with_label(Label::new(span).with_message(msg.text));
-        }
-        report.finish()
+impl Diagnostic {
+    fn to_ariadne(self, color: bool) -> ariadne::Report<'static, Span> {
+        ariadne::Report::build(ReportKind::Error, self.label.span)
+            .with_message(self.label.text)
+            .with_labels(
+                self.messages
+                    .into_iter()
+                    .map(|msg| Label::new(msg.span).with_message(msg.text)),
+            )
+            .with_config(Config::default().with_color(color))
+            .finish()
     }
 }
 
@@ -88,7 +88,7 @@ impl Report {
 
     pub fn print(&mut self, sources: &mut Cache) -> std::io::Result<()> {
         for diag in self.diags.drain(..) {
-            let report: ariadne::Report<Span> = diag.into();
+            let report = diag.to_ariadne(true);
             report.eprint(&mut *sources)?;
         }
         Ok(())
@@ -97,8 +97,8 @@ impl Report {
     pub fn string(&mut self, sources: &mut Cache) -> Result<String, std::string::FromUtf8Error> {
         let mut buf = Vec::new();
         for diag in self.diags.drain(..) {
-            let report: ariadne::Report<Span> = diag.into();
-            report.write(&mut &mut *sources, &mut buf).unwrap();
+            let report = diag.to_ariadne(false);
+            report.write(&mut *sources, &mut buf).unwrap();
             writeln!(&mut buf).unwrap();
         }
         String::from_utf8(buf)

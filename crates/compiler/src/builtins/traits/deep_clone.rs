@@ -8,6 +8,7 @@ use runtime::prelude::DeepClone;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
+        docs: "",
         aqua: "trait DeepClone[T] {
              def deep_clone(v:T): T;
          }",
@@ -22,9 +23,9 @@ impl DeepClone for Value {
             Value::Bool(v) => Value::Bool(v.deep_clone()),
             Value::Char(v) => Value::Char(v.deep_clone()),
             Value::Dict(v) => Value::Dict(v.deep_clone()),
-            Value::Assigner(v) => Value::Assigner(v.deep_clone()),
+            Value::Window(v) => Value::Window(v.deep_clone()),
             Value::Duration(v) => Value::Duration(v.deep_clone()),
-            Value::Encoding(v) => Value::Encoding(v.deep_clone()),
+            Value::Format(v) => Value::Format(v.deep_clone()),
             Value::F32(v) => Value::F32(v.deep_clone()),
             Value::F64(v) => Value::F64(v.deep_clone()),
             Value::File(_) => unreachable!(),
@@ -60,6 +61,9 @@ impl DeepClone for Value {
             Value::Ordering(v) => Value::Ordering(v.deep_clone()),
             Value::Backend(_) => unreachable!(),
             Value::Range(v) => Value::Range(v.deep_clone()),
+            Value::Iterator(_) => unreachable!(),
+            Value::KeyedStream(_) => todo!(),
+            Value::Storage(_) => todo!(),
         }
     }
 }

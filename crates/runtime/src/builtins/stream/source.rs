@@ -8,7 +8,7 @@ use tokio::io::BufReader;
 use tokio_stream::StreamExt;
 
 use crate::builtins::duration::Duration;
-use crate::builtins::encoding::Encoding;
+use crate::builtins::format::Format;
 use crate::builtins::path::Path;
 use crate::builtins::reader::Reader;
 use crate::builtins::socket::SocketAddr;
@@ -23,13 +23,13 @@ impl<T: Data> Stream<T> {
     pub fn source(
         ctx: &mut Context,
         reader: Reader,
-        encoding: Encoding,
+        encoding: Format,
         extractor: impl FnMut(T, Time) -> Time + Send + 'static,
         slack: Duration,
         watermark_interval: Duration,
     ) -> Stream<T> {
         match encoding {
-            Encoding::Csv { sep } => {
+            Format::Csv { sep } => {
                 let mut decoder = crate::formats::csv::de::Reader::<1024>::new(sep);
                 Self::_source1(
                     ctx,
@@ -40,7 +40,7 @@ impl<T: Data> Stream<T> {
                     watermark_interval,
                 )
             }
-            Encoding::Json => {
+            Format::Json => {
                 let mut decoder = crate::formats::json::de::Reader::new();
                 Self::_source1(
                     ctx,
@@ -57,7 +57,7 @@ impl<T: Data> Stream<T> {
     pub fn dyn_source<Seed>(
         ctx: &mut Context,
         reader: Reader,
-        encoding: Encoding,
+        encoding: Format,
         extractor: impl FnMut(T, Time) -> Time + Send + 'static,
         slack: Duration,
         watermark_interval: Duration,
@@ -67,7 +67,7 @@ impl<T: Data> Stream<T> {
         Seed: Clone + Send + Sync + for<'a> serde::de::DeserializeSeed<'a, Value = T> + 'static,
     {
         match encoding {
-            Encoding::Csv { sep } => {
+            Format::Csv { sep } => {
                 let mut decoder = crate::formats::csv::de::Reader::<1024>::new(sep);
                 Self::_source1(
                     ctx,
@@ -78,7 +78,7 @@ impl<T: Data> Stream<T> {
                     watermark_interval,
                 )
             }
-            Encoding::Json => {
+            Format::Json => {
                 let mut decoder = crate::formats::json::de::Reader::new();
                 Self::_source1(
                     ctx,

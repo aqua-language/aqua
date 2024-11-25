@@ -14,6 +14,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Instance;",
         codegen: None,
     });
@@ -22,6 +23,7 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Instance",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def logpath(inst: Instance): Path;",
                 codegen: None,
                 eval: |_ctx, _v| {
@@ -31,6 +33,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def wait(inst: Instance): ();",
                 codegen: None,
                 eval: |_ctx, v| {
@@ -42,6 +45,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def stop(inst: Instance): ();",
                 codegen: None,
                 eval: |_ctx, v| {

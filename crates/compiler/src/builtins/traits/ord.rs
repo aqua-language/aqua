@@ -7,7 +7,8 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
-        aqua: "trait Ord[T] where PartialOrd[T,T] {
+        docs: "",
+        aqua: "trait Ord[T] where PartialOrd[T] {
              def cmp(a:T, b:T): Ordering;
              def min(a:T, b:T): T;
              def max(a:T, b:T): T;
@@ -33,9 +34,9 @@ impl Ord for Value {
             (Value::Blob(_), Value::Blob(_)) => unreachable!(),
             (Value::Bool(a), Value::Bool(b)) => a.cmp(b),
             (Value::Char(a), Value::Char(b)) => a.cmp(b),
-            (Value::Assigner(_), Value::Assigner(_)) => unreachable!(),
+            (Value::Window(_), Value::Window(_)) => unreachable!(),
             (Value::Duration(a), Value::Duration(b)) => a.cmp(b),
-            (Value::Encoding(a), Value::Encoding(b)) => a.cmp(b),
+            (Value::Format(a), Value::Format(b)) => a.cmp(b),
             (Value::F32(_), Value::F32(_)) => unreachable!(),
             (Value::F64(_), Value::F64(_)) => unreachable!(),
             (Value::File(_), Value::File(_)) => unreachable!(),

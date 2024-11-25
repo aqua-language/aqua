@@ -1,8 +1,8 @@
-use crate::span::Span;
+use crate::syntax::span::Span;
 
 use super::Expr;
 use super::Pat;
-use super::Query;
+use super::QueryOp;
 
 impl Expr {
     pub fn with_span(self, span: Span) -> Expr {
@@ -51,6 +51,10 @@ impl Expr {
             Expr::LetIn(_, t, x, t1, e0, e1) => Expr::LetIn(span, t, x, t1, e0, e1),
             Expr::Update(_, t, x, e0, e1) => Expr::Update(span, t, x, e0, e1),
             Expr::Anonymous(_, t) => Expr::Anonymous(span, t),
+            Expr::Ref(_, _) => todo!(),
+            Expr::RefMut(_, _) => todo!(),
+            Expr::Place(_, _) => todo!(),
+            Expr::Deref(_, _, _) => todo!(),
         }
     }
 }
@@ -77,24 +81,24 @@ impl Pat {
     }
 }
 
-impl Query {
+impl QueryOp {
     #[inline(always)]
-    pub fn with_span(self, s: Span) -> Query {
+    pub fn with_span(self, s: Span) -> QueryOp {
         match self {
-            Query::From(_, x, e) => Query::From(s, x, e),
-            Query::Limit(_, e) => Query::Limit(s, e),
-            Query::Union(_, e1) => Query::Union(s, e1),
-            Query::Where(_, e) => Query::Where(s, e),
-            Query::Select(_, xes) => Query::Select(s, xes),
-            Query::JoinOn(_, x, e0, e1) => Query::JoinOn(s, x, e0, e1),
-            Query::GroupOverCompute(_, x, e0, e1, aggs) => {
-                Query::GroupOverCompute(s, x, e0, e1, aggs)
+            QueryOp::From(_, x, t, e) => QueryOp::From(s, x, t, e),
+            QueryOp::Limit(_, e) => QueryOp::Limit(s, e),
+            QueryOp::Union(_, e1) => QueryOp::Union(s, e1),
+            QueryOp::Where(_, e) => QueryOp::Where(s, e),
+            QueryOp::Select(_, xes) => QueryOp::Select(s, xes),
+            QueryOp::JoinOn(_, x, t, e0, e1) => QueryOp::JoinOn(s, x, t, e0, e1),
+            QueryOp::GroupOverCompute(_, x, e0, e1, aggs) => {
+                QueryOp::GroupOverCompute(s, x, e0, e1, aggs)
             }
-            Query::OverCompute(_, e, aggs) => Query::OverCompute(s, e, aggs),
-            Query::Var(_, x, e) => Query::Var(s, x, e),
-            Query::Err(_) => Query::Err(s),
-            Query::JoinOverOn(_, x, e0, e1, e2) => Query::JoinOverOn(s, x, e0, e1, e2),
-            Query::Drop(_, x) => Query::Drop(s, x),
+            QueryOp::OverCompute(_, e, aggs) => QueryOp::OverCompute(s, e, aggs),
+            QueryOp::Var(_, x, t, e) => QueryOp::Var(s, x, t, e),
+            QueryOp::Err(_) => QueryOp::Err(s),
+            QueryOp::JoinOverOn(_, x, e0, e1, e2) => QueryOp::JoinOverOn(s, x, e0, e1, e2),
+            QueryOp::Drop(_, x) => QueryOp::Drop(s, x),
         }
     }
 }

@@ -35,7 +35,7 @@ impl Visitor for Context<'_> {
     }
 
     fn visit_type(&mut self, ty: &Type) {
-        if let Type::Cons(x, _) = ty {
+        if let Type::Builtin(x, _) = ty {
             if let Some(stmt) = self.decls.enums.get(x) {
                 if self.reachable.enums.contains_key(x) {
                     return;

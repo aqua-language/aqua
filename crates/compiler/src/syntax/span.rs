@@ -1,4 +1,4 @@
-use crate::source::SourceId;
+use crate::syntax::source::SourceId;
 
 impl ariadne::Span for Span {
     fn start(&self) -> usize {
@@ -14,7 +14,7 @@ impl ariadne::Span for Span {
     fn source(&self) -> &Self::SourceId {
         match self {
             Span::Source(id, _, _) => id,
-            Span::Generated => unreachable!()
+            Span::Generated => unreachable!(),
         }
     }
 }

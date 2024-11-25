@@ -4,7 +4,7 @@ use crate::BTreeMap;
 use std::collections::hash_map::Entry;
 use std::ops::Range;
 
-use crate::builtins::assigner::Assigner;
+use crate::builtins::window::Window;
 use crate::builtins::duration::Duration;
 use crate::builtins::time::Time;
 use crate::runner::context::Context;
@@ -24,7 +24,7 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
     pub fn incr_window<P, O>(
         self,
         ctx: &mut Context,
-        assigner: Assigner,
+        assigner: Window,
         lift: impl Fn(&T) -> P + Send + 'static,
         combine: impl Fn(&P, P) -> P + Send + 'static,
         lower: impl Fn(K, &P, Range<Time>) -> O + Send + 'static,
@@ -35,17 +35,17 @@ impl<K: Key, T: Data> KeyedStream<K, T> {
         O: Data,
     {
         match assigner {
-            Assigner::Tumbling { length } => {
+            Window::Tumbling { length } => {
                 if properties.commutative {
                     self.commutative_tumbling_window(ctx, length, lift, combine, lower)
                 } else {
                     todo!()
                 }
             }
-            Assigner::Sliding { .. } => todo!(),
-            Assigner::Session { .. } => todo!(),
-            Assigner::Counting { .. } => todo!(),
-            Assigner::Moving { .. } => todo!(),
+            Window::Sliding { .. } => todo!(),
+            Window::Session { .. } => todo!(),
+            Window::Counting { .. } => todo!(),
+            Window::Moving { .. } => todo!(),
         }
     }
 

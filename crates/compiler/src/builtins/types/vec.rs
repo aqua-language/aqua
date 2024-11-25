@@ -1,5 +1,4 @@
 use crate::ast::Codegen;
-use crate::builtins::value::Value;
 use crate::builtins::Context;
 use crate::builtins::Decl;
 use crate::builtins::ImplDecl;
@@ -14,6 +13,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "A dynamic array.",
         aqua: "type Vec[T];",
         codegen: Some(Codegen {
             rust: "Vec",
@@ -23,8 +23,14 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
+        aqua: "impl[T] Serde[Vec[T]] where Serde[T]",
+        decls: &[],
+    });
+
+    ctx.declare(Decl::Impl {
         aqua: "impl[T] Display[Vec[T]] where Display[T]",
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def toString(v:Vec[T]): String;",
             codegen: Some(Codegen {
                 rust: "Vec::to_string",
@@ -42,6 +48,7 @@ fn declare(ctx: &mut Context) {
         aqua: "impl[T] Vec[T]",
         decls: &[
             ImplDecl::Def {
+                docs: "Create a new vector.",
                 aqua: "def new(): Vec[T];",
                 codegen: Some(Codegen {
                     rust: "Vec::new",
@@ -51,6 +58,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_, _v| Vec::new().into(),
             },
             ImplDecl::Def {
+                docs: "Push an element onto the end of the vector.",
                 aqua: "def push(v:Vec[T], x:T): ();",
                 codegen: Some(Codegen {
                     rust: "Vec::push",
@@ -65,6 +73,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "Pop an element from the end of the vector.",
                 aqua: "def pop(v:Vec[T]): Option[T];",
                 codegen: Some(Codegen {
                     rust: "Vec::pop",
@@ -77,6 +86,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "Get the length of the vector.",
                 aqua: "def len(v:Vec[T]): usize;",
                 codegen: Some(Codegen {
                     rust: "Vec::len",
@@ -89,6 +99,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "Get an element from the vector by its index.",
                 aqua: "def get(v:Vec[T], i:usize): Option[T];",
                 codegen: Some(Codegen {
                     rust: "Vec::get",
@@ -102,6 +113,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "Inserts a value into the vector at a given index.",
                 aqua: "def insert(v:Vec[T], i:usize, x:T): ();",
                 codegen: Some(Codegen {
                     rust: "Vec::insert",
@@ -117,6 +129,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "Returns true if the vector contains no elements.",
                 aqua: "def isEmpty(v:Vec[T]): bool;",
                 codegen: Some(Codegen {
                     rust: "Vec::is_empty",
@@ -129,6 +142,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "Sorts the vector in place.",
                 aqua: "def sort(v:Vec[T]): ();",
                 codegen: Some(Codegen {
                     rust: "Vec::sort",
@@ -142,6 +156,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "Removes the element at the specified index.",
                 aqua: "def remove(v:Vec[T], i:usize): Option[T];",
                 codegen: Some(Codegen {
                     rust: "Vec::remove",
@@ -155,6 +170,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "Clears the vector, removing all elements.",
                 aqua: "def clear(v:Vec[T]): ();",
                 codegen: Some(Codegen {
                     rust: "Vec::clear",
@@ -168,7 +184,8 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
-                aqua: "def concat(v:Vec[T], x:Vec[T]): ();",
+                docs: "Appends a vector with another",
+                aqua: "def append(v:Vec[T], x:Vec[T]): ();",
                 codegen: Some(Codegen {
                     rust: "Vec::extend",
                     java: "Vector.concat",
@@ -179,23 +196,6 @@ fn declare(ctx: &mut Context) {
                     let a1 = v[1].as_vec();
                     a0.extend(a1);
                     Tuple(vec![]).into()
-                },
-            },
-            ImplDecl::Def {
-                aqua: "def map[T, U](v:Vec[T], f:T => U): Vec[U];",
-                codegen: Some(Codegen {
-                    rust: "Vec::map",
-                    java: "Vector.map",
-                    egglog: None,
-                }),
-                eval: |ctx, v| {
-                    let a0 = v[0].as_vec();
-                    let a1 = v[1].as_function();
-                    Value::Vec(
-                        a0.iter()
-                            .map(|a2| a1.call(ctx, &[a2.clone()]))
-                            .collect::<Vec<Value>>(),
-                    )
                 },
             },
         ],

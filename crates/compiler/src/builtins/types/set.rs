@@ -10,6 +10,7 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Set[T];",
         codegen: Some(Codegen {
             rust: "Set",
@@ -18,9 +19,16 @@ fn declare(ctx: &mut Context) {
         }),
     });
 
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl[T] Serde[Set[T]] where Serde[T]",
+        decls: &[],
+    });
+
     ctx.declare(Decl::Impl {
         aqua: "impl Set",
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def new[T](): Set[T];",
             codegen: Some(Codegen {
                 rust: "Set::new",

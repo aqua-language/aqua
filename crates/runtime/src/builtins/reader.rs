@@ -3,7 +3,6 @@ use serde::Serialize;
 
 use crate::builtins::path::Path;
 use crate::builtins::socket::SocketAddr;
-use crate::builtins::string::String;
 use crate::traits::DeepClone;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -13,7 +12,7 @@ pub enum Reader {
     File { path: Path, watch: bool },
     Http { addr: SocketAddr },
     Tcp { addr: SocketAddr },
-    Kafka { addr: SocketAddr, topic: String },
+    Kafka { addr: SocketAddr, topic: crate::prelude::String },
 }
 
 impl DeepClone for Reader {
@@ -39,9 +38,6 @@ impl Reader {
         Self::Stdin
     }
     pub fn file(path: Path, watch: bool) -> Self {
-        if !path.0.exists() {
-            tracing::warn!("{} does not exist", path.0.display());
-        }
         Self::File { path, watch }
     }
     pub fn http(addr: SocketAddr) -> Self {
@@ -50,7 +46,7 @@ impl Reader {
     pub fn tcp(addr: SocketAddr) -> Self {
         Self::Tcp { addr }
     }
-    pub fn kafka(addr: SocketAddr, topic: String) -> Self {
+    pub fn kafka(addr: SocketAddr, topic: crate::prelude::String) -> Self {
         Self::Kafka { addr, topic }
     }
 }

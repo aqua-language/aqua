@@ -15,12 +15,12 @@ use crate::builtins::DECLS;
 fn declare(_ctx: &mut Context) {}
 
 #[derive(Debug, Clone, Eq, PartialEq, Send, Sync)]
-pub struct Fun {
+pub struct Function {
     pub params: Map<Name, Type>,
     pub body: ExprBody,
 }
 
-impl std::fmt::Display for Fun {
+impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "(")?;
         let mut iter = self.params.iter();
@@ -34,7 +34,7 @@ impl std::fmt::Display for Fun {
     }
 }
 
-impl Fun {
+impl Function {
     pub fn new(xs: Map<Name, Type>, body: ExprBody) -> Self {
         Self { params: xs, body }
     }

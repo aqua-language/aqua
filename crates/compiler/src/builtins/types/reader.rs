@@ -9,6 +9,7 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Reader;",
         codegen: None,
     });
@@ -24,6 +25,7 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Reader",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def file(path: Path, watch: bool): Reader;",
                 codegen: None,
                 eval: |_ctx, v| {
@@ -33,6 +35,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def http(a0: Url): Reader;",
                 codegen: None,
                 eval: |_ctx, _v| {
@@ -42,6 +45,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def tcp(a0: SocketAddr): Reader;",
                 codegen: None,
                 eval: |_ctx, v| {
@@ -50,13 +54,13 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def kafka(a0: SocketAddr, a1: String): Reader;",
                 codegen: None,
-                eval: |_ctx, _v| {
-                    todo!()
-                    // let addr = v[0].as_socket_addr();
-                    // let topic = v[1].as_string();
-                    // Reader::kafka(addr, topic).into()
+                eval: |_ctx, v| {
+                    let addr = v[0].as_socket_addr();
+                    let topic = v[1].as_string();
+                    Reader::kafka(addr, topic).into()
                 },
             },
         ],

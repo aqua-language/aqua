@@ -2,16 +2,16 @@ pub mod package;
 
 use std::fmt::Display;
 
-use runtime::builtins::assigner::Assigner;
+use runtime::builtins::window::Window;
 use runtime::builtins::duration::Duration;
-use runtime::builtins::encoding::Encoding;
+use runtime::builtins::format::Format;
 use runtime::builtins::path::Path;
 use runtime::builtins::reader::Reader;
 use runtime::builtins::writer::Writer;
 
 use crate::builtins::types::stream::Operator;
 use crate::builtins::value::Dataflow;
-use crate::builtins::value::Fun;
+use crate::builtins::value::Function;
 use crate::builtins::value::Stream;
 use crate::analysis::declare;
 use crate::print::Print;
@@ -101,11 +101,12 @@ impl<'a, 'b> Printer<'a, 'b> {
                     this.writer(w)?;
                     this.punct(",")?;
                     this.space()?;
-                    this.encoding(e)
+                    this.format(e)
                 })?;
                 self.punct(";")?;
                 self.newline()?;
             }
+            Dataflow::KeyedSink(_, _, _) => todo!(),
         }
         Ok(())
     }
@@ -158,10 +159,10 @@ impl<'a, 'b> Printer<'a, 'b> {
         })
     }
 
-    fn encoding(&mut self, e: &Encoding) -> std::fmt::Result {
+    fn format(&mut self, e: &Format) -> std::fmt::Result {
         match e {
-            Encoding::Csv { sep } => {
-                self.lit("Encoding")?;
+            Format::Csv { sep } => {
+                self.lit("Format")?;
                 self.punct("::")?;
                 self.lit("csv")?;
                 self.paren(|this| {
@@ -170,7 +171,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                     this.lit("'")
                 })
             }
-            Encoding::Json => todo!(),
+            Format::Json => todo!(),
         }
     }
 
@@ -200,7 +201,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                     this.reader(r)?;
                     this.punct(",")?;
                     this.space()?;
-                    this.encoding(e)?;
+                    this.format(e)?;
                     this.punct(",")?;
                     this.space()?;
                     this.fun(f)?;
@@ -275,7 +276,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                     this.lit("ctx")?;
                     this.punct(",")?;
                     this.space()?;
-                    this.assigner(a)?;
+                    this.window(a)?;
                     this.punct(",")?;
                     this.space()?;
                     this.fun(f)
@@ -327,15 +328,15 @@ impl<'a, 'b> Printer<'a, 'b> {
         self.newline()
     }
 
-    fn assigner(&mut self, a: &Assigner) -> std::fmt::Result {
-        self.lit("Assigner")?;
+    fn window(&mut self, a: &Window) -> std::fmt::Result {
+        self.lit("Window")?;
         self.punct("::")?;
         match a {
-            Assigner::Tumbling { length } => {
+            Window::Tumbling { length } => {
                 self.lit("tumbling")?;
                 self.paren(|this| this.duration(length))
             }
-            Assigner::Sliding { duration, step } => {
+            Window::Sliding { duration, step } => {
                 self.lit("sliding")?;
                 self.paren(|this| {
                     this.duration(duration)?;
@@ -344,9 +345,9 @@ impl<'a, 'b> Printer<'a, 'b> {
                     this.duration(step)
                 })
             }
-            Assigner::Session { .. } => todo!(),
-            Assigner::Counting { .. } => todo!(),
-            Assigner::Moving { .. } => todo!(),
+            Window::Session { .. } => todo!(),
+            Window::Counting { .. } => todo!(),
+            Window::Moving { .. } => todo!(),
         }
     }
 
@@ -354,13 +355,13 @@ impl<'a, 'b> Printer<'a, 'b> {
         self.lit(&format!("_{}", s.id()))
     }
 
-    fn fun(&mut self, f: &Fun) -> std::fmt::Result {
+    fn fun(&mut self, f: &Function) -> std::fmt::Result {
         f.rust(self.indent_level).fmt(self.f)
     }
 
     // TODO: Remove this when we have ownership
     // (|x| f(x))(x.clone())
-    fn clone_fun(&mut self, f: &Fun) -> std::fmt::Result {
+    fn clone_fun(&mut self, f: &Function) -> std::fmt::Result {
         self.lit("|x|")?;
         self.paren(|this| this.fun(f))?;
         self.lit("(x.clone())")

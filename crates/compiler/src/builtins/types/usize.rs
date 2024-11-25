@@ -9,6 +9,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type usize;",
         codegen: Some(Codegen {
             rust: "usize",
@@ -18,8 +19,14 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
+        aqua: "impl Serde[usize]",
+        decls: &[],
+    });
+
+    ctx.declare(Decl::Impl {
         aqua: "impl Display[usize]",
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def toString(x: usize): String;",
             codegen: Some(Codegen {
                 rust: "|x| x.to_string()",

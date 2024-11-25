@@ -10,6 +10,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type f64;",
         codegen: Some(Codegen {
             rust: "f64",
@@ -21,6 +22,7 @@ fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Impl {
         aqua: "impl f64",
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def abs(a:f64): f64;",
             codegen: Some(Codegen {
                 rust: "f64::abs",
@@ -35,12 +37,19 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
+        aqua: "impl Serde[f64]",
+        decls: &[],
+    });
+
+    ctx.declare(Decl::Impl {
         aqua: "impl Add[f64,f64]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = f64;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def add(a:f64, b:f64): f64;",
                 codegen: Some(Codegen {
                     rust: "f64::add_f64",
@@ -60,9 +69,11 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Sub[f64,f64]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = f64;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def sub(a:f64, b:f64): f64;",
                 codegen: Some(Codegen {
                     rust: "f64::sub_f64",
@@ -82,9 +93,11 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Mul[f64,f64]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = f64;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def mul(a:f64, b:f64): f64; ",
                 codegen: Some(Codegen {
                     rust: "f64::mul_f64",
@@ -104,9 +117,11 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Div[f64,f64]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = f64;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def div(a:f64, b:f64): f64;",
                 codegen: Some(Codegen {
                     rust: "f64::div_f64",
@@ -126,9 +141,11 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Add[f64,i32]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = f64;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def add(a:f64, b:i32): f64;",
                 codegen: Some(Codegen {
                     rust: "f64::add_i32",
@@ -148,9 +165,11 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Add[i32,f64]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = f64;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def add(a:i32, b:f64): f64;",
                 codegen: Some(Codegen {
                     rust: "f64::add_i32",
@@ -169,6 +188,7 @@ fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Impl {
         aqua: "impl Display[f64]",
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def toString(a:f64): String;",
             codegen: Some(Codegen {
                 rust: "f64::display",

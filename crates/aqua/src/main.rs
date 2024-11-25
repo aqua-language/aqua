@@ -5,7 +5,6 @@ mod version;
 use anyhow::Result;
 use colored::Color;
 use colored::Colorize;
-use compiler::ast::Program;
 use compiler::Compiler;
 use config::Command;
 use config::CompilerConfig;
@@ -31,53 +30,64 @@ fn main() -> Result<()> {
             message("Checking", format_args!("{name}"));
             let time = std::time::Instant::now();
             compiler.init();
-            let result = compiler.check(name, &source);
+            let program = compiler.parse(&name, &source);
+            let _program = compiler.infer(&program);
             let duration = time.elapsed().as_millis() as f64 / 1000.0;
-            match result {
-                Ok(_) => message("Finished", format_args!("in {duration}s")),
-                Err(_) => {
-                    let n = compiler.report.len();
-                    compiler.print_report();
-                    message(
-                        "Failure:",
-                        format_args!("could not compile due to {n} previous errors."),
-                    );
-                }
+            if compiler.report.is_empty() {
+                message("Finished", format_args!("in {duration}s"));
+            } else {
+                let n = compiler.report.len();
+                compiler.report.print(&mut compiler.sources).unwrap();
+                message(
+                    "Failure:",
+                    format_args!("could not compile due to {n} previous errors."),
+                );
             }
             Ok(())
         }
         Some(Command::Format(_)) => {
             let (_, source) = read(&compiler.config)?;
-            match Program::parse(&source) {
-                Ok(program) => println!("{}", program),
-                Err(_) => print!("{}", source),
+            let program = compiler.parse("main", &source);
+            if compiler.report.is_empty() {
+                println!("{}", program);
+            } else {
+                println!("{}", source);
             }
             Ok(())
         }
         Some(Command::Run(_)) => {
             let (name, source) = read(&compiler.config)?;
             compiler.init();
-            compiler.run(name, &source)
+            compiler.run(name, &source);
+            Ok(())
         }
         Some(Command::Inspect(cmd)) => {
             let (name, source) = read(&compiler.config)?;
             match cmd.mode {
-                InspectMode::Desugar => match compiler.querycomp(&name, &source) {
-                    Ok(program) => println!("{}", program),
-                    Err(_) => print!("{}", source),
-                },
+                InspectMode::Desugar => {
+                    let program = compiler.parse(&name, &source);
+                    let program = compiler.desugar(&program);
+                    if compiler.report.is_empty() {
+                        println!("{}", program.verbose());
+                    } else {
+                        println!("{}", source);
+                    }
+                }
                 InspectMode::Type => {
+                    let program = compiler.parse(&name, &source);
                     compiler.init();
-                    match compiler.infer(&name, &source) {
-                        Ok(program) => println!("{}", program.verbose()),
-                        Err(_) => print!("{}", source),
+                    let program = compiler.infer(&program);
+                    if compiler.report.is_empty() {
+                        println!("{}", program.verbose());
+                    } else {
+                        println!("{}", source);
                     }
                 }
             }
             Ok(())
         }
         Some(Command::Lsp) => {
-            if let Err(e) = lsp::start() {
+            if let Err(e) = lsp::Server::new().start() {
                 eprintln!("Error: {}", e);
             }
             Ok(())
@@ -90,7 +100,7 @@ fn main() -> Result<()> {
                 if repl.compiler.config.interactive {
                     repl.run(Some(source))
                 } else {
-                    repl.compiler.run(name, &source)?;
+                    repl.compiler.run(name, &source);
                     repl.run(None)
                 }
             } else {

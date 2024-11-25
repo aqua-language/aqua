@@ -7,6 +7,7 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
+        docs: "",
         aqua: "trait Neg[T] {
              type Output;
              def neg(v:T): Neg[T]::Output;

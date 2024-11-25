@@ -9,6 +9,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Image;",
         codegen: Some(Codegen {
             rust: "Image",
@@ -18,9 +19,15 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
+        aqua: "impl Serde[Image]",
+        decls: &[],
+    });
+
+    ctx.declare(Decl::Impl {
         aqua: "impl Image",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def load(blob: Blob): Image;",
                 codegen: Some(Codegen {
                     rust: "Image::load",
@@ -34,6 +41,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def crop(img: Image, x: u32, y: u32, w: u32, h: u32): Image;",
                 codegen: Some(Codegen {
                     rust: "Image::crop",
@@ -51,6 +59,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def centerCrop(img: Image, w: u32, h: u32): Image;",
                 codegen: Some(Codegen {
                     rust: "Image::center_crop",
@@ -66,6 +75,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua:"def resize(img: Image, w: u32, h: u32): Image;",
                 codegen: Some(Codegen {
                     rust: "Image::resize",
@@ -81,6 +91,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua:"def resizeWidth(img: Image, w: u32): Image;",
                 codegen: Some(Codegen {
                     rust: "Image::resize_width",
@@ -95,6 +106,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua:"def resizeHeight(img: Image, h: u32): Image;",
                 codegen: Some(Codegen {
                     rust: "Image::resize_height",
@@ -109,6 +121,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua:"def into_matrix(img: Image): Matrix[f32];",
                 codegen: Some(Codegen {
                     rust: "Image::into_matrix",
@@ -122,6 +135,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua:"def from_matrix(m: Matrix[f32]): Image;",
                 codegen: Some(Codegen {
                     rust: "Image::from_matrix",
@@ -139,6 +153,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua:"def save(img: Image, path: Path): ();",
                 codegen: None,
                 eval: |_ctx, _v| {
@@ -149,6 +164,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua:"def height(img: Image): u32;",
                 codegen: Some(Codegen {
                     rust: "Image::height",
@@ -162,6 +178,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua:"def width(img: Image): u32;",
                 codegen: Some(Codegen {
                     rust: "Image::width",
@@ -175,6 +192,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua:"def draw_box(img: Image, x: u32, y: u32, w: u32, h: u32, color: [u8; 4]): Image;",
                 codegen: Some(Codegen {
                     rust: "Image::draw_box",
@@ -193,6 +211,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua:"def preview(img: Image): ();",
                 codegen: None,
                 eval: |_ctx, _v| {

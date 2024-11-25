@@ -30,8 +30,10 @@ use common::dsl::trait_bound;
 use common::dsl::ty;
 use common::dsl::ty_alias;
 use common::dsl::ty_assoc;
-use common::dsl::ty_con;
+use common::dsl::ty_builtin;
+use common::dsl::ty_enum;
 use common::dsl::ty_gen;
+use common::dsl::ty_struct;
 use common::dsl::ty_tuple;
 use common::dsl::type_bound;
 
@@ -443,7 +445,7 @@ fn test_resolve_struct1() {
         stmt_struct("S", ["T"], [("x", ty_gen("T"))]),
         stmt_var(
             "s",
-            ty_con("S", [ty("i32")]),
+            ty_struct("S", [ty("i32")]),
             expr_struct("S", [ty("i32")], [("x", expr_int("0"))]),
         ),
     ]);
@@ -483,7 +485,7 @@ fn test_resolve_struct3() {
     .unwrap();
     let b = program([
         stmt_struct("S", [], []),
-        stmt_var("s", ty("S"), expr_struct("S", [], [])),
+        stmt_var("s", ty_struct("S", []), expr_struct("S", [], [])),
     ]);
     check!(a, b);
 }
@@ -531,7 +533,7 @@ fn test_resolve_enum1() {
         stmt_enum("E", ["T"], [("A", ty_gen("T"))]),
         stmt_var(
             "e",
-            ty_con("E", [ty("i32")]),
+            ty_enum("E", [ty("i32")]),
             expr_enum("E", [ty("i32")], "A", expr_int("0")),
         ),
     ]);
@@ -756,12 +758,12 @@ fn test_resolve_type_impl2() {
     .unwrap();
     let b = program([stmt_impl(
         ["T"],
-        type_bound(ty_con("Vec", [ty_gen("T")])),
+        type_bound(ty_builtin("Vec", [ty_gen("T")])),
         [],
         [stmt_def(
             "push",
             [],
-            [("v", ty_con("Vec", [ty_gen("T")])), ("x", ty_gen("T"))],
+            [("v", ty_builtin("Vec", [ty_gen("T")])), ("x", ty_gen("T"))],
             Type::Tuple(vec![]),
             [],
             expr_unit(),
@@ -785,7 +787,7 @@ fn test_resolve_i32_abs() {
 fn test_resolve_vec_new1() {
     let a = resolve(aqua!("Vec::new();")).unwrap();
     let b = program([stmt_expr(expr_call(
-        expr_assoc(type_bound(ty_con("Vec", [Type::Unknown])), "new", []),
+        expr_assoc(type_bound(ty_builtin("Vec", [Type::Unknown])), "new", []),
         [],
     ))]);
     check!(a, b);
@@ -795,7 +797,7 @@ fn test_resolve_vec_new1() {
 fn test_resolve_vec_new2() {
     let a = resolve(aqua!("Vec[i32]::new();")).unwrap();
     let b = program([stmt_expr(expr_call(
-        expr_assoc(type_bound(ty_con("Vec", [ty("i32")])), "new", []),
+        expr_assoc(type_bound(ty_builtin("Vec", [ty("i32")])), "new", []),
         [],
     ))]);
     check!(a, b);
@@ -814,13 +816,13 @@ fn test_resolve_impl_generic() {
         stmt_struct("X", ["T"], [("y", ty_gen("T"))]),
         stmt_impl(
             ["T"],
-            type_bound(ty_con("X", [ty_gen("T")])),
+            type_bound(ty_struct("X", [ty_gen("T")])),
             [],
             [stmt_def(
                 "new",
                 [],
                 [("y", ty_gen("T"))],
-                ty_con("X", [ty_gen("T")]),
+                ty_struct("X", [ty_gen("T")]),
                 [],
                 expr_struct("X", [ty_gen("T")], [("y", expr_var("y"))]),
             )],

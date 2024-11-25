@@ -7,12 +7,14 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Def {
+        docs: "",
         aqua: "def unreachable(): !;",
         codegen: None,
         fun: |_ctx, _v| unreachable!(),
     });
 
     ctx.declare(Decl::Def {
+        docs: "",
         aqua: "def panic(msg: String): !;",
         codegen: None,
         fun: |_ctx, v| {
@@ -22,6 +24,7 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Def {
+        docs: "",
         aqua: "def exit(): !;",
         codegen: None,
         fun: |_ctx, _v| {

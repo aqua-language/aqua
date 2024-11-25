@@ -2,7 +2,7 @@ use futures_util::SinkExt;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
 
-use crate::builtins::encoding::Encoding;
+use crate::builtins::format::Format;
 use crate::builtins::path::Path;
 use crate::builtins::socket::SocketAddr;
 use crate::builtins::writer::Writer;
@@ -14,7 +14,7 @@ use super::Event;
 use super::Stream;
 
 impl<T: Data> Stream<T> {
-    pub fn sink(self, ctx: &mut Context, writer: Writer, encoding: Encoding) {
+    pub fn sink(self, ctx: &mut Context, writer: Writer, encoding: Format) {
         let mut this = self;
         let (tx, rx) = tokio::sync::mpsc::channel(100);
         ctx.sink(|| async move {
@@ -127,14 +127,14 @@ impl<T: Data> Stream<T> {
         ctx: &mut Context,
         rx: tokio::sync::mpsc::Receiver<T>,
         writer: Writer,
-        encoding: Encoding,
+        encoding: Format,
     ) {
         match encoding {
-            Encoding::Csv { sep } => {
+            Format::Csv { sep } => {
                 let encoder = crate::formats::csv::ser::Writer::new(sep);
                 Self::sink_writer(ctx, rx, writer, encoder);
             }
-            Encoding::Json => {
+            Format::Json => {
                 let encoder = crate::formats::json::ser::Writer::new();
                 Self::sink_writer(ctx, rx, writer, encoder);
             }

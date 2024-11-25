@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Set<K>(Vec<K>);
 
 impl<K> Default for Set<K> {
@@ -83,5 +83,27 @@ impl<K> IntoIterator for Set<K> {
 impl<K> Into<Vec<K>> for Set<K> {
     fn into(self) -> Vec<K> {
         self.0
+    }
+}
+
+impl<K> PartialEq for Set<K>
+where
+    K: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0.len() == other.0.len() && self.0.iter().all(|k| other.contains(k))
+    }
+}
+
+impl<K> Eq for Set<K> where K: PartialEq {}
+
+impl<K> std::hash::Hash for Set<K>
+where
+    K: std::hash::Hash + PartialEq + Ord + Clone,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let mut v = self.0.clone();
+        v.sort();
+        v.hash(state);
     }
 }

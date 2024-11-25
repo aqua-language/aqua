@@ -7,6 +7,7 @@ use util::call_map;
 use util::call_merge;
 use util::call_take;
 use util::call_window;
+use util::typed_lambda;
 
 use crate::ast::Aggr;
 use crate::ast::Expr;
@@ -14,10 +15,10 @@ use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Path;
 use crate::ast::Program;
-use crate::ast::Query;
+use crate::ast::QueryOp;
 use crate::ast::Type;
 use crate::diag::Report;
-use crate::span::Span;
+use crate::syntax::span::Span;
 use crate::traversal::mapper::Mapper;
 
 use self::util::call;
@@ -33,7 +34,7 @@ use super::Pass;
 #[derive(Debug)]
 pub struct Context {
     stack: Vec<Scope>,
-    report: Report,
+    pub report: Report,
 }
 
 impl Pass for Context {
@@ -77,22 +78,22 @@ impl Context {
         self.stack.last().unwrap().0.iter()
     }
 
-    fn query(&mut self, e0: Expr, q: &Query) -> Expr {
+    fn query(&mut self, e0: Expr, q: &QueryOp) -> Expr {
         match q {
-            Query::Where(s, e1) => self.where_clause(e0, *s, e1),
-            Query::Union(s, e1) => self.union_clause(e0, *s, e1),
-            Query::Limit(s, e1) => self.limit_clause(e0, *s, e1),
-            Query::From(s, x, e) => self.from_clause(e0, *s, *x, e),
-            Query::Select(s, xes) => self.select_clause(e0, *s, xes),
-            Query::GroupOverCompute(s, x, e1, e2, aggs) => {
+            QueryOp::Where(s, e1) => self.where_clause(e0, *s, e1),
+            QueryOp::Union(s, e1) => self.union_clause(e0, *s, e1),
+            QueryOp::Limit(s, e1) => self.limit_clause(e0, *s, e1),
+            QueryOp::From(s, x, t, e) => self.from_clause(e0, *s, *x, t, e),
+            QueryOp::Select(s, xes) => self.select_clause(e0, *s, xes),
+            QueryOp::GroupOverCompute(s, x, e1, e2, aggs) => {
                 self.group_over_compute_clause(e0, *s, *x, e1, e2, aggs)
             }
-            Query::JoinOn(s, x, e1, e2) => self.join_on_clause(e0, *s, *x, e1, e2),
-            Query::Var(s, x, e) => self.var_clause(e0, *s, *x, e),
-            Query::OverCompute(s, e, aggs) => self.over_compute_clause(e0, *s, e, aggs),
-            Query::JoinOverOn(_, _, _, _, _) => todo!(),
-            Query::Err(s) => Expr::Err(*s, Type::Unknown),
-            Query::Drop(s, x) => self.drop_clause(e0, *s, *x),
+            QueryOp::JoinOn(s, x, t, e1, e2) => self.join_on_clause(e0, *s, *x, t, e1, e2),
+            QueryOp::Var(s, x, t, e) => self.var_clause(e0, *s, *x, t, e),
+            QueryOp::OverCompute(s, e, aggs) => self.over_compute_clause(e0, *s, e, aggs),
+            QueryOp::JoinOverOn(_, _, _, _, _) => todo!(),
+            QueryOp::Err(s) => Expr::Err(*s, Type::Unknown),
+            QueryOp::Drop(s, x) => self.drop_clause(e0, *s, *x),
         }
     }
 
@@ -141,7 +142,7 @@ impl Context {
     /// [e0] from x in e
     /// =>
     /// flatMap(e0, r => e.map(x => record(x=x, x1=r.x1, ..., xn=r.xn)))
-    fn from_clause(&mut self, e0: Expr, s: Span, x: Name, e1: &Expr) -> Expr {
+    fn from_clause(&mut self, e0: Expr, s: Span, x: Name, t: &Type, e1: &Expr) -> Expr {
         let e = self.map_expr(e1);
         // record(x=x, x1=r.x1, ..., xn=r.xn)
         let r = Rc::new(relation_expr(s));
@@ -156,7 +157,7 @@ impl Context {
         );
         self.bind_relational_var(x);
         // x => record(x=x, x1=r.x1, ..., xn=r.xn)
-        let elam = lambda(s, [x], record);
+        let elam = typed_lambda(s, [(x, t.clone())], record);
         // e.map(x => record(x=x, x1=r.x1, ..., xn=r.xn))
         let emap = call(s, Name::new(s, "map"), vec![Type::Unknown], vec![e, elam]);
         // flatMap(e0, r => e.map(x => record(x=x, x1=r.x1, ..., xn=r.xn)))
@@ -196,14 +197,14 @@ impl Context {
     //       over ewin
     //       compute xagg1=efun1 of eattr1,...,xaggn=efunn of eattrn
     // =>
-    // e0.keyBy(r => ekey)
-    //   .window(
+    // e0.keyBy[_](r => ekey)
+    //   .window[_](
     //     ewin,
     //     (xkey, r) => record(
     //       xkey = xkey,
-    //       xagg1 = efun1(r.map(r => eattr1))
+    //       xagg1 = efun1(r.map[_](r => eattr1))
     //       ...,
-    //       xaggn = efunn(r.map(r => eattrn))
+    //       xaggn = efunn(r.map[_](r => eattrn))
     //     )
     //   )
     fn group_over_compute_clause(
@@ -245,12 +246,12 @@ impl Context {
                     let v0 = relation_expr(s);
                     let v1 = call_filter(s, v0, lambda(s, [x], self.map_expr(e2)));
                     let v2 = call_map(s, v1, lambda(s, [x], self.map_expr(&agg.e1)));
-                    let v3 = call(s, agg.x1, vec![Type::Unknown], vec![v2]);
+                    let v3 = call(s, agg.x1, vec![], vec![v2]);
                     (agg.x0, v3)
                 } else {
                     let v0 = relation_expr(s);
                     let v1 = call_map(s, v0, lambda(s, [x], self.map_expr(&agg.e1)));
-                    let v2 = call(s, agg.x1, vec![Type::Unknown], vec![v1]);
+                    let v2 = call(s, agg.x1, vec![], vec![v1]);
                     (agg.x0, v2)
                 }
             })
@@ -278,7 +279,15 @@ impl Context {
     // =>
     // e0.flatMap[_](r => e1.filter(x => e2 == e3)
     //                   .map[_](x => record(x=x, x1=r.x1, ..., xn=r.xn)))
-    fn join_on_clause(&mut self, e0: Expr, s: Span, x: Name, e1: &Expr, e2: &Expr) -> Expr {
+    fn join_on_clause(
+        &mut self,
+        e0: Expr,
+        s: Span,
+        x: Name,
+        t: &Type,
+        e1: &Expr,
+        e2: &Expr,
+    ) -> Expr {
         let e1 = self.map_expr(e1);
         let e2 = self.map_expr(e2);
         let r = Rc::new(relation_expr(s));
@@ -296,24 +305,24 @@ impl Context {
         );
         // e1.filter(x => e2 == e3)
         let efilter = call_filter(s, e1, lambda(s, [x], e2));
-        let emap = call_map(s, efilter, lambda(s, [x], record));
+        let emap = call_map(s, efilter, typed_lambda(s, [(x, t.clone())], record));
         call_flatmap(s, e0, lambda(s, [relation(s)], emap))
     }
 
     // [e0] var x = e1
     // =>
     // e0.map(r => record(x=e1, x1=r.x1, ..., xn=r.xn))
-    fn var_clause(&mut self, e0: Expr, s: Span, x: Name, e1: &Expr) -> Expr {
+    fn var_clause(&mut self, e0: Expr, s: Span, x: Name, t: &Type, e1: &Expr) -> Expr {
         let e1 = self.map_expr(e1);
         let r = Rc::new(relation_expr(s));
-        let xts = self
+        let xes = self
             .relational_vars()
             .map(|x| (*x, expr_field(r.clone(), *x)));
-        let xts = xts.collect::<Map<_, _>>();
+        let xes = xes.collect::<Map<_, _>>();
         let record = record(
             s,
-            std::iter::once((x, e1))
-                .chain(xts)
+            std::iter::once((x, e1.with_type(t.clone())))
+                .chain(xes)
                 .collect::<Vec<_>>()
                 .into(),
         );
@@ -374,7 +383,7 @@ mod util {
     use crate::ast::Name;
     use crate::ast::Path;
     use crate::ast::Type;
-    use crate::span::Span;
+    use crate::syntax::span::Span;
 
     pub(super) fn relation(s: Span) -> Name {
         Name::new(s, "r")
@@ -441,12 +450,12 @@ mod util {
         )
     }
 
-    pub(super) fn call_window(s: Span, stream: Expr, assigner: Expr, udf: Expr) -> Expr {
+    pub(super) fn call_window(s: Span, stream: Expr, window: Expr, udf: Expr) -> Expr {
         call(
             s,
             Name::new(s, "window"),
             vec![Type::Unknown],
-            vec![stream, assigner, udf],
+            vec![stream, window, udf],
         )
     }
 
@@ -455,6 +464,16 @@ mod util {
             s,
             Type::Unknown,
             x.iter().map(|x| (*x, Type::Unknown)).collect::<Map<_, _>>(),
+            Type::Unknown,
+            Rc::new(e),
+        )
+    }
+
+    pub(super) fn typed_lambda<const N: usize>(s: Span, xt: [(Name, Type); N], e: Expr) -> Expr {
+        Expr::Lambda(
+            s,
+            Type::Unknown,
+            xt.iter().cloned().collect::<Map<_, _>>(),
             Type::Unknown,
             Rc::new(e),
         )

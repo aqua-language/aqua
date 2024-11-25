@@ -10,10 +10,10 @@ use crate::ast::Path;
 use crate::ast::Program;
 use crate::ast::Type;
 use crate::pass::Pass;
-use crate::span::Span;
-use crate::splice::Splice;
-use crate::splice::SpliceIterator;
-use crate::token::Token;
+use crate::syntax::splice::Splice;
+use crate::syntax::splice::SpliceIterator;
+use crate::syntax::span::Span;
+use crate::syntax::token::Token;
 use crate::traversal::mapper::Mapper;
 
 use self::util::infix;
@@ -22,7 +22,7 @@ use self::util::unop;
 #[derive(Debug)]
 pub struct Context {
     anons: Stack,
-    _report: crate::diag::Report,
+    pub report: crate::diag::Report,
 }
 
 impl Pass for Context {
@@ -31,7 +31,7 @@ impl Pass for Context {
     }
 
     fn report(&mut self) -> &mut crate::diag::Report {
-        unimplemented!()
+        &mut self.report
     }
 }
 
@@ -44,7 +44,7 @@ impl Context {
     pub fn new() -> Self {
         Context {
             anons: Stack::default(),
-            _report: crate::diag::Report::new(),
+            report: crate::diag::Report::new(),
         }
     }
 
@@ -222,8 +222,8 @@ impl Context {
                 // Only lex the part of the file that is the splice.
                 // let source = &self.sources.fetch(&file).unwrap().text()[..end as usize];
                 // let lexer = crate::lexer::Lexer::new_from(file, source, start as usize);
-                let lexer = crate::lexer::Lexer::new_from(file, s, start as usize);
-                let mut parser = crate::parser::Parser::new(s, lexer);
+                let lexer = crate::syntax::lexer::Lexer::new_from(file, s, start as usize);
+                let mut parser = crate::syntax::parser::Parser::new(s, lexer);
                 if let Some(e) = parser.parse(|p, follow| p.expr(follow)) {
                     let e = self.map_expr(&e);
                     unop(span, Type::Unknown, "Display", "toString", e)
@@ -248,7 +248,7 @@ mod util {
     use crate::ast::Path;
     use crate::ast::Segment;
     use crate::ast::Type;
-    use crate::span::Span;
+    use crate::syntax::span::Span;
 
     pub(super) fn unop(s: Span, t: Type, x0: &'static str, x1: &'static str, e: Expr) -> Expr {
         let s0 = Segment::new_name(Name::new(s, x0));

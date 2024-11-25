@@ -213,15 +213,10 @@ impl Mapper for Context {
 
     fn map_type(&mut self, ty: &Type) -> Type {
         match ty {
-            Type::Cons(x, ts) => {
+            Type::Builtin(x, ts) => {
                 let x = self.stack.get(x);
                 let ts = self.map_types(ts);
-                Type::Cons(x, ts)
-            }
-            Type::Alias(x, ts) => {
-                let x = self.stack.get(x);
-                let ts = ts.iter().map(|t| self.map_type(t)).collect();
-                Type::Alias(x, ts)
+                Type::Builtin(x, ts)
             }
             Type::Generic(x) => {
                 let x = self.stack.get(x);

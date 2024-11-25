@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
-use crate::span::Span;
-use crate::symbol::Symbol;
+use crate::syntax::span::Span;
+use crate::syntax::symbol::Symbol;
 
 use super::Aggr;
 use super::Block;

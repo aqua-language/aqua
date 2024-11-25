@@ -2,7 +2,7 @@ use crate::ast::Expr;
 use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::Type;
-use crate::span::Span;
+use crate::syntax::span::Span;
 use crate::traversal::visitor::Visitable;
 use crate::traversal::visitor::Visitor;
 
@@ -24,7 +24,7 @@ impl Visitor for GatherConstraints<'_> {
     fn visit_type(&mut self, t: &Type) {
         self._visit_type(t);
         if let Type::Assoc(i, x, ts) = t {
-            self.ctx.add_constraint(Constraint::TypeAssoc(
+            self.ctx.add_constraint(Constraint::AssocType(
                 self.span,
                 t.clone(),
                 i.clone(),
@@ -38,7 +38,7 @@ impl Visitor for GatherConstraints<'_> {
         self.span = e.span_of();
         self._visit_expr(e);
         if let Expr::Assoc(s, t, i, x, ts) = e {
-            self.ctx.add_constraint(Constraint::ExprAssoc(
+            self.ctx.add_constraint(Constraint::AssocDef(
                 *s,
                 t.clone(),
                 i.clone(),

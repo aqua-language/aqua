@@ -8,14 +8,14 @@ mod common;
 #[test]
 fn test_desugar_query_from0() {
     let a = querycomp(aqua!("from x in e;")).unwrap();
-    let b = querycomp(aqua!("e.map(x => record(x));")).unwrap();
+    let b = querycomp(aqua!("e.map[_](x => record(x));")).unwrap();
     check!(a, b);
 }
 
 #[test]
 fn test_desugar_query_from_where1() {
     let a = querycomp(aqua!("from x in e where x;")).unwrap();
-    let b = querycomp(aqua!("e.map(x => record(x)).filter(r => r.x);")).unwrap();
+    let b = querycomp(aqua!("e.map[_](x => record(x)).filter(r => r.x);")).unwrap();
     check!(a, b);
 }
 
@@ -23,8 +23,8 @@ fn test_desugar_query_from_where1() {
 fn test_desugar_query_from_from0() {
     let a = querycomp(aqua!("from x0 in e0 from x1 in e1;")).unwrap();
     let b = querycomp(aqua!(
-        "e0.map(x0 => record(x0))
-           .flatMap(r => e1.map(x1 => record(x1 = x1, x0 = r.x0)));"
+        "e0.map[_](x0 => record(x0))
+           .flatMap[_](r => e1.map[_](x1 => record(x1 = x1, x0 = r.x0)));"
     ))
     .unwrap();
     check!(a, b);
@@ -34,8 +34,8 @@ fn test_desugar_query_from_from0() {
 fn test_desugar_query_from_select() {
     let a = querycomp(aqua!("from x in e select y=f(x);")).unwrap();
     let b = querycomp(aqua!(
-        "e.map(x => record(x = x))
-          .map(r => record(y = f(r.x)));"
+        "e.map[_](x => record(x = x))
+          .map[_](r => record(y = f(r.x)));"
     ))
     .unwrap();
     check!(a, b);
@@ -46,19 +46,19 @@ fn test_desugar_query_from_group() {
     let a = querycomp(aqua!(
         "from x in e0
          group k=x
-            over tumbling(1min)
+            over Window::tumbling(1min)
             compute a = sum of x, b = count of x;"
     ))
     .unwrap();
     let b = querycomp(aqua!(
-        "e0.map(x => record(x = x))
-           .keyBy(r => r.x)
-           .window(
-               tumbling(1min),
+        "e0.map[_](x => record(x = x))
+           .keyBy[_](r => r.x)
+           .window[_](
+               Window::tumbling(1min),
                (k, r) => record(
                    k = k,
-                   a = r.map(r => r.x).sum(),
-                   b = r.map(r => r.x).count()
+                   a = r.map[_](r => r.x).sum(),
+                   b = r.map[_](r => r.x).count()
                )
            );"
     ))
@@ -74,9 +74,9 @@ fn test_desugar_query_from_join() {
     ))
     .unwrap();
     let b = querycomp(aqua!(
-        "e0.map(x => record(x = x))
-           .flatMap(r => e1.filter(y => r.x.a == y.b)
-                               .map(y => record(y = y, x = r.x)));"
+        "e0.map[_](x => record(x = x))
+           .flatMap[_](r => e1.filter(y => r.x.a == y.b)
+                               .map[_](y => record(y = y, x = r.x)));"
     ))
     .unwrap();
     check!(a, b);
@@ -92,12 +92,12 @@ fn test_desugar_query_over_compute() {
     ))
     .unwrap();
     let b = querycomp(aqua!(
-        "e.map(x => record(x = x))
-          .window(
+        "e.map[_](x => record(x = x))
+          .window[_](
               tumbling(1min),
               r => record(
-                  a = r.map(r => r.x).sum(),
-                  b = r.map(r => r.x).count()
+                  a = r.map[_](r => r.x).sum(),
+                  b = r.map[_](r => r.x).count()
               )
           );"
     ))
@@ -108,13 +108,13 @@ fn test_desugar_query_over_compute() {
 #[test]
 fn test_desugar_query_into() {
     let a = querycomp(aqua!("from x in e into sink();")).unwrap();
-    let b = querycomp(aqua!("e.map(x => record(x = x)).sink();")).unwrap();
+    let b = querycomp(aqua!("e.map[_](x => record(x = x)).sink();")).unwrap();
     check!(a, b);
 }
 
 #[test]
 fn test_desugar_query_into_run() {
     let a = querycomp(aqua!("from x in e into sink().run();")).unwrap();
-    let b = querycomp(aqua!("e.map(x => record(x = x)).sink().run();")).unwrap();
+    let b = querycomp(aqua!("e.map[_](x => record(x = x)).sink().run();")).unwrap();
     check!(a, b);
 }

@@ -14,6 +14,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Dict[K,V];",
         codegen: Some(Codegen {
             rust: "Dict",
@@ -23,9 +24,15 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
+        aqua: aqua!("impl[K,V] Serde[Dict[K,V]] where Serde[K], Serde[V]"),
+        decls: &[],
+    });
+
+    ctx.declare(Decl::Impl {
         aqua: "impl[K,V] Dict[K,V]",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def new(): Dict[K,V];",
                 codegen: Some(Codegen {
                     rust: "Dict::new",
@@ -35,6 +42,7 @@ fn declare(ctx: &mut Context) {
                 eval: |_ctx, _v| Dict::new().into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def get(d: Dict[K,V], k: K): Option[V];",
                 codegen: Some(Codegen {
                     rust: "|d, k| d.get(&k).cloned()",
@@ -51,6 +59,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def insert(d: Dict[K,V], k: K, v: V): ();",
                 codegen: Some(Codegen {
                     rust: "|d, k, v| d.insert(k, v)",
@@ -75,6 +84,7 @@ fn declare(ctx: &mut Context) {
                       Display[V]"
         },
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def toString(d: Dict[K,V]): String;",
             codegen: Some(Codegen {
                 rust: "|d| format!(\"{{}}\", d)",

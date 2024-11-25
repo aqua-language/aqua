@@ -13,10 +13,11 @@ use runtime::prelude::Send;
 use runtime::prelude::Sync;
 
 use crate::builtins::value::Value;
+use crate::collections::set::Set;
 use crate::interpret::Context;
-use crate::span::Span;
-use crate::symbol::Symbol;
-use crate::token::Token;
+use crate::syntax::span::Span;
+use crate::syntax::symbol::Symbol;
+use crate::syntax::token::Token;
 
 pub use crate::collections::map::Map;
 
@@ -104,8 +105,10 @@ pub struct Trait {
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Send, Sync)]
 pub enum Type {
     Path(Path),
-    Cons(Name, Vec<Type>),
+    Builtin(Name, Vec<Type>),
     Alias(Name, Vec<Type>),
+    Struct(Name, Vec<Type>),
+    Enum(Name, Vec<Type>),
     Assoc(Impl, Name, Vec<Type>),
     Var(TypeVar),
     Generic(Name),
@@ -115,8 +118,16 @@ pub enum Type {
     Array(Rc<Type>, Option<usize>),
     Never,
     Paren(Rc<Type>),
+    Ref(Set<Loan>, Rc<Type>),
+    RefMut(Set<Loan>, Rc<Type>),
     Err,
     Unknown, // A placeholder for a type that has not been annotated yet.
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub enum Loan {
+    Unique(Place),
+    Shared(Place),
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -172,6 +183,18 @@ pub struct StmtDef {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+pub struct StmtDefBuiltin {
+    pub span: Span,
+    pub name: Name,
+    pub generics: Vec<Name>,
+    pub params: Vec<Type>,
+    pub ty: Type,
+    pub where_clause: Vec<Impl>,
+    pub fun: fn(&mut Context, &[Value]) -> Value,
+    pub codegen: Option<Codegen>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct StmtStruct {
     pub span: Span,
     pub name: Name,
@@ -213,14 +236,14 @@ pub struct BuiltinDef {
     pub codegen: Option<Codegen>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Copy)]
 pub struct Codegen {
     pub rust: &'static str,
     pub java: &'static str,
     pub egglog: Option<Egglog>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Copy)]
 pub struct Egglog {
     pub name: &'static str,
     pub code: for<'a> fn(
@@ -255,9 +278,19 @@ impl From<usize> for Index {
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub enum Place {
+    Var(Name),
+    Field(Rc<Place>, Name),
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Expr {
     Path(Span, Type, Path),
+    Ref(Span, Type, Place),
+    RefMut(Span, Type, Place),
+    Place(Span, Type, Place),
+    Deref(Span, Type, Rc<Expr>),
     Int(Span, Type, Symbol),
     Float(Span, Type, Symbol),
     IntSuffix(Span, Type, Symbol, Symbol),
@@ -277,19 +310,18 @@ pub enum Expr {
     Call(Span, Type, Rc<Expr>, Vec<Expr>),
     Block(Span, Type, Block),
     Closure(Span, Type, Map<Name, Type>, Map<Name, Type>, Type, Rc<Expr>),
-    Query(Span, Type, Name, Type, Rc<Expr>, Vec<Query>),
+    Query(Span, Type, Name, Type, Rc<Expr>, Vec<QueryOp>),
     QueryInto(
         Span,
         Type,
         Name,
         Type,
         Rc<Expr>,
-        Vec<Query>,
+        Vec<QueryOp>,
         Name,
         Vec<Type>,
         Vec<Expr>,
     ),
-    // TODO: Decide how to define type args
     Assoc(Span, Type, Impl, Name, Vec<Type>),
     Match(Span, Type, Rc<Expr>, Map<Pat, Expr>),
     IfElse(Span, Type, Rc<Expr>, Rc<Expr>, Rc<Expr>),
@@ -346,9 +378,9 @@ pub enum Pat {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Query {
-    From(Span, Name, Rc<Expr>),
-    Var(Span, Name, Rc<Expr>),
+pub enum QueryOp {
+    From(Span, Name, Type, Rc<Expr>),
+    Var(Span, Name, Type, Rc<Expr>),
     Drop(Span, Name),
     Union(Span, Rc<Expr>),
     Where(Span, Rc<Expr>),
@@ -356,7 +388,7 @@ pub enum Query {
     Limit(Span, Rc<Expr>),
     OverCompute(Span, Rc<Expr>, Vec<Aggr>),
     GroupOverCompute(Span, Name, Rc<Expr>, Rc<Expr>, Vec<Aggr>),
-    JoinOn(Span, Name, Rc<Expr>, Rc<Expr>),
+    JoinOn(Span, Name, Type, Rc<Expr>, Rc<Expr>),
     JoinOverOn(Span, Name, Rc<Expr>, Rc<Expr>, Rc<Expr>),
     // Compute(Span, Name, Rc<Expr>, Rc<Expr>),
     Err(Span),

@@ -1,3 +1,4 @@
+use crate::aqua;
 use crate::builtins::value::Value;
 use crate::builtins::Context;
 use crate::builtins::Decl;
@@ -7,9 +8,12 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
-        aqua: "trait Display[T] {
-                   def toString(v: T): String;
-               }",
+        docs: "",
+        aqua: aqua! {
+            "trait Display[T] {
+                 def toString(v: T): String;
+             }"
+        },
     });
 }
 
@@ -21,9 +25,9 @@ impl std::fmt::Display for Value {
             Value::Bool(v) => write!(f, "{v}"),
             Value::Char(v) => write!(f, "{v}"),
             Value::Dict(v) => write!(f, "{v}"),
-            Value::Assigner(v) => write!(f, "{v}"),
+            Value::Window(v) => write!(f, "{v}"),
             Value::Duration(v) => write!(f, "{v}"),
-            Value::Encoding(v) => write!(f, "{v}"),
+            Value::Format(v) => write!(f, "{v}"),
             Value::F32(v) => write!(f, "{v}"),
             Value::F64(v) => write!(f, "{v}"),
             Value::File(v) => write!(f, "{v}"),
@@ -41,6 +45,7 @@ impl std::fmt::Display for Value {
             Value::Set(v) => write!(f, "{v}"),
             Value::SocketAddr(v) => write!(f, "{v}"),
             Value::Stream(v) => write!(f, "{v}"),
+            Value::KeyedStream(v) => write!(f, "{v}"),
             Value::Dataflow(v) => write!(f, "{v}"),
             Value::String(v) => write!(f, "{v}"),
             Value::Time(v) => write!(f, "{v}"),
@@ -59,6 +64,8 @@ impl std::fmt::Display for Value {
             Value::Backend(v) => write!(f, "{v}"),
             Value::Range(v) => write!(f, "{v}"),
             Value::Url(v) => write!(f, "{v}"),
+            Value::Iterator(_) => unreachable!(),
+            Value::Storage(_) => todo!(),
         }
     }
 }

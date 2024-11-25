@@ -50,6 +50,10 @@ impl Expr {
             Expr::LetIn(s, _, x, t1, e0, e1) => Expr::LetIn(s, t, x, t1, e0, e1),
             Expr::Update(s, _, x, e0, e1) => Expr::Update(s, t, x, e0, e1),
             Expr::Anonymous(s, _) => Expr::Anonymous(s, t),
+            Expr::Ref(_, _) => todo!(),
+            Expr::RefMut(_, _) => todo!(),
+            Expr::Place(_, _) => todo!(),
+            Expr::Deref(_, _, _) => todo!(),
         }
     }
 }

@@ -1,14 +1,14 @@
 struct Data(time:Time, key:String, value:i32);
 
-var i =
+var i:Instance =
   from x in Stream[Data]::source(
     Reader::file(Path::new("data.csv"), false),
-    Format::csv(','),
+    Encoding::csv(','),
     (x, t) => x.time, 0s, 1s
   )
   where x.value < 50
   limit 100
   into sink(
     Writer::stdout(),
-    Format::csv(',')
+    Encoding::csv(',')
   ).run(Backend::native());

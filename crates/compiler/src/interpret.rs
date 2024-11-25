@@ -10,7 +10,7 @@ use crate::ast::Program;
 use crate::ast::Stmt;
 use crate::ast::StmtVar;
 use crate::ast::Type;
-use crate::builtins::types::function::Fun;
+use crate::builtins::types::function::Function;
 use crate::builtins::types::record::Record;
 use crate::builtins::types::tuple::Tuple;
 use crate::builtins::types::variant::Variant;
@@ -124,7 +124,7 @@ impl Context {
         match e {
             Expr::Path(_, _, _) => unreachable!(),
             Expr::Int(_, t, v) => {
-                let Type::Cons(x, _) = t else {
+                let Type::Builtin(x, _) = t else {
                     unreachable!();
                 };
                 match x.data.as_str() {
@@ -140,7 +140,7 @@ impl Context {
                 }
             }
             Expr::Float(_, t, v) => {
-                let Type::Cons(x, _) = t else {
+                let Type::Builtin(x, _) = t else {
                     unreachable!();
                 };
                 match x.data.as_str() {
@@ -170,7 +170,7 @@ impl Context {
             Expr::Var(_, _, x) => self.stack.get(x).clone(),
             Expr::Def(_, _, x, _) => {
                 let s = self.decls.defs.get(x).unwrap().clone();
-                Fun::new(s.params.clone(), s.body.clone()).into()
+                Function::new(s.params.clone(), s.body.clone()).into()
             }
             Expr::Assoc(_, _, _, _, _) => unreachable!(),
             Expr::Call(_, _, e, es) => {
@@ -210,7 +210,7 @@ impl Context {
                 Tuple::new(vec![]).into()
             }
             Expr::Lambda(_, _, xts, _, e) => {
-                Fun::new(xts.clone(), ExprBody::UserDefined(e.clone())).into()
+                Function::new(xts.clone(), ExprBody::UserDefined(e.clone())).into()
             }
             Expr::Err(_, _) => unreachable!(),
             Expr::For(_, _, _, _, _) => unreachable!(),
@@ -235,6 +235,10 @@ impl Context {
             Expr::Closure(_, _, _xts0, _xts1, _t, _e) => {
                 todo!()
             }
+            Expr::Ref(_, _) => todo!(),
+            Expr::Place(..) => todo!(),
+            Expr::RefMut(_, _) => todo!(),
+            Expr::Deref(_, _, _) => todo!(),
         }
     }
 }

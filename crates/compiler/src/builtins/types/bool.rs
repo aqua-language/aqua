@@ -9,6 +9,7 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type bool;",
         codegen: Some(Codegen {
             rust: "bool",
@@ -18,12 +19,19 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
+        aqua: "impl Serde[bool]",
+        decls: &[],
+    });
+
+    ctx.declare(Decl::Impl {
         aqua: "impl Not[bool]",
         decls: &[
             ImplDecl::Type {
+                docs: "",
                 aqua: "type Output = bool;",
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def not(a:bool): bool;",
                 codegen: Some(Codegen {
                     rust: "(|a| !a)",

@@ -9,18 +9,27 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "A descriptor for writing data to a sink.",
         aqua: "type Writer;",
         codegen: None,
     });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl Writer",
+        decls: &[],
+    });
+
     ctx.declare(Decl::Impl {
         aqua: "impl Writer",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def stdout(): Writer;",
                 codegen: None,
                 eval: |_, _| Writer::stdout().into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def file(path: Path): Writer;",
                 codegen: None,
                 eval: |_, v| {
@@ -29,6 +38,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def http(a0: Url): Writer;",
                 codegen: None,
                 eval: |_ctx, _v| {
@@ -38,6 +48,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def tcp(a0: SocketAddr): Writer;",
                 codegen: None,
                 eval: |_ctx, _v| {
@@ -46,6 +57,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def kafka(a0: SocketAddr, a1: String): Writer;",
                 codegen: None,
                 eval: |_ctx, _v| {

@@ -8,6 +8,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
+        docs: "",
         aqua: indoc::indoc! {
             "trait Add[A,B] {
                  type Output;

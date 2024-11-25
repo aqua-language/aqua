@@ -20,11 +20,11 @@ pub fn floats() -> impl Iterator<Item = Name> {
 }
 
 pub fn bool() -> Type {
-    Type::Cons("bool".into(), vec![])
+    Type::Builtin("bool".into(), vec![])
 }
 
 pub fn char() -> Type {
-    Type::Cons("char".into(), vec![])
+    Type::Builtin("char".into(), vec![])
 }
 
 pub fn unit() -> Type {
@@ -32,13 +32,13 @@ pub fn unit() -> Type {
 }
 
 pub fn string() -> Type {
-    Type::Cons("String".into(), vec![])
+    Type::Builtin("String".into(), vec![])
 }
 
 pub fn default_int() -> Type {
-    Type::Cons("i32".into(), vec![])
+    Type::Builtin("i32".into(), vec![])
 }
 
 pub fn default_float() -> Type {
-    Type::Cons("f64".into(), vec![])
+    Type::Builtin("f64".into(), vec![])
 }

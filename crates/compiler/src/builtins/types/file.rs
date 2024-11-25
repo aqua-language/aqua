@@ -9,6 +9,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type File;",
         codegen: None,
     });
@@ -17,6 +18,7 @@ fn declare(ctx: &mut Context) {
         aqua: "impl File",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def open(path:Path): File;",
                 codegen: None,
                 eval: |_ctx, v| {
@@ -25,6 +27,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def read_to_string(file:File): String;",
                 codegen: None,
                 eval: |_ctx, _v| {
@@ -34,6 +37,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def read_to_bytes(file:File): Blob;",
                 codegen: None,
                 eval: |_ctx, v| {
@@ -42,6 +46,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def inspect(file:File): ();",
                 codegen: None,
                 eval: |_ctx, _v| {

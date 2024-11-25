@@ -60,6 +60,7 @@ impl Stack {
 #[derive(Debug)]
 pub struct Context {
     stack: Stack,
+    // Used to track the number of type alias expansions.
     pub report: Report,
 }
 
@@ -230,7 +231,7 @@ impl Mapper for Context {
                         };
                         let ts1 = seg1.ts;
                         let x1 = seg1.x;
-                        let b = Impl::Type(Rc::new(Type::Cons(x0, ts0)));
+                        let b = Impl::Type(Rc::new(Type::Builtin(x0, ts0)));
                         Expr::Assoc(*s, t, b, x1, ts1)
                     }
                     Some(b) => {
@@ -246,7 +247,7 @@ impl Mapper for Context {
             Expr::Call(s, t, e, es) => {
                 let t = self.map_type(t);
                 if let Expr::Path(_s, _t, path) = e.as_ref() {
-                    let path = self.map_path(path);
+                    let path = self.map_path(&path);
                     let mut iter = path.segments.into_iter();
                     let seg0 = iter.next().unwrap();
                     match self.stack.get(&seg0.x) {
@@ -372,7 +373,7 @@ impl Mapper for Context {
                             self.unexpected_assoc("Type", "item", &seg0.x, &seg1.x);
                             return Type::Err;
                         }
-                        Type::Cons(seg0.x, seg0.ts.clone())
+                        Type::Enum(seg0.x, seg0.ts.clone())
                     }
                     Some(Binding::Struct(stmt)) => {
                         if !seg0.has_arity(stmt.generics.len()) {
@@ -383,7 +384,7 @@ impl Mapper for Context {
                             self.unexpected_assoc("Type", "item", &seg0.x, &seg1.x);
                             return Type::Err;
                         }
-                        Type::Cons(seg0.x, seg0.ts.clone())
+                        Type::Struct(seg0.x, seg0.ts.clone())
                     }
                     Some(Binding::Type(stmt)) => {
                         if !seg0.has_arity(stmt.generics.len()) {
@@ -394,9 +395,10 @@ impl Mapper for Context {
                             self.unexpected_assoc("Type", "item", &seg0.x, &seg1.x);
                             return Type::Err;
                         }
-                        match &stmt.body {
+                        let stmt = stmt.instantiate(&seg0.ts.clone());
+                        match stmt.body {
                             TypeBody::UserDefined(_) => Type::Alias(seg0.x, seg0.ts.clone()),
-                            TypeBody::Builtin(_) => Type::Cons(seg0.x, seg0.ts.clone()),
+                            TypeBody::Builtin(_) => Type::Builtin(seg0.x, seg0.ts.clone()),
                         }
                     }
                     Some(Binding::Trait(stmt)) => {
@@ -525,7 +527,7 @@ impl Mapper for Context {
             Impl::Path(_span, path) => self.resolve_bound_path(path),
             Impl::Trait(..) => unreachable!(),
             Impl::Type(..) => unreachable!(),
-            Impl::Var(_) => unreachable!(),
+            Impl::Var(..) => unreachable!(),
             Impl::Unknown => Impl::Unknown,
             Impl::Err => Impl::Err,
         }
@@ -833,7 +835,7 @@ impl Context {
                     return Impl::Err;
                 }
                 let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                let t = Type::Cons(seg0.x, ts0.clone());
+                let t = Type::Builtin(seg0.x, ts0.clone());
                 if let Some(seg1) = iter.next() {
                     self.unexpected_assoc("Type", "item", &seg0.x, &seg1.x);
                     return Impl::Err;
@@ -846,7 +848,7 @@ impl Context {
                     return Impl::Err;
                 }
                 let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                let t = Type::Cons(seg0.x, ts0.clone());
+                let t = Type::Struct(seg0.x, ts0.clone());
                 if let Some(seg1) = iter.next() {
                     self.unexpected_assoc("Struct", "item", &seg0.x, &seg1.x);
                     return Impl::Err;
@@ -859,7 +861,7 @@ impl Context {
                     return Impl::Err;
                 }
                 let ts0 = seg0.create_unnamed_holes(stmt.generics.len());
-                let t = Type::Cons(seg0.x, ts0.clone());
+                let t = Type::Enum(seg0.x, ts0.clone());
                 if let Some(seg1) = iter.next() {
                     self.unexpected_assoc("Enum", "item", &seg0.x, &seg1.x);
                     return Impl::Err;

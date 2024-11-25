@@ -10,7 +10,7 @@ use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::PathPatField;
 use crate::ast::Program;
-use crate::ast::Query;
+use crate::ast::QueryOp;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
@@ -88,15 +88,20 @@ impl<'a, 'b> Printer<'a, 'b> {
         }
     }
 
+    fn type_annotation(&mut self, t: &Type) -> std::fmt::Result {
+        if *t != Type::Unknown {
+            self.punct(":")?;
+            self.space()?;
+            self.ty(&t)?;
+        }
+        Ok(())
+    }
+
     fn stmt_var(&mut self, s: &StmtVar) -> std::fmt::Result {
         self.kw("var")?;
         self.space()?;
         self.name(&s.name)?;
-        if s.ty != Type::Unknown {
-            self.punct(":")?;
-            self.space()?;
-            self.ty(&s.ty)?;
-        }
+        self.type_annotation(&s.ty)?;
         self.space()?;
         self.punct("=")?;
         self.space()?;
@@ -133,7 +138,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     fn expr_body(&mut self, e: &ExprBody) -> std::fmt::Result {
         match e {
             ExprBody::UserDefined(e) => self.expr(e),
-            ExprBody::Builtin(_) => self.kw("<builtin>"),
+            ExprBody::Builtin(_) => Ok(()),
         }
     }
 
@@ -224,7 +229,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     fn ty_body(&mut self, t: &TypeBody) -> std::fmt::Result {
         match t {
             TypeBody::UserDefined(t) => self.ty(t),
-            TypeBody::Builtin(_) => self.kw("<builtin>"),
+            TypeBody::Builtin(_) => Ok(()),
         }
     }
 
@@ -559,6 +564,10 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.expr(e)?;
             }
+            Expr::Ref(_, _) => todo!(),
+            Expr::RefMut(_, _) => todo!(),
+            Expr::Place(_, _) => todo!(),
+            Expr::Deref(_, _, _) => todo!(),
         }
         Ok(())
     }
@@ -619,38 +628,39 @@ impl<'a, 'b> Printer<'a, 'b> {
         self.ty(t)
     }
 
-    fn query_clause(&mut self, q: &Query) -> std::fmt::Result {
+    fn query_clause(&mut self, q: &QueryOp) -> std::fmt::Result {
         match q {
-            Query::From(_, x, e) => {
+            QueryOp::From(_, x, t, e) => {
                 self.kw("from")?;
                 self.space()?;
                 self.name(x)?;
+                self.type_annotation(t)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
                 self.expr(e)?;
             }
-            Query::Union(_, e) => {
+            QueryOp::Union(_, e) => {
                 self.kw("union")?;
                 self.space()?;
                 self.expr(e)?;
             }
-            Query::Limit(_, e) => {
+            QueryOp::Limit(_, e) => {
                 self.kw("limit")?;
                 self.space()?;
                 self.expr(e)?;
             }
-            Query::Where(_, e) => {
+            QueryOp::Where(_, e) => {
                 self.kw("where")?;
                 self.space()?;
                 self.expr(e)?;
             }
-            Query::Select(_, xes) => {
+            QueryOp::Select(_, xes) => {
                 self.kw("select")?;
                 self.space()?;
                 self.comma_scope(xes.as_ref(), Self::expr_field)?;
             }
-            Query::GroupOverCompute(_, x, e0, e1, aggrs) => {
+            QueryOp::GroupOverCompute(_, x, e0, e1, aggrs) => {
                 self.kw("group")?;
                 self.space()?;
                 self.name(x)?;
@@ -669,7 +679,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                     this.indented(|this| this.newline_comma_sep(aggrs, Self::aggr))
                 })?;
             }
-            Query::OverCompute(_, e, aggrs) => {
+            QueryOp::OverCompute(_, e, aggrs) => {
                 self.kw("over")?;
                 self.space()?;
                 self.expr(e)?;
@@ -678,19 +688,21 @@ impl<'a, 'b> Printer<'a, 'b> {
                     this.newline_comma_sep(aggrs, Self::aggr)
                 })?;
             }
-            Query::Var(_, x, e) => {
+            QueryOp::Var(_, x, t, e) => {
                 self.kw("var")?;
                 self.space()?;
                 self.name(x)?;
+                self.type_annotation(t)?;
                 self.space()?;
                 self.punct("=")?;
                 self.space()?;
                 self.expr(e)?;
             }
-            Query::JoinOn(_, x, e0, e1) => {
+            QueryOp::JoinOn(_, x, t, e0, e1) => {
                 self.kw("join")?;
                 self.space()?;
                 self.name(x)?;
+                self.type_annotation(t)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
@@ -700,7 +712,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.expr(e1)?;
             }
-            Query::JoinOverOn(_, x, e0, e1, e2) => {
+            QueryOp::JoinOverOn(_, x, e0, e1, e2) => {
                 self.kw("join")?;
                 self.space()?;
                 self.name(x)?;
@@ -717,10 +729,10 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.expr(e2)?;
             }
-            Query::Err(_) => {
+            QueryOp::Err(_) => {
                 self.kw("<err>")?;
             }
-            Query::Drop(_, x) => {
+            QueryOp::Drop(_, x) => {
                 self.kw("drop")?;
                 self.space()?;
                 self.name(x)?;
@@ -779,8 +791,8 @@ impl<'a, 'b> Printer<'a, 'b> {
 
     fn ty(&mut self, t: &Type) -> std::fmt::Result {
         match t {
-            Type::Cons(name, ts) => {
-                self.name(name)?;
+            Type::Struct(x, ts) | Type::Enum(x, ts) | Type::Builtin(x, ts) | Type::Alias(x, ts) => {
+                self.name(x)?;
                 self.type_args(ts)?;
             }
             Type::Assoc(b, x1, ts1) => {
@@ -820,10 +832,6 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.kw("record")?;
                 self.fields(xts.as_ref(), Self::annotate)?;
             }
-            Type::Alias(name, xts) => {
-                self.name(name)?;
-                self.type_args(xts)?;
-            }
             Type::Path(path) => {
                 self.path(path)?;
             }
@@ -842,6 +850,8 @@ impl<'a, 'b> Printer<'a, 'b> {
             Type::Paren(t) => {
                 self.paren(|this| this.ty(t))?;
             }
+            Type::Ref(_, _) => todo!(),
+            Type::RefMut(_, _) => todo!(),
         }
         Ok(())
     }
@@ -973,7 +983,7 @@ impl<'a, 'b> Printer<'a, 'b> {
 
     fn constraint(&mut self, c: &Constraint) -> std::fmt::Result {
         match c {
-            Constraint::ExprAssoc(_, t, i, x, ts) => {
+            Constraint::AssocDef(_, t, i, x, ts) => {
                 self.lit("function")?;
                 self.punct(":")?;
                 self.space()?;
@@ -986,7 +996,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.ty(t)?;
             }
-            Constraint::TypeAssoc(_, t, i, x, ts) => {
+            Constraint::AssocType(_, t, i, x, ts) => {
                 self.lit("type")?;
                 self.punct(":")?;
                 self.space()?;
@@ -1103,7 +1113,7 @@ impl std::fmt::Display for Impl {
     }
 }
 
-impl std::fmt::Display for Query {
+impl std::fmt::Display for QueryOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Printer::new(f).query_clause(self)
     }

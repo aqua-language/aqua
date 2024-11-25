@@ -8,6 +8,7 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Result[T];",
         codegen: Some(Codegen {
             rust: "Result",
@@ -15,10 +16,17 @@ fn declare(ctx: &mut Context) {
             egglog: None,
         }),
     });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl[T] Serde[Result[T]] where Serde[T]",
+        decls: &[],
+    });
+
     ctx.declare(Decl::Impl {
         aqua: "impl Result",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def ok[T](v: T): Result[T];",
                 codegen: Some(Codegen {
                     rust: "Result::ok",
@@ -32,6 +40,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def error[T](v: T): Result[T];",
                 codegen: Some(Codegen {
                     rust: "Result::error",
@@ -45,6 +54,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def is_ok[T](v: Result[T]): bool;",
                 codegen: Some(Codegen {
                     rust: "Result::is_ok",
@@ -57,6 +67,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def is_error[T](v: Result[T]): bool;",
                 codegen: Some(Codegen {
                     rust: "Result::is_error",
@@ -69,6 +80,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def unwrap_ok[T](v: Result[T]): T;",
                 codegen: Some(Codegen {
                     rust: "Result::unwrap_ok",
@@ -82,6 +94,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def unwrap_error[T](v: Result[T]): T;",
                 codegen: Some(Codegen {
                     rust: "Result::unwrap_error",

@@ -13,7 +13,7 @@ use compiler::ast::Map;
 use compiler::ast::Name;
 use compiler::ast::Pat;
 use compiler::ast::Program;
-use compiler::ast::Query;
+use compiler::ast::QueryOp;
 use compiler::ast::Stmt;
 use compiler::ast::StmtDef;
 use compiler::ast::StmtEnum;
@@ -29,7 +29,7 @@ use compiler::ast::Type;
 use compiler::ast::TypeBody;
 
 use compiler::ast::TypeVar;
-use compiler::span::Span;
+use compiler::syntax::span::Span;
 
 pub fn program<const N: usize>(ss: [Stmt; N]) -> Program {
     Program::new(span(), vec(ss))
@@ -132,21 +132,28 @@ pub fn bound_err() -> Impl {
     Impl::Err
 }
 
-pub fn ty_alias<const N: usize>(x: &'static str, ts: [Type; N]) -> Type {
-    Type::Alias(name(x), vec(ts))
-}
-
 pub fn ty(x: &'static str) -> Type {
-    debug_assert!(!x.starts_with('?'));
-    ty_con(x, [])
+    ty_builtin(x, [])
 }
 
 pub fn name(x: impl Into<Name>) -> Name {
     x.into()
 }
 
-pub fn ty_con<const N: usize>(x: &'static str, types: [Type; N]) -> Type {
-    Type::Cons(name(x), vec(types))
+pub fn ty_builtin<const N: usize>(x: &'static str, types: [Type; N]) -> Type {
+    Type::Builtin(name(x), vec(types))
+}
+
+pub fn ty_alias<const N: usize>(x: &'static str, ts: [Type; N]) -> Type {
+    Type::Alias(name(x), vec(ts))
+}
+
+pub fn ty_struct<const N: usize>(x: &'static str, types: [Type; N]) -> Type {
+    Type::Struct(name(x), vec(types))
+}
+
+pub fn ty_enum<const N: usize>(x: &'static str, types: [Type; N]) -> Type {
+    Type::Enum(name(x), vec(types))
 }
 
 pub fn ty_tuple<const N: usize>(ts: [Type; N]) -> Type {
@@ -193,7 +200,7 @@ pub mod sugared {
     use compiler::ast::Expr;
     use compiler::ast::Pat;
     use compiler::ast::Type;
-    use compiler::token::Token;
+    use compiler::syntax::token::Token;
 
     use super::span;
 
@@ -937,7 +944,7 @@ pub fn expr_break() -> Expr {
     Expr::Break(span(), Type::Unknown)
 }
 
-pub fn expr_query<const N: usize>(x0: &'static str, t0: Type, e: Expr, qs: [Query; N]) -> Expr {
+pub fn expr_query<const N: usize>(x0: &'static str, t0: Type, e: Expr, qs: [QueryOp; N]) -> Expr {
     Expr::Query(span(), Type::Unknown, name(x0), t0, Rc::new(e), vec(qs))
 }
 
@@ -945,7 +952,7 @@ pub fn expr_query_into<const N: usize, const M: usize, const K: usize>(
     x0: &'static str,
     t0: Type,
     e: Expr,
-    qs: [Query; N],
+    qs: [QueryOp; N],
     x1: &'static str,
     ts: [Type; M],
     es: [Expr; K],
@@ -963,36 +970,36 @@ pub fn expr_query_into<const N: usize, const M: usize, const K: usize>(
     )
 }
 
-pub fn query_join_on(x: &'static str, e0: Expr, e1: Expr) -> Query {
-    Query::JoinOn(span(), name(x), Rc::new(e0), Rc::new(e1))
+pub fn query_join_on(x: &'static str, e0: Expr, e1: Expr) -> QueryOp {
+    QueryOp::JoinOn(span(), name(x), Type::Unknown, Rc::new(e0), Rc::new(e1))
 }
 
-pub fn query_join_over_on(x: &'static str, e0: Expr, e1: Expr, e2: Expr) -> Query {
-    Query::JoinOverOn(span(), name(x), Rc::new(e0), Rc::new(e1), Rc::new(e2))
+pub fn query_join_over_on(x: &'static str, e0: Expr, e1: Expr, e2: Expr) -> QueryOp {
+    QueryOp::JoinOverOn(span(), name(x), Rc::new(e0), Rc::new(e1), Rc::new(e2))
 }
 
-pub fn query_select<const N: usize>(xes: [(&'static str, Expr); N]) -> Query {
-    Query::Select(span(), name_map(xes))
+pub fn query_select<const N: usize>(xes: [(&'static str, Expr); N]) -> QueryOp {
+    QueryOp::Select(span(), name_map(xes))
 }
 
-pub fn query_where(e: Expr) -> Query {
-    Query::Where(span(), Rc::new(e))
+pub fn query_where(e: Expr) -> QueryOp {
+    QueryOp::Where(span(), Rc::new(e))
 }
 
-pub fn query_from(x: &'static str, e: Expr) -> Query {
-    Query::From(span(), name(x), Rc::new(e))
+pub fn query_from(x: &'static str, e: Expr) -> QueryOp {
+    QueryOp::From(span(), name(x), Type::Unknown, Rc::new(e))
 }
 
-pub fn query_var(x: &'static str, e: Expr) -> Query {
-    Query::Var(span(), name(x), Rc::new(e))
+pub fn query_var(x: &'static str, e: Expr) -> QueryOp {
+    QueryOp::Var(span(), name(x), Type::Unknown, Rc::new(e))
 }
 
-pub fn query_join(x: &'static str, e0: Expr, e1: Expr) -> Query {
-    Query::JoinOn(span(), name(x), Rc::new(e0), Rc::new(e1))
+pub fn query_join(x: &'static str, e0: Expr, e1: Expr) -> QueryOp {
+    QueryOp::JoinOn(span(), name(x), Type::Unknown, Rc::new(e0), Rc::new(e1))
 }
 
-pub fn query_join_over(x: &'static str, e0: Expr, e1: Expr, e2: Expr) -> Query {
-    Query::JoinOverOn(span(), name(x), Rc::new(e0), Rc::new(e1), Rc::new(e2))
+pub fn query_join_over(x: &'static str, e0: Expr, e1: Expr, e2: Expr) -> QueryOp {
+    QueryOp::JoinOverOn(span(), name(x), Rc::new(e0), Rc::new(e1), Rc::new(e2))
 }
 
 pub fn query_group_over_compute<const N: usize>(
@@ -1000,12 +1007,12 @@ pub fn query_group_over_compute<const N: usize>(
     e0: Expr,
     e1: Expr,
     aggs: [Aggr; N],
-) -> Query {
-    Query::GroupOverCompute(span(), name(x), Rc::new(e0), Rc::new(e1), vec(aggs))
+) -> QueryOp {
+    QueryOp::GroupOverCompute(span(), name(x), Rc::new(e0), Rc::new(e1), vec(aggs))
 }
 
-pub fn query_over_compute<const N: usize>(e: Expr, aggs: [Aggr; N]) -> Query {
-    Query::OverCompute(span(), Rc::new(e), vec(aggs))
+pub fn query_over_compute<const N: usize>(e: Expr, aggs: [Aggr; N]) -> QueryOp {
+    QueryOp::OverCompute(span(), Rc::new(e), vec(aggs))
 }
 
 pub fn aggr(x0: &'static str, x1: &'static str, e: Expr) -> Aggr {
@@ -1033,7 +1040,7 @@ pub mod types {
     use compiler::ast::Type;
 
     use super::ty;
-    use super::ty_con;
+    use super::ty_builtin;
 
     pub fn ty_i32() -> Type {
         ty("i32")
@@ -1052,15 +1059,15 @@ pub mod types {
     }
 
     pub fn ty_vec(t: Type) -> Type {
-        ty_con("Vec", [t])
+        ty_builtin("Vec", [t])
     }
 
     pub fn ty_option(t: Type) -> Type {
-        ty_con("Option", [t])
+        ty_builtin("Option", [t])
     }
 
     pub fn ty_stream(t: Type) -> Type {
-        ty_con("Stream", [t])
+        ty_builtin("Stream", [t])
     }
 }
 

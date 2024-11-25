@@ -10,6 +10,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Backend;",
         codegen: None,
     });
@@ -17,11 +18,13 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Backend",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def native(): Backend;",
                 codegen: None,
                 eval: |_ctx, _v| Backend::native().into(),
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def flink(): Backend;",
                 codegen: None,
                 eval: |_ctx, _v| Backend::flink().into(),

@@ -2,9 +2,9 @@
 
 use std::rc::Rc;
 
-use runtime::prelude::Assigner;
-use runtime::prelude::Encoding;
+use runtime::prelude::Format;
 use runtime::prelude::Set;
+use runtime::prelude::Window;
 
 use crate::ast::Aggr;
 use crate::ast::Block;
@@ -16,7 +16,7 @@ use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::PathPatField;
 use crate::ast::Program;
-use crate::ast::Query;
+use crate::ast::QueryOp;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
@@ -31,16 +31,18 @@ use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
+use crate::builtins::types::keyed_stream::KeyedOperator;
+use crate::builtins::types::keyed_stream::KeyedStream;
 use crate::builtins::types::stream::Operator;
 use crate::builtins::value::Dataflow;
-use crate::builtins::value::Fun;
+use crate::builtins::value::Function;
 use crate::builtins::value::Record;
 use crate::builtins::value::Stream;
 use crate::builtins::value::Tuple;
 use crate::builtins::value::Value;
 use crate::builtins::value::Variant;
 use crate::pass::infer::solver::Constraint;
-use crate::span::Span;
+use crate::syntax::span::Span;
 
 pub(crate) trait Visitor {
     fn visit_program(&mut self, program: &Program) {
@@ -540,6 +542,10 @@ pub(crate) trait Visitor {
                 self.visit_type(t);
                 self.visit_expr(e);
             }
+            Expr::Ref(_, _) => todo!(),
+            Expr::RefMut(_, _) => todo!(),
+            Expr::Place(_, _) => todo!(),
+            Expr::Deref(_, _, _) => todo!(),
         }
     }
 
@@ -560,63 +566,66 @@ pub(crate) trait Visitor {
         self.visit_expr(e);
     }
 
-    fn visit_query_stmts(&mut self, qs: &[Query]) {
+    fn visit_query_stmts(&mut self, qs: &[QueryOp]) {
         self._visit_query_stmts(qs);
     }
     #[inline(always)]
-    fn _visit_query_stmts(&mut self, qs: &[Query]) {
+    fn _visit_query_stmts(&mut self, qs: &[QueryOp]) {
         self.visit_iter(qs, Self::visit_query_stmt);
     }
 
-    fn visit_query_stmt(&mut self, q: &Query) {
+    fn visit_query_stmt(&mut self, q: &QueryOp) {
         self._visit_query_stmt(q);
     }
-    fn _visit_query_stmt(&mut self, q: &Query) {
+    fn _visit_query_stmt(&mut self, q: &QueryOp) {
         let s = self.visit_span(&q.span_of());
         match q {
-            Query::From(_, x, e) => {
+            QueryOp::From(_, x, t, e) => {
                 self.visit_name(x);
+                self.visit_type(t);
                 self.visit_expr(e);
             }
-            Query::Union(_, e) => {
+            QueryOp::Union(_, e) => {
                 self.visit_expr(e);
             }
-            Query::Limit(_, e) => {
+            QueryOp::Limit(_, e) => {
                 self.visit_expr(e);
             }
-            Query::Var(_, x, e) => {
+            QueryOp::Var(_, x, t, e) => {
                 self.visit_name(x);
+                self.visit_type(t);
                 self.visit_expr(e);
             }
-            Query::Where(_, e) => {
+            QueryOp::Where(_, e) => {
                 self.visit_expr(e);
             }
-            Query::Select(_, xes) => {
+            QueryOp::Select(_, xes) => {
                 self.visit_expr_fields(xes);
             }
-            Query::OverCompute(_, e, aggs) => {
+            QueryOp::OverCompute(_, e, aggs) => {
                 self.visit_expr(e);
                 self.visit_aggs(aggs);
             }
-            Query::GroupOverCompute(_, x, e0, e1, aggs) => {
+            QueryOp::GroupOverCompute(_, x, e0, e1, aggs) => {
                 self.visit_name(x);
                 self.visit_expr(e0);
                 self.visit_expr(e1);
                 self.visit_aggs(aggs);
             }
-            Query::JoinOn(_, x, e0, e1) => {
+            QueryOp::JoinOn(_, x, t, e0, e1) => {
                 self.visit_name(x);
+                self.visit_type(t);
                 self.visit_expr(e0);
                 self.visit_expr(e1);
             }
-            Query::JoinOverOn(_, x, e0, e1, e2) => {
+            QueryOp::JoinOverOn(_, x, e0, e1, e2) => {
                 self.visit_name(x);
                 self.visit_expr(e0);
                 self.visit_expr(e1);
                 self.visit_expr(e2);
             }
-            Query::Err(_) => {}
-            Query::Drop(_, x) => {
+            QueryOp::Err(_) => {}
+            QueryOp::Drop(_, x) => {
                 self.visit_name(x);
             }
         }
@@ -715,11 +724,7 @@ pub(crate) trait Visitor {
             Type::Path(path) => {
                 self.visit_path(path);
             }
-            Type::Cons(x, ts) => {
-                self.visit_name(x);
-                self.visit_types(ts);
-            }
-            Type::Alias(x, ts) => {
+            Type::Builtin(x, ts) => {
                 self.visit_name(x);
                 self.visit_types(ts);
             }
@@ -751,6 +756,20 @@ pub(crate) trait Visitor {
             Type::Paren(t) => {
                 self.visit_type(t);
             }
+            Type::Struct(x, ts) => {
+                self.visit_name(x);
+                self.visit_types(ts);
+            }
+            Type::Enum(x, ts) => {
+                self.visit_name(x);
+                self.visit_types(ts);
+            }
+            Type::Alias(x, ts) => {
+                self.visit_name(x);
+                self.visit_types(ts);
+            }
+            Type::Ref(..) => todo!(),
+            Type::RefMut(..) => todo!(),
         }
     }
 
@@ -861,9 +880,9 @@ pub(crate) trait Visitor {
             Value::Bool(_) => {}
             Value::Char(_) => {}
             Value::Dict(v) => self._visit_value_dict(v),
-            Value::Assigner(_) => {}
+            Value::Window(_) => {}
             Value::Duration(_) => {}
-            Value::Encoding(_) => {}
+            Value::Format(_) => {}
             Value::F32(_) => {}
             Value::F64(_) => {}
             Value::File(_) => {}
@@ -881,6 +900,7 @@ pub(crate) trait Visitor {
             Value::Set(v) => self._visit_value_set(v),
             Value::SocketAddr(_) => {}
             Value::Stream(v) => self._visit_value_stream(v),
+            Value::KeyedStream(v) => self._visit_value_keyed_stream(v),
             Value::Dataflow(v) => self._visit_value_dataflow(v),
             Value::String(_) => {}
             Value::Time(_) => {}
@@ -899,6 +919,8 @@ pub(crate) trait Visitor {
             Value::Ordering(_) => {}
             Value::Backend(_) => {}
             Value::Range(v) => self._visit_value_range(v),
+            Value::Iterator(_) => {}
+            Value::Storage(_) => todo!(),
         }
     }
 
@@ -973,27 +995,58 @@ pub(crate) trait Visitor {
             Dataflow::Sink(s, _, _) => {
                 self._visit_value_stream(s);
             }
+            Dataflow::KeyedSink(s, _, _) => {
+                self._visit_value_keyed_stream(s);
+            }
+        }
+    }
+
+    fn _visit_value_keyed_stream(&mut self, s: &KeyedStream) {
+        match s.0.as_ref() {
+            KeyedOperator::Source(_, _, f, _, _) => {
+                self._visit_value_fun(&f);
+            }
+            KeyedOperator::Take(e, _) => {
+                self._visit_value_keyed_stream(&e);
+            }
+            KeyedOperator::Map(s, f) => {
+                self._visit_value_keyed_stream(&s);
+                self._visit_value_fun(&f);
+            }
+            KeyedOperator::Filter(s, f) => {
+                self._visit_value_keyed_stream(&s);
+                self._visit_value_fun(&f);
+            }
+            KeyedOperator::Flatten(s) => {
+                self._visit_value_keyed_stream(&s);
+            }
+            KeyedOperator::FlatMap(_, _) => todo!(),
+            KeyedOperator::Keyby(_, _) => todo!(),
+            KeyedOperator::Window(_, _, _) => todo!(),
+            KeyedOperator::Merge(_, _) => todo!(),
+            KeyedOperator::IncrWindow(_, _, _, _, _) => todo!(),
+            KeyedOperator::Unkey(_) => todo!(),
         }
     }
 
     fn _visit_value_stream(&mut self, s: &Stream) {
         match s.0.as_ref() {
             Operator::Source(_, _, f, _, _) => {
-                self._visit_value_fun(f);
+                self._visit_value_fun(&f);
             }
             Operator::Take(e, _) => {
-                self._visit_value_stream(e);
+                self._visit_value_stream(&e);
             }
             Operator::Map(s, f) => {
-                self._visit_value_stream(s);
-                self._visit_value_fun(f);
+                self._visit_value_stream(&s);
+                self._visit_value_fun(&f);
             }
             Operator::Filter(s, f) => {
-                self._visit_value_stream(s);
-                self._visit_value_fun(f);
+                self._visit_value_stream(&s);
+                self._visit_value_fun(&f);
             }
             Operator::Flatten(s) => {
-                self._visit_value_stream(s);
+                self._visit_value_stream(&s);
             }
             Operator::FlatMap(_, _) => todo!(),
             Operator::Keyby(_, _) => todo!(),
@@ -1003,7 +1056,7 @@ pub(crate) trait Visitor {
         }
     }
 
-    fn _visit_value_fun(&mut self, f: &Fun) {
+    fn _visit_value_fun(&mut self, f: &Function) {
         f.params.values().for_each(|t| self.visit_type(t));
         self.visit_stmt_def_body(&f.body);
     }
@@ -1015,14 +1068,14 @@ pub(crate) trait Visitor {
     #[inline(always)]
     fn _visit_constraint(&mut self, c: &Constraint) {
         match c {
-            Constraint::ExprAssoc(s, t, i, x, ts) => {
+            Constraint::AssocDef(s, t, i, x, ts) => {
                 self.visit_span(s);
                 self.visit_type(t);
                 self.visit_impl(i);
                 self.visit_name(x);
                 self.visit_types(ts);
             }
-            Constraint::TypeAssoc(s, t, i, x, ts) => {
+            Constraint::AssocType(s, t, i, x, ts) => {
                 self.visit_span(s);
                 self.visit_type(t);
                 self.visit_impl(i);

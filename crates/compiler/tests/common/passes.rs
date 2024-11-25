@@ -9,10 +9,13 @@ use compiler::ast::Stmt;
 use compiler::ast::Type;
 use compiler::builtins::value::Value;
 use compiler::diag::Report;
-use compiler::lexer::Lexer;
-use compiler::parser::Parser;
+use compiler::pass;
+use compiler::pass::Pass;
 use compiler::pass::Pass as _;
-use compiler::source::Cache;
+use compiler::syntax::lexer::Lexer;
+use compiler::syntax::parser::Parser;
+use compiler::syntax::source::Cache;
+use compiler::syntax::span::Span;
 use compiler::Compiler;
 
 #[macro_export]
@@ -104,37 +107,37 @@ pub fn trim(s: &str) -> String {
         .join("\n")
 }
 
-struct Tester {
-    compiler: Compiler,
-}
+struct Tester(Compiler);
 
 impl Tester {
     pub fn new() -> Self {
-        Self {
-            compiler: Compiler::default(),
-        }
-    }
-
-    pub fn init(&mut self) -> &mut Self {
-        self.compiler.init();
-        self
+        Self(Compiler::default())
     }
 
     pub fn recover<T>(&mut self, result: T) -> Result<T, Recovered<T>> {
-        if self.compiler.report.is_empty() {
+        if self.0.report.is_empty() {
             Ok(result)
         } else {
             Err(Recovered::new(
                 result,
-                trim(
-                    &self
-                        .compiler
-                        .report
-                        .string(&mut self.compiler.sources)
-                        .unwrap(),
-                ),
+                trim(&self.0.report.string(&mut self.0.sources).unwrap()),
             ))
         }
+    }
+
+    pub fn init(&mut self) -> &mut Self {
+        self.0.init();
+        self
+    }
+
+    pub fn run<T>(
+        &mut self,
+        s: &str,
+        f: impl FnOnce(&mut Compiler, Program) -> T,
+    ) -> Result<T, Recovered<T>> {
+        let program = self.0.parse("test", s);
+        let result = f(&mut self.0, program);
+        self.recover(result)
     }
 
     pub fn parse<T>(
@@ -142,66 +145,14 @@ impl Tester {
         input: &str,
         f: impl for<'a> FnOnce(&mut Parser<'a, &mut Lexer<'a>>) -> T,
     ) -> Result<T, Recovered<T>> {
-        let mut compiler = Compiler::default();
         let input: Rc<str> = Rc::from(input);
-        let id = self.compiler.sources.add("test", input.clone());
-        let mut lexer = Lexer::new(id, input.as_ref());
+        let id = self.0.sources.add("test", input.clone());
+        let mut lexer = Lexer::new(id, &input);
         let mut parser = Parser::new(&input, &mut lexer);
         let result = f(&mut parser);
-        self.compiler.report.append(&mut parser.report);
-        self.compiler.report.append(&mut lexer.report);
+        self.0.report.append(&mut parser.report);
+        self.0.report.append(&mut lexer.report);
         self.recover(result)
-    }
-
-    pub fn desugar(&mut self, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = parse(input)?;
-        let result = self.compiler.desugar.run(&program);
-        self.recover(result)
-    }
-
-    pub fn querycomp(&mut self, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.desugar(input)?;
-        let result = self.compiler.query.run(&program);
-        self.recover(result)
-    }
-
-    pub fn resolve(&mut self, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.querycomp(input)?;
-        let result = self.compiler.resolve.run(&program);
-        self.recover(result)
-    }
-
-    pub fn flatten(&mut self, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.resolve(input)?;
-        let result = self.compiler.flatten.run(&program);
-        self.recover(result)
-    }
-
-    pub fn lift(&mut self, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.resolve(input)?;
-        let result = self.compiler.lift.run(&program);
-        self.recover(result)
-    }
-
-    pub fn infer(&mut self, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.resolve(input)?;
-        let result = self.compiler.infer.run(&program);
-        self.recover(result)
-    }
-
-    pub fn monomorphise(&mut self, input: &str) -> Result<Program, Recovered<Program>> {
-        let program = self.infer(input)?;
-        let result = self.compiler.monomorphise.run(&program);
-        self.recover(result)
-    }
-
-    pub fn interpret(&mut self, input: &str) -> Result<Value, Recovered<Value>> {
-        let mut result = self.monomorphise(input).unwrap();
-        let last_stmt = result.stmts.pop().unwrap();
-        let last_expr = last_stmt.as_expr().unwrap();
-        self.compiler.interpret.interpret(&result);
-        let value = self.compiler.interpret.eval_expr(last_expr);
-        self.recover(value)
     }
 }
 
@@ -209,50 +160,59 @@ pub fn parse(input: &str) -> Result<Program, Recovered<Program>> {
     Tester::new().parse(input, |p| p.parse(Parser::program).unwrap())
 }
 
-pub fn parse_expr(input: &str) -> Result<Expr, Recovered<Expr>> {
-    Tester::new().parse(input, |p| p.parse(Parser::expr).unwrap())
+pub fn parse_expr(s: &str) -> Result<Expr, Recovered<Expr>> {
+    Tester::new().parse(s, |p| p.parse(Parser::expr).unwrap())
 }
 
-pub fn parse_stmt(input: &str) -> Result<Stmt, Recovered<Stmt>> {
-    Tester::new().parse(input, |p| p.parse(Parser::stmt).unwrap())
+pub fn parse_stmt(s: &str) -> Result<Stmt, Recovered<Stmt>> {
+    Tester::new().parse(s, |p| p.parse(Parser::stmt).unwrap())
 }
 
-pub fn parse_type(input: &str) -> Result<Type, Recovered<Type>> {
-    Tester::new().parse(input, |p| p.parse(Parser::ty).unwrap())
+pub fn parse_type(s: &str) -> Result<Type, Recovered<Type>> {
+    Tester::new().parse(s, |p| p.parse(Parser::ty).unwrap())
 }
 
-pub fn parse_pat(input: &str) -> Result<Pat, Recovered<Pat>> {
-    Tester::new().parse(input, |p| p.parse(Parser::pat).unwrap())
+pub fn parse_pat(s: &str) -> Result<Pat, Recovered<Pat>> {
+    Tester::new().parse(s, |p| p.parse(Parser::pat).unwrap())
 }
 
-pub fn desugar(input: &str) -> Result<Program, Recovered<Program>> {
-    Tester::new().desugar(input)
+pub fn desugar(s: &str) -> Result<Program, Recovered<Program>> {
+    Tester::new().init().run(s, |c, p| c.desugar(&p))
 }
 
-pub fn querycomp(input: &str) -> Result<Program, Recovered<Program>> {
-    Tester::new().querycomp(input)
+pub fn querycomp(s: &str) -> Result<Program, Recovered<Program>> {
+    Tester::new().init().run(s, |c, p| c.query_desugar(&p))
 }
 
-pub fn resolve(input: impl AsRef<str>) -> Result<Program, Recovered<Program>> {
-    Tester::new().init().resolve(input.as_ref())
+pub fn resolve(s: impl AsRef<str>) -> Result<Program, Recovered<Program>> {
+    Tester::new().init().run(s.as_ref(), |c, p| c.resolve(&p))
 }
 
 pub fn flatten(input: &str) -> Result<Program, Recovered<Program>> {
-    Tester::new().init().flatten(input)
+    todo!()
+    // Tester::new()
+    //     .init()
+    //     .run(input, |compiler, program| compiler.expand(&program))
 }
 
-pub fn lift(input: &str) -> Result<Program, Recovered<Program>> {
-    Tester::new().init().lift(input)
+pub fn lift(s: &str) -> Result<Program, Recovered<Program>> {
+    Tester::new().init().run(s, |c, p| c.infer(&p))
 }
 
-pub fn infer(input: &str) -> Result<Program, Recovered<Program>> {
-    Tester::new().init().infer(input)
+pub fn infer(s: &str) -> Result<Program, Recovered<Program>> {
+    Tester::new().init().run(s, |c, p| c.infer(&p))
 }
 
-pub fn monomorphise(input: &str) -> Result<Program, Recovered<Program>> {
-    Tester::new().init().monomorphise(input)
+pub fn monomorphise(s: &str) -> Result<Program, Recovered<Program>> {
+    Tester::new().init().run(s, |c, p| c.monomorphise(&p))
 }
 
-pub fn interpret(input: impl AsRef<str>) -> Result<Value, Recovered<Value>> {
-    Tester::new().init().interpret(input.as_ref())
+pub fn interpret(s: impl AsRef<str>) -> Result<Value, Recovered<Value>> {
+    Tester::new().init().run(s.as_ref(), |c, mut p| {
+        let mut p = c.monomorphise(&p);
+        let last_stmt = p.stmts.pop().unwrap();
+        let last_expr = last_stmt.as_expr().unwrap();
+        c.interpreter.interpret(&p);
+        c.interpreter.eval_expr(last_expr)
+    })
 }

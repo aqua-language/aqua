@@ -7,12 +7,14 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type SocketAddr;",
         codegen: None,
     });
     ctx.declare(Decl::Impl {
         aqua: "impl SocketAddr",
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def new(s: String): SocketAddr;",
             codegen: None,
             eval: |_ctx, _v| {

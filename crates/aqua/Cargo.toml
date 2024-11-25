@@ -1,5 +1,5 @@
 [package]
-name = "cli"
+name = "aqua"
 version.workspace = true
 edition.workspace = true
 build = "build.rs"

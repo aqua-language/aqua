@@ -4,10 +4,12 @@ use crate::builtins::Decl;
 use crate::builtins::ImplDecl;
 use crate::builtins::DECLS;
 use linkme::distributed_slice;
+use runtime::prelude::Path;
 
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Path;",
         codegen: Some(Codegen {
             rust: "Path",
@@ -20,6 +22,7 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Path",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def new(s: String): Path;",
                 codegen: Some(Codegen {
                     rust: "Path::new",
@@ -28,10 +31,11 @@ fn declare(ctx: &mut Context) {
                 }),
                 eval: |_ctx, v| {
                     let a0 = v[0].as_string();
-                    runtime::builtins::path::Path::new(a0.to_string()).into()
+                    Path::new(a0.to_string()).into()
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def extend(a0: Path, a1: String): Path;",
                 codegen: Some(Codegen {
                     rust: "Path::join",

@@ -1,11 +1,11 @@
 pub mod array;
-pub mod assigner;
+pub mod window;
 pub mod blob;
 pub mod dataflow;
 // pub mod dataframe;
 pub mod dict;
 pub mod duration;
-pub mod encoding;
+pub mod format;
 pub mod file;
 // pub mod image;
 // pub mod iterator;

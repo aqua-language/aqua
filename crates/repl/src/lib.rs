@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use compiler::ast::Program;
-use compiler::parser::Parser;
+use compiler::syntax::parser::Parser;
 use compiler::Compiler;
 use config::ReplConfig;
 use helper::validator::StmtIterator;
@@ -121,14 +121,12 @@ impl Repl {
                 Ok(input) => {
                     let input: Rc<str> = Rc::from(input);
                     self.editor.add_history_entry(input.as_ref());
-                    match self.compiler.run(self.count, input.as_ref()) {
-                        Ok(_) => {
-                            self.color(Green);
-                        }
-                        Err(_) => {
-                            self.compiler.print_report();
-                            self.color(Red);
-                        }
+                    self.compiler.run(self.count, input.as_ref());
+                    if self.compiler.report.is_empty() {
+                        self.color(Green);
+                    } else {
+                        self.compiler.report.print(&mut self.compiler.sources)?;
+                        self.color(Red);
                     }
                 }
                 Err(ReadlineError::Interrupted) => {

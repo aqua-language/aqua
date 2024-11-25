@@ -7,6 +7,7 @@ use linkme::distributed_slice;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Trait {
+        docs: "",
         aqua: "trait Eq[T] {
              def eq(a:T, b:T): bool;
              def ne(a:T, b:T): bool;
@@ -21,9 +22,9 @@ impl PartialEq for Value {
             (Value::Blob(_), Value::Blob(_)) => unreachable!(),
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Char(a), Value::Char(b)) => a == b,
-            (Value::Assigner(_), Value::Assigner(_)) => unreachable!(),
+            (Value::Window(_), Value::Window(_)) => unreachable!(),
             (Value::Duration(a), Value::Duration(b)) => a == b,
-            (Value::Encoding(a), Value::Encoding(b)) => a == b,
+            (Value::Format(a), Value::Format(b)) => a == b,
             (Value::F32(_), Value::F32(_)) => unreachable!(),
             (Value::F64(_), Value::F64(_)) => unreachable!(),
             (Value::File(_), Value::File(_)) => unreachable!(),

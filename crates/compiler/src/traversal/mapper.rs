@@ -11,7 +11,7 @@ use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::PathPatField;
 use crate::ast::Program;
-use crate::ast::Query;
+use crate::ast::QueryOp;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
@@ -27,7 +27,7 @@ use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
 use crate::pass::infer::solver::Constraint;
-use crate::span::Span;
+use crate::syntax::span::Span;
 
 pub(crate) trait Mapper {
     #[inline(always)]
@@ -586,77 +586,84 @@ pub(crate) trait Mapper {
                 let e = self.map_expr(e);
                 Expr::Closure(s, t, xts0, xts1, t1, Rc::new(e))
             }
+            Expr::Ref(_, _) => todo!(),
+            Expr::RefMut(_, _) => todo!(),
+            Expr::Place(_, _) => todo!(),
+            Expr::Deref(_, _, _) => todo!(),
         }
     }
 
-    fn map_query_stmts(&mut self, qs: &[Query]) -> Vec<Query> {
+    fn map_query_stmts(&mut self, qs: &[QueryOp]) -> Vec<QueryOp> {
         self._map_query_stmts(qs)
     }
     #[inline(always)]
-    fn _map_query_stmts(&mut self, qs: &[Query]) -> Vec<Query> {
+    fn _map_query_stmts(&mut self, qs: &[QueryOp]) -> Vec<QueryOp> {
         self.map_iter(qs, Self::map_query_stmt)
     }
 
-    fn map_query_stmt(&mut self, q: &Query) -> Query {
+    fn map_query_stmt(&mut self, q: &QueryOp) -> QueryOp {
         self._map_query_stmt(q)
     }
     #[inline(always)]
-    fn _map_query_stmt(&mut self, q: &Query) -> Query {
+    fn _map_query_stmt(&mut self, q: &QueryOp) -> QueryOp {
         let s = self.map_span(&q.span_of());
         match q {
-            Query::From(_, x, e) => {
+            QueryOp::From(_, x, t, e) => {
                 let x = self.map_name(x);
+                let t = self.map_type(t);
                 let e = self.map_expr(e);
-                Query::From(s, x, Rc::new(e))
+                QueryOp::From(s, x, t, Rc::new(e))
             }
-            Query::Union(_, e) => {
+            QueryOp::Union(_, e) => {
                 let e = self.map_expr(e);
-                Query::Union(s, Rc::new(e))
+                QueryOp::Union(s, Rc::new(e))
             }
-            Query::Limit(_, e) => {
+            QueryOp::Limit(_, e) => {
                 let e = self.map_expr(e);
-                Query::Limit(s, Rc::new(e))
+                QueryOp::Limit(s, Rc::new(e))
             }
-            Query::Var(_, x, e) => {
+            QueryOp::Var(_, x, t, e) => {
                 let x = self.map_name(x);
+                let t = self.map_type(t);
                 let e = self.map_expr(e);
-                Query::Var(s, x, Rc::new(e))
+                QueryOp::Var(s, x, t, Rc::new(e))
             }
-            Query::Where(_, e) => {
+            QueryOp::Where(_, e) => {
                 let e = self.map_expr(e);
-                Query::Where(s, Rc::new(e))
+                QueryOp::Where(s, Rc::new(e))
             }
-            Query::Select(_, xes) => {
+            QueryOp::Select(_, xes) => {
                 let xes = self.map_expr_fields(xes).into();
-                Query::Select(s, xes)
+                QueryOp::Select(s, xes)
             }
-            Query::OverCompute(_, e, aggs) => {
+            QueryOp::OverCompute(_, e, aggs) => {
                 let e = self.map_expr(e);
-                Query::OverCompute(s, Rc::new(e), aggs.clone())
+                QueryOp::OverCompute(s, Rc::new(e), aggs.clone())
             }
-            Query::GroupOverCompute(_, x, e0, e1, aggs) => {
+            QueryOp::GroupOverCompute(_, x, e0, e1, aggs) => {
                 let x = self.map_name(x);
                 let e0 = self.map_expr(e0);
                 let e1 = self.map_expr(e1);
-                Query::GroupOverCompute(s, x, Rc::new(e0), Rc::new(e1), aggs.clone())
+                QueryOp::GroupOverCompute(s, x, Rc::new(e0), Rc::new(e1), aggs.clone())
             }
-            Query::JoinOn(_, x, e0, e1) => {
+            QueryOp::JoinOn(_, x, t, e0, e1) => {
                 let x = self.map_name(x);
+                let t = self.map_type(t);
                 let e0 = self.map_expr(e0);
                 let e1 = self.map_expr(e1);
-                Query::JoinOn(s, x, Rc::new(e0), Rc::new(e1))
+                QueryOp::JoinOn(s, x, t, Rc::new(e0), Rc::new(e1))
             }
-            Query::JoinOverOn(_, x, e0, e1, e2) => {
+            QueryOp::JoinOverOn(_, x, e0, e1, e2) => {
                 let x = self.map_name(x);
                 let e0 = self.map_expr(e0);
                 let e1 = self.map_expr(e1);
                 let e2 = self.map_expr(e2);
-                Query::JoinOverOn(s, x, Rc::new(e0), Rc::new(e1), Rc::new(e2))
+                QueryOp::JoinOverOn(s, x, Rc::new(e0), Rc::new(e1), Rc::new(e2))
             }
-            Query::Err(_) => Query::Err(s),
-            Query::Drop(_, x) => {
+            QueryOp::Err(_) => QueryOp::Err(s),
+            QueryOp::Drop(_, x) => {
                 let x = self.map_name(x);
-                Query::Drop(s, x)
+                QueryOp::Drop(s, x)
             }
         }
     }
@@ -782,15 +789,10 @@ pub(crate) trait Mapper {
                 let path = self.map_path(path);
                 Type::Path(path)
             }
-            Type::Cons(x, ts) => {
+            Type::Builtin(x, ts) => {
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
-                Type::Cons(x, ts)
-            }
-            Type::Alias(x, ts) => {
-                let x = self.map_name(x);
-                let ts = self.map_types(ts);
-                Type::Alias(x, ts)
+                Type::Builtin(x, ts)
             }
             Type::Assoc(b, x, ts) => {
                 let b = self.map_impl(b);
@@ -828,6 +830,23 @@ pub(crate) trait Mapper {
                 let t = self.map_type(t);
                 Type::Paren(Rc::new(t))
             }
+            Type::Struct(x, ts) => {
+                let x = self.map_name(x);
+                let ts = self.map_types(ts);
+                Type::Struct(x, ts)
+            }
+            Type::Enum(x, ts) => {
+                let x = self.map_name(x);
+                let ts = self.map_types(ts);
+                Type::Struct(x, ts)
+            }
+            Type::Alias(x, ts) => {
+                let x = self.map_name(x);
+                let ts = self.map_types(ts);
+                Type::Alias(x, ts)
+            }
+            Type::Ref(_, _) => todo!(),
+            Type::RefMut(_, _) => todo!(),
         }
     }
 
@@ -955,21 +974,21 @@ pub(crate) trait Mapper {
     #[inline(always)]
     fn _map_constraint(&mut self, c: &Constraint) -> Constraint {
         match c {
-            Constraint::ExprAssoc(s, t, i, x, ts) => {
+            Constraint::AssocDef(s, t, i, x, ts) => {
                 let s = self.map_span(s);
                 let t = self.map_type(t);
                 let i = self.map_impl(i);
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
-                Constraint::ExprAssoc(s, t, i, x, ts)
+                Constraint::AssocDef(s, t, i, x, ts)
             }
-            Constraint::TypeAssoc(s, t, i, x, ts) => {
+            Constraint::AssocType(s, t, i, x, ts) => {
                 let s = self.map_span(s);
                 let t = self.map_type(t);
                 let i = self.map_impl(i);
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
-                Constraint::TypeAssoc(s, t, i, x, ts)
+                Constraint::AssocType(s, t, i, x, ts)
             }
             Constraint::WhereClause(s, i) => {
                 let s = self.map_span(s);
@@ -1039,7 +1058,7 @@ impl Mappable for Pat {
     }
 }
 
-impl Mappable for Query {
+impl Mappable for QueryOp {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_query_stmt(self)
     }

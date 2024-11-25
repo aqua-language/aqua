@@ -8,11 +8,17 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type f32;",
         codegen: Some(Codegen {
             rust: "f32",
             java: "float",
             egglog: None,
         }),
+    });
+
+    ctx.declare(Decl::Impl {
+        aqua: "impl Serde[f32]",
+        decls: &[],
     });
 }

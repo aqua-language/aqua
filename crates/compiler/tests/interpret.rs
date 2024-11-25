@@ -10,7 +10,7 @@ use common::passes::interpret;
 use compiler::aqua;
 use compiler::ast::Map;
 use compiler::builtins::types::dataflow::Dataflow;
-use compiler::builtins::types::function::Fun;
+use compiler::builtins::types::function::Function;
 use compiler::builtins::types::record::Record;
 use compiler::builtins::types::stream::Operator;
 use compiler::builtins::types::tuple::Tuple;
@@ -19,7 +19,7 @@ use compiler::builtins::value::Value;
 use runtime::builtins::duration::Duration;
 use runtime::builtins::path::Path;
 use runtime::builtins::writer::Writer;
-use runtime::prelude::Encoding;
+use runtime::prelude::Format;
 use runtime::prelude::Reader;
 
 #[test]
@@ -119,15 +119,15 @@ fn test_interpret_while1() {
 fn test_interpret_dataflow0() {
     let a = interpret(aqua!(
         r#"struct Item(price:i32, ts:Time);
-           source(file_reader(path("file.csv"), false), csv(','), fun(i:Item, _):Time = i.ts, 0s, 1s)
-               .sink(file_writer(path("file.csv")), csv(','));"#
+           Stream[Item]::source(Reader::file(Path::new("file.csv"), false), Format::csv(','), (i:Item, _) => i.ts, 0s, 1s)
+               .sink(Writer::file(Path::new("file.csv")), Format::csv(','));"#
     ))
     .unwrap();
     let b = Dataflow::Sink(
         Operator::Source(
             Reader::file(Path::new("file.csv"), false),
-            Encoding::csv(','),
-            Fun::new(
+            Format::csv(','),
+            Function::new(
                 params([("i", ty("Item"))]),
                 expr_body(
                     expr_field(expr_var("i").with_type(ty("Item")), "ts").with_type(ty("Time")),
@@ -138,7 +138,7 @@ fn test_interpret_dataflow0() {
         )
         .to_stream(),
         Writer::file(Path::new("file.csv")),
-        Encoding::csv(','),
+        Format::csv(','),
     )
     .into();
     assert_eq!(a, b);

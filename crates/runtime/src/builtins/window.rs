@@ -6,7 +6,7 @@ use crate::traits::DeepClone;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(C)]
-pub enum Assigner {
+pub enum Window {
     Tumbling { length: Duration },
     Sliding { duration: Duration, step: Duration },
     Session { gap: Duration },
@@ -14,25 +14,25 @@ pub enum Assigner {
     Moving { length: i32, step: i32 },
 }
 
-impl DeepClone for Assigner {
+impl DeepClone for Window {
     fn deep_clone(&self) -> Self {
         self.clone()
     }
 }
 
-impl std::fmt::Display for Assigner {
+impl std::fmt::Display for Window {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Assigner::Tumbling { length } => write!(f, "Tumbling({})", length),
-            Assigner::Sliding { duration, step } => write!(f, "Sliding({}, {})", duration, step),
-            Assigner::Session { gap } => write!(f, "Session({})", gap),
-            Assigner::Counting { length } => write!(f, "Counting({})", length),
-            Assigner::Moving { length, step } => write!(f, "Moving({}, {})", length, step),
+            Window::Tumbling { length } => write!(f, "Tumbling({})", length),
+            Window::Sliding { duration, step } => write!(f, "Sliding({}, {})", duration, step),
+            Window::Session { gap } => write!(f, "Session({})", gap),
+            Window::Counting { length } => write!(f, "Counting({})", length),
+            Window::Moving { length, step } => write!(f, "Moving({}, {})", length, step),
         }
     }
 }
 
-impl Assigner {
+impl Window {
     pub fn tumbling(length: Duration) -> Self {
         Self::Tumbling { length }
     }

@@ -12,12 +12,14 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Url;",
         codegen: None,
     });
     ctx.declare(Decl::Impl {
         aqua: "impl Url",
         decls: &[ImplDecl::Def {
+            docs: "",
             aqua: "def parse(s: String): Result[Url];",
             codegen: None,
             eval: |_ctx, v| {

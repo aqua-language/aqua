@@ -3,6 +3,7 @@ use crate::diag::Report;
 
 pub mod controlflow;
 pub mod desugar;
+pub mod expand;
 pub mod flatten;
 pub mod infer;
 #[allow(unused)]

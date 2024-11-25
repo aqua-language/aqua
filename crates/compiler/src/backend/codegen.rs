@@ -9,7 +9,7 @@ use crate::ast::StmtStruct;
 use crate::ast::StmtType;
 use crate::ast::StmtVar;
 use crate::ast::Type;
-use crate::builtins::value::Fun;
+use crate::builtins::value::Function;
 use crate::print::Print;
 
 pub trait Codegen<'a>: Print<'a> {
@@ -41,7 +41,7 @@ pub trait Codegen<'a>: Print<'a> {
 
     fn ty(&mut self, t: &Type) -> std::fmt::Result;
 
-    fn fun(&mut self, f: &Fun) -> std::fmt::Result;
+    fn fun(&mut self, f: &Function) -> std::fmt::Result;
 
     fn fields<T>(
         &mut self,

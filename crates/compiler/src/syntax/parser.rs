@@ -42,7 +42,7 @@ use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::PathPatField;
 use crate::ast::Program;
-use crate::ast::Query;
+use crate::ast::QueryOp;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
@@ -58,9 +58,9 @@ use crate::ast::Type;
 use crate::ast::TypeBody;
 use crate::collections::map::Map;
 use crate::diag::Report;
-use crate::span::Span;
-use crate::spanned::Spanned;
-use crate::token::Token;
+use crate::syntax::span::Span;
+use crate::syntax::spanned::Spanned;
+use crate::syntax::token::Token;
 
 pub struct Parser<'a, I>
 where
@@ -1366,6 +1366,26 @@ where
                 let e = Expr::PrefixUnaryOp(s, Type::Unknown, op.v, Rc::new(rhs.v));
                 Ok(Spanned::new(s, e))
             }
+            Token::Star => {
+                let op = self.next();
+                let e = self.expr(follow)?;
+                let s = op.s + e.s;
+                Ok(Spanned::new(s, Expr::Deref(s, Type::Unknown, Rc::new(e.v))))
+            }
+            Token::Ampersand => {
+                let op = self.next();
+                if self.eat(Token::Mut, follow | Expr::FOLLOW)? {
+                    let e = self.expr(follow)?;
+                    let p = e.v.as_place();
+                    let s = op.s + e.s;
+                    Ok(Spanned::new(s, Expr::RefMut(s, Type::Unknown, p)))
+                } else {
+                    let e = self.expr(follow)?;
+                    let p = e.as_place();
+                    let s = op.s + e.s;
+                    Ok(Spanned::new(s, Expr::Ref(s, Type::Unknown, Rc::new(e.v))))
+                }
+            }
             Token::Break => {
                 self.skip();
                 let s = t0.s;
@@ -1482,14 +1502,11 @@ where
             }
             Token::From => {
                 let t = self.next();
-                let x0 = self.name(follow | Token::In)?;
-                let t0 = self
-                    .optional(Self::ty_annot, Token::Colon, follow | Token::In)?
-                    .map(|x| x.v)
-                    .unwrap_or(Type::Unknown);
+                let x0 = self.name(follow | Token::Colon | Token::In)?;
+                let t0 = self.optional_type_annot(Type::Unknown, follow | Token::In)?;
                 self.expect(Token::In, follow | Expr::FIRST)?;
-                let e = self.expr(follow | Query::FIRST | Token::Into)?;
-                let qs = self.repeat(Self::query, Query::FIRST, follow | Query::FOLLOW)?;
+                let e = self.expr(follow | QueryOp::FIRST | Token::Into)?;
+                let qs = self.repeat(Self::query_op, QueryOp::FIRST, follow | QueryOp::FOLLOW)?;
                 if self.start(follow | Token::Into, follow)?.v == Token::Into {
                     self.skip();
                     let qs = qs.map(|x| x.v).unwrap_or_default();
@@ -1565,39 +1582,47 @@ where
         }
     }
 
-    fn query(&mut self, follow: Token) -> Result<Spanned<Query>, Span> {
-        self.query_fallible(follow)
-            .or_else(|s| Ok(Spanned::new(s, Query::Err(s))))
+    fn query_op(&mut self, follow: Token) -> Result<Spanned<QueryOp>, Span> {
+        self.query_op_fallible(follow)
+            .or_else(|s| Ok(Spanned::new(s, QueryOp::Err(s))))
     }
 
-    fn query_fallible(&mut self, follow: Token) -> Result<Spanned<Query>, Span> {
-        let t = self.start(Query::FIRST, follow)?;
+    fn optional_type_annot(&mut self, default: Type, follow: Token) -> Result<Type, Span> {
+        Ok(self
+            .optional(Self::ty_annot, Token::Colon, follow | Token::In)?
+            .map(|x| x.v)
+            .unwrap_or(default))
+    }
+
+    fn query_op_fallible(&mut self, follow: Token) -> Result<Spanned<QueryOp>, Span> {
+        let t = self.start(QueryOp::FIRST, follow)?;
         match t.v {
             Token::From => {
                 let t = self.next();
                 let x = self.name(follow | Token::In)?;
+                let t0 = self.optional_type_annot(Type::Unknown, follow | Token::In)?;
                 self.expect(Token::In, follow)?;
                 let e = self.expr(follow)?;
                 let s = t.s + e.s;
-                Ok(Spanned::new(s, Query::From(s, x.v, Rc::new(e.v))))
+                Ok(Spanned::new(s, QueryOp::From(s, x.v, t0, Rc::new(e.v))))
             }
             Token::Where => {
                 let t = self.next();
                 let e = self.expr(follow)?;
                 let s = t.s + e.s;
-                Ok(Spanned::new(s, Query::Where(s, Rc::new(e.v))))
+                Ok(Spanned::new(s, QueryOp::Where(s, Rc::new(e.v))))
             }
             Token::Limit => {
                 let t = self.next();
                 let e = self.expr(follow)?;
                 let s = t.s + e.s;
-                Ok(Spanned::new(s, Query::Limit(s, Rc::new(e.v))))
+                Ok(Spanned::new(s, QueryOp::Limit(s, Rc::new(e.v))))
             }
             Token::Select => {
                 let t = self.next();
                 let es = self.seq_nonempty(Self::field_expr, Token::Comma, Token::Name, follow)?;
                 let s = t.s + es.s;
-                Ok(Spanned::new(s, Query::Select(s, es.v.into())))
+                Ok(Spanned::new(s, QueryOp::Select(s, es.v.into())))
             }
             Token::Group => {
                 let t = self.next();
@@ -1611,7 +1636,7 @@ where
                 let s = t.s + aggs.s;
                 Ok(Spanned::new(
                     s,
-                    Query::GroupOverCompute(s, x.v, Rc::new(e0.v), Rc::new(e1.v), aggs.v),
+                    QueryOp::GroupOverCompute(s, x.v, Rc::new(e0.v), Rc::new(e1.v), aggs.v),
                 ))
             }
             Token::Over => {
@@ -1620,25 +1645,30 @@ where
                 self.expect(Token::Compute, follow | Expr::FIRST)?;
                 let aggs = self.seq_nonempty(Self::aggr, Token::Comma, Token::Name, follow)?;
                 let s = t.s + e.s;
-                Ok(Spanned::new(s, Query::OverCompute(s, Rc::new(e.v), aggs.v)))
+                Ok(Spanned::new(
+                    s,
+                    QueryOp::OverCompute(s, Rc::new(e.v), aggs.v),
+                ))
             }
             Token::Var => {
                 let t = self.next();
                 let x = self.name(follow | Token::Eq)?;
+                let t0 = self.optional_type_annot(Type::Unknown, follow | Token::Eq)?;
                 self.expect(Token::Eq, follow)?;
-                let e = self.expr(follow | Query::FIRST)?;
+                let e = self.expr(follow | QueryOp::FIRST)?;
                 let s = t.s + e.s;
-                Ok(Spanned::new(s, Query::Var(s, x.v, Rc::new(e.v))))
+                Ok(Spanned::new(s, QueryOp::Var(s, x.v, t0, Rc::new(e.v))))
             }
             Token::Drop => {
                 let t = self.next();
                 let x = self.name(follow | Token::Eq)?;
                 let s = t.s + x.s;
-                Ok(Spanned::new(s, Query::Drop(s, x.v)))
+                Ok(Spanned::new(s, QueryOp::Drop(s, x.v)))
             }
             Token::Join => {
                 let t = self.next();
                 let x = self.name(follow | Token::In)?;
+                let t0 = self.optional_type_annot(Type::Unknown, follow | Token::Eq)?;
                 self.expect(Token::In, follow | Expr::FIRST)?;
                 let e0 = self.expr(follow | Token::On | Token::Over)?;
                 match self.start(Token::On | Token::Over, follow)?.v {
@@ -1648,7 +1678,7 @@ where
                         let s = t.s + e1.s;
                         Ok(Spanned::new(
                             s,
-                            Query::JoinOn(s, x.v, Rc::new(e0.v), Rc::new(e1.v)),
+                            QueryOp::JoinOn(s, x.v, t0, Rc::new(e0.v), Rc::new(e1.v)),
                         ))
                     }
                     Token::Over => {
@@ -1659,7 +1689,13 @@ where
                         let s = t.s + e2.s;
                         Ok(Spanned::new(
                             s,
-                            Query::JoinOverOn(s, x.v, Rc::new(e0.v), Rc::new(e1.v), Rc::new(e2.v)),
+                            QueryOp::JoinOverOn(
+                                s,
+                                x.v,
+                                Rc::new(e0.v),
+                                Rc::new(e1.v),
+                                Rc::new(e2.v),
+                            ),
                         ))
                     }
                     _ => unreachable!(),
@@ -1690,6 +1726,8 @@ where
         if let Some((x, e)) = e0.v.as_field() {
             Ok(Spanned::new(e0.s, (*x, e.clone())))
         } else {
+            self.report
+                .err(e0.s, "expected field expression", "found expression");
             Err(e0.s)
         }
     }
@@ -1791,7 +1829,7 @@ impl Pat {
         .or(Token::FatArrow);
 }
 
-impl Query {
+impl QueryOp {
     const FIRST: Token = Token::From
         .or(Token::Where)
         .or(Token::Over)
@@ -1800,5 +1838,5 @@ impl Query {
         .or(Token::Select)
         .or(Token::Join)
         .or(Token::Limit);
-    const FOLLOW: Token = Expr::FOLLOW.or(Query::FIRST).or(Token::Into);
+    const FOLLOW: Token = Expr::FOLLOW.or(QueryOp::FIRST).or(Token::Into);
 }

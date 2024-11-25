@@ -11,7 +11,7 @@ use crate::ast::StmtType;
 use crate::ast::StmtVar;
 use crate::ast::Type;
 use crate::backend::codegen::Codegen;
-use crate::builtins::value::Fun;
+use crate::builtins::value::Function;
 use crate::print::Print;
 
 // This wrapper causes the underlying structure to be printed as Rust code.
@@ -29,7 +29,7 @@ impl crate::analysis::declare::Context {
     }
 }
 
-impl Fun {
+impl Function {
     pub fn rust(&self, indent: usize) -> impl std::fmt::Display + '_ {
         Wrapper(self, indent)
     }
@@ -60,7 +60,7 @@ impl<'a> std::fmt::Display for Wrapper<&'a crate::analysis::declare::Context> {
     }
 }
 
-impl<'a> std::fmt::Display for Wrapper<&'a Fun> {
+impl<'a> std::fmt::Display for Wrapper<&'a Function> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut p = Printer::new(f);
         p.indent = self.1;
@@ -339,6 +339,10 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Expr::LetIn(_, _, _, _, _, _) => todo!(),
             Expr::Update(_, _, _, _, _) => todo!(),
             Expr::Anonymous(_, _) => unreachable!(),
+            Expr::Ref(_, _) => todo!(),
+            Expr::RefMut(_, _) => todo!(),
+            Expr::Place(_, _) => todo!(),
+            Expr::Deref(_, _, _) => todo!(),
         }
         Ok(())
     }
@@ -369,9 +373,10 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
 
     fn ty(&mut self, t: &Type) -> std::fmt::Result {
         match t {
-            Type::Cons(name, _) => {
+            Type::Builtin(name, _) => {
                 self.name(name)?;
             }
+            Type::Alias(..) => unreachable!(),
             Type::Assoc(..) => unreachable!("{t}"),
             Type::Var(_) => unreachable!(),
             Type::Unknown => unreachable!(),
@@ -391,7 +396,6 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Type::Record(xts) => {
                 self.fields(xts.as_ref(), Self::type_field)?;
             }
-            Type::Alias(..) => unreachable!(),
             Type::Path(..) => unreachable!(),
             Type::Array(t, n) => {
                 self.brack(|ctx| {
@@ -409,6 +413,18 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Type::Paren(t) => {
                 self.paren(|this| this.ty(t))?;
             }
+            Type::Struct(x, ts) => {
+                self.name(x)?;
+                self.space()?;
+                self.fields(ts, Self::ty)?;
+            }
+            Type::Enum(x, ts) => {
+                self.name(x)?;
+                self.space()?;
+                self.fields(ts, Self::ty)?;
+            }
+            Type::Ref(_, _) => todo!(),
+            Type::RefMut(_, _) => todo!(),
         }
         Ok(())
     }
@@ -425,7 +441,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
         })
     }
 
-    fn fun(&mut self, f: &Fun) -> std::fmt::Result {
+    fn fun(&mut self, f: &Function) -> std::fmt::Result {
         self.bars(|this| this.comma_sep(&f.params, Self::param))?;
         self.space()?;
         self.expr(f.body.as_udf().unwrap())

@@ -1,19 +1,22 @@
 use super::types::backend::Backend;
+use super::types::iterator::Adaptor;
+use super::types::keyed_stream::KeyedStream;
+use super::types::storage::Storage;
 use super::value::Value;
 use crate::builtins::types::array::Array;
 use crate::builtins::types::dataflow::Dataflow;
-use crate::builtins::types::function::Fun;
+use crate::builtins::types::function::Function;
 use crate::builtins::types::instance::Instance;
 use crate::builtins::types::record::Record;
 use crate::builtins::types::stream::Stream;
 use crate::builtins::types::tuple::Tuple;
 use crate::builtins::types::variant::Variant;
 use runtime::builtins::url::Url;
-use runtime::builtins::assigner::Assigner;
+use runtime::builtins::window::Window;
 use runtime::builtins::blob::Blob;
 use runtime::builtins::dict::Dict;
 use runtime::builtins::duration::Duration;
-use runtime::builtins::encoding::Encoding;
+use runtime::builtins::format::Format;
 use runtime::builtins::file::File;
 use runtime::builtins::path::Path;
 use runtime::builtins::reader::Reader;
@@ -47,17 +50,19 @@ macro_rules! conv {
 
 conv!(Array, Array, as_array);
 conv!(Tuple, Tuple, as_tuple);
-conv!(Fun, Fun, as_function);
+conv!(Function, Fun, as_function);
 conv!(Record, Record, as_record);
 conv!(Stream, Stream, as_stream);
+conv!(KeyedStream, KeyedStream, as_keyed_stream);
+conv!(Storage, Storage, as_storage);
 conv!(Variant, Variant, as_variant);
 conv!(bool, Bool, as_bool);
 conv!(Blob, Blob, as_blob);
 conv!(Dict<Value, Value>, Dict, as_dict);
-conv!(Assigner, Assigner, as_assigner);
+conv!(Window, Window, as_window);
 conv!(Duration, Duration, as_duration);
 conv!(Dataflow, Dataflow, as_dataflow);
-conv!(Encoding, Encoding, as_encoding);
+conv!(Format, Format, as_format);
 conv!(File, File, as_file);
 conv!(
     runtime::builtins::option::Option<Rc<Value>>,
@@ -76,6 +81,7 @@ conv!(SocketAddr, SocketAddr, as_socket_addr);
 conv!(runtime::builtins::im_string::String, String, as_string);
 conv!(Time, Time, as_time);
 conv!(runtime::builtins::vec::Vec<Value>, Vec, as_vec);
+conv!(Adaptor, Iterator, as_iterator);
 conv!(Writer, Writer, as_writer);
 conv!(char, Char, as_char);
 conv!(f32, F32, as_f32);

@@ -9,6 +9,7 @@ use crate::builtins::DECLS;
 #[distributed_slice(DECLS)]
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
+        docs: "",
         aqua: "type Model;",
         codegen: Some(Codegen {
             rust: "Model",
@@ -21,6 +22,7 @@ fn declare(ctx: &mut Context) {
         aqua: "impl Model",
         decls: &[
             ImplDecl::Def {
+                docs: "",
                 aqua: "def load_model(): Model;",
                 codegen: Some(Codegen {
                     rust: "Model::load_model",
@@ -34,6 +36,7 @@ fn declare(ctx: &mut Context) {
                 },
             },
             ImplDecl::Def {
+                docs: "",
                 aqua: "def predict[I,O](model: Model, input: Matrix[I]): Matrix[O];",
                 codegen: Some(Codegen {
                     rust: "Model::predict",

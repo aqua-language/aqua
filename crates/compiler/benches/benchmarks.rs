@@ -1,11 +1,13 @@
 use std::hint::black_box;
 use std::rc::Rc;
 
+use compiler::analysis;
 use compiler::aqua;
-use compiler::lexer::Lexer;
-use compiler::parser::Parser;
+use compiler::pass;
 use compiler::pass::Pass as _;
-use compiler::source::Cache;
+use compiler::syntax::lexer::Lexer;
+use compiler::syntax::parser::Parser;
+use compiler::syntax::source::Cache;
 use compiler::Compiler;
 use divan::Bencher;
 
@@ -125,27 +127,27 @@ const INPUTS: &[Input] = &[
         name: "add8",
         code: aqua!("1 + 1 + 1 + 1 + 1 + 1 + 1 + 1;"),
     },
-    Input {
-        name: "add256",
-        code: aqua!(
-            "1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
-             1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1;"
-        ),
-    },
+    // Input {
+    //     name: "add256",
+    //     code: aqua!(
+    //         "1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+
+    //          1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1;"
+    //     ),
+    // },
     Input {
         name: "brace1",
         code: aqua!("{}"),
@@ -243,12 +245,8 @@ fn parser(bencher: Bencher, arg: Input) {
 fn desugar(bencher: Bencher, arg: Input) {
     bencher
         .with_inputs(|| {
-            let mut cache = Cache::new();
-            let code: Rc<str> = arg.code.into();
-            let id = cache.add(arg.name, code.clone());
-            let lexer = Lexer::new(id, &code);
-            let mut parser = Parser::new(&code, lexer);
-            let program = parser.parse(Parser::program).unwrap();
+            let mut compiler = Compiler::default();
+            let program = compiler.parse(arg.name, arg.code);
             let ctx = compiler::pass::desugar::Context::new();
             (ctx, program)
         })
@@ -262,82 +260,48 @@ fn querycomp(bencher: Bencher, arg: Input) {
     bencher
         .with_inputs(|| {
             let mut compiler = Compiler::default();
-            let code: Rc<str> = arg.code.into();
-            let id = compiler.sources.add(arg.name, code.clone());
-            let lexer = Lexer::new(id, &code);
-            let mut parser = Parser::new(&code, lexer);
-            let program = parser.parse(Parser::program).unwrap();
-            (compiler, program)
+            let program = compiler.parse(arg.name, arg.code);
+            let program = compiler.query_desugar(&program);
+            let ctx = pass::query_desugar::Context::new();
+            (ctx, program)
         })
-        .bench_local_values(|(mut compiler, program)| compiler.query.run(&program));
+        .bench_local_values(|(mut ctx, program)| ctx.run(&program));
 }
 
 fn resolve(bencher: Bencher, arg: Input) {
     bencher
         .with_inputs(|| {
             let mut compiler = Compiler::default();
-            let code: Rc<str> = arg.code.into();
-            let id = compiler.sources.add(arg.name, code.clone());
-            let lexer = Lexer::new(id, &code);
-            let mut parser = Parser::new(&code, lexer);
-            let program = parser.parse(Parser::program).unwrap();
-            let program = compiler.desugar.run(&program);
-            (compiler, program)
+            compiler.init();
+            let program = compiler.parse(arg.name, arg.code);
+            let program = compiler.resolve(&program);
+            let ctx = pass::query_desugar::Context::new();
+            (ctx, program)
         })
-        .bench_local_values(|(mut compiler, program)| compiler.resolve.run(&program));
+        .bench_local_values(|(mut ctx, program)| ctx.run(&program));
 }
 
 fn infer(bencher: Bencher, arg: Input) {
     bencher
         .with_inputs(|| {
             let mut compiler = Compiler::default();
-            let code: Rc<str> = arg.code.into();
-            let id = compiler.sources.add(arg.name, code.clone());
-            let lexer = Lexer::new(id, &code);
-            let mut parser = Parser::new(&code, lexer);
-            let program = parser.parse(Parser::program).unwrap();
-            let program = compiler.desugar.run(&program);
-            let program = compiler.query.run(&program);
-            let program = compiler.resolve.run(&program);
-            (compiler, program)
+            compiler.init();
+            let program = compiler.parse(arg.name, arg.code);
+            let program = compiler.infer(&program);
+            let ctx = pass::query_desugar::Context::new();
+            (ctx, program)
         })
-        .bench_local_values(|(mut compiler, program)| compiler.infer.run(&program));
+        .bench_local_values(|(mut ctx, program)| ctx.run(&program));
 }
 
 fn check(bencher: Bencher, arg: Input) {
     bencher
         .with_inputs(|| {
             let mut compiler = Compiler::default();
-            let code: Rc<str> = arg.code.into();
-            let id = compiler.sources.add(arg.name, code.clone());
-            let lexer = Lexer::new(id, &code);
-            let mut parser = Parser::new(&code, lexer);
-            let program = parser.parse(Parser::program).unwrap();
-            let program = compiler.desugar.run(&program);
-            let program = compiler.query.run(&program);
-            let program = compiler.resolve.run(&program);
-            let program = compiler.infer.run(&program);
+            compiler.init();
+            let program = compiler.parse(arg.name, arg.code);
+            let program = compiler.compile(&program);
             program
         })
-        .bench_local_values(|program| compiler::analysis::check::check(&program))
+        .bench_local_values(|program| analysis::check::check(&program))
 }
-
-// #[allow(dead_code)]
-// fn monomorphise(bencher: Bencher, arg: Input) {
-//     bencher
-//         .with_inputs(|| {
-//             let mut compiler = Compiler::default();
-//             let code: Rc<str> = arg.code.into();
-//             let id = compiler.sources.add(arg.name, code.clone());
-//             let lexer = Lexer::new(id, &code);
-//             let mut parser = Parser::new(&code, lexer);
-//             let program = parser.parse(Parser::program).unwrap();
-//             let program = compiler::desugar::desugar(&mut compiler.sources, &program);
-//             let program = compiler.resolve.resolve(&program);
-//             let program = compiler.query.querycomp(&program);
-//             let program = compiler.infer.infer(&program);
-//             compiler::check::check(&program);
-//             (compiler, program)
-//         })
-//         .bench_local_values(|(mut compiler, program)| compiler.monomorphise.monomorphise(&program))
-// }

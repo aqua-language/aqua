@@ -26,6 +26,12 @@ pub struct Context {
     pub type_impls: Vec<Rc<StmtImpl>>,
 }
 
+impl Context {
+    pub fn new() -> Context {
+        Context::default()
+    }
+}
+
 impl Visitor for Context {
     fn visit_stmt(&mut self, s: &Stmt) {
         match s {

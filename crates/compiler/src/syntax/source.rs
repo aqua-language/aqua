@@ -3,7 +3,6 @@ use std::rc::Rc;
 use ariadne::Cache as _;
 use ariadne::Source;
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SourceId(u16);
 
@@ -34,7 +33,7 @@ impl Cache {
     }
 
     // TODO: Does not work yet for unicode
-    pub fn get_byte(&mut self, file: SourceId, (l,c): (u32, u32)) -> u32 {
+    pub fn get_byte(&mut self, file: SourceId, (l, c): (u32, u32)) -> u32 {
         let source = self.fetch(&file).unwrap();
         let line = source.line(l as usize).unwrap();
         (line.offset() as u32) + c
@@ -42,10 +41,8 @@ impl Cache {
 
     /// Add a new source to the cache.
     pub fn add(&mut self, name: impl ToString, data: impl Into<Rc<str>>) -> SourceId {
-        let name = name.to_string();
-        let source = Source::from(data.into());
-        self.0.push((name, source));
-        let id = self.0.len() as u16 - 1;
+        let id = self.0.len() as u16;
+        self.0.push((name.to_string(), Source::from(data.into())));
         SourceId(id as u16)
     }
 }

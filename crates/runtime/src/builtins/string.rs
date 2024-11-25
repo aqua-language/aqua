@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::builtins::encoding::Encoding;
+use crate::builtins::format::Format;
 use crate::builtins::unchecked_cell::UncheckedCell;
 use crate::builtins::vec::Vec;
 use crate::traits::DeepClone;
@@ -182,24 +182,24 @@ impl String {
         String::from(format!("{}{}", self.as_ref(), other.as_ref()))
     }
 
-    pub fn decode<T: DeserializeOwned>(self, encoding: Encoding) -> T {
+    pub fn decode<T: DeserializeOwned>(self, encoding: Format) -> T {
         match encoding {
-            Encoding::Csv { sep } => crate::formats::csv::de::Reader::<1024>::new(sep)
+            Format::Csv { sep } => crate::formats::csv::de::Reader::<1024>::new(sep)
                 .decode(self.as_ref().as_bytes())
                 .unwrap(),
-            Encoding::Json => crate::formats::json::de::Reader::new()
+            Format::Json => crate::formats::json::de::Reader::new()
                 .decode(self.as_ref().as_bytes())
                 .unwrap(),
         }
     }
 
-    pub fn encode<T: Serialize>(value: T, encoding: Encoding) -> Self {
+    pub fn encode<T: Serialize>(value: T, encoding: Format) -> Self {
         let mut output = std::vec::Vec::new();
         match encoding {
-            Encoding::Csv { sep } => crate::formats::csv::ser::Writer::new(sep)
+            Format::Csv { sep } => crate::formats::csv::ser::Writer::new(sep)
                 .encode(&value, &mut output)
                 .unwrap(),
-            Encoding::Json => crate::formats::json::ser::Writer::new()
+            Format::Json => crate::formats::json::ser::Writer::new()
                 .encode(&value, &mut output)
                 .unwrap(),
         };

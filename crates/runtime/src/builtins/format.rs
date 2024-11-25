@@ -5,27 +5,27 @@ use crate::traits::DeepClone;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(C)]
-pub enum Encoding {
+pub enum Format {
     Csv { sep: char },
     Json,
 }
 
-impl std::fmt::Display for Encoding {
+impl std::fmt::Display for Format {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Encoding::Csv { sep } => write!(f, "Csv({})", sep),
-            Encoding::Json => write!(f, "Json"),
+            Format::Csv { sep } => write!(f, "Csv({})", sep),
+            Format::Json => write!(f, "Json"),
         }
     }
 }
 
-impl DeepClone for Encoding {
+impl DeepClone for Format {
     fn deep_clone(&self) -> Self {
         self.clone()
     }
 }
 
-impl Encoding {
+impl Format {
     pub fn csv(sep: char) -> Self {
         Self::Csv { sep }
     }
