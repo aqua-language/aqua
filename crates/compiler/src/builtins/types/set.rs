@@ -26,10 +26,10 @@ fn declare(ctx: &mut Context) {
     });
 
     ctx.declare(Decl::Impl {
-        aqua: "impl Set",
+        aqua: "impl[T] Set[T]",
         decls: &[ImplDecl::Def {
             docs: "",
-            aqua: "def new[T](): Set[T];",
+            aqua: "def new(): Set[T];",
             codegen: Some(Codegen {
                 rust: "Set::new",
                 java: "Set.new",

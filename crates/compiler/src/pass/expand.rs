@@ -1,5 +1,5 @@
 use crate::analysis::declare;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Type;
 use crate::ast::TypeBody;
 use crate::diag::Report;
@@ -26,7 +26,7 @@ impl Context {
 }
 
 impl Pass for Context {
-    fn run(&mut self, program: &Program) -> Program {
+    fn run(&mut self, program: &Ast) -> Ast {
         self.decls.visit_program(program);
         self.map_program(program)
     }

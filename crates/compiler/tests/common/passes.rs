@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use compiler::ast::Expr;
 use compiler::ast::Pat;
-use compiler::ast::Program;
+use compiler::ast::Ast;
 use compiler::ast::Stmt;
 use compiler::ast::Type;
 use compiler::builtins::value::Value;
@@ -133,7 +133,7 @@ impl Tester {
     pub fn run<T>(
         &mut self,
         s: &str,
-        f: impl FnOnce(&mut Compiler, Program) -> T,
+        f: impl FnOnce(&mut Compiler, Ast) -> T,
     ) -> Result<T, Recovered<T>> {
         let program = self.0.parse("test", s);
         let result = f(&mut self.0, program);
@@ -156,7 +156,7 @@ impl Tester {
     }
 }
 
-pub fn parse(input: &str) -> Result<Program, Recovered<Program>> {
+pub fn parse(input: &str) -> Result<Ast, Recovered<Ast>> {
     Tester::new().parse(input, |p| p.parse(Parser::program).unwrap())
 }
 
@@ -176,34 +176,34 @@ pub fn parse_pat(s: &str) -> Result<Pat, Recovered<Pat>> {
     Tester::new().parse(s, |p| p.parse(Parser::pat).unwrap())
 }
 
-pub fn desugar(s: &str) -> Result<Program, Recovered<Program>> {
+pub fn desugar(s: &str) -> Result<Ast, Recovered<Ast>> {
     Tester::new().init().run(s, |c, p| c.desugar(&p))
 }
 
-pub fn querycomp(s: &str) -> Result<Program, Recovered<Program>> {
+pub fn querycomp(s: &str) -> Result<Ast, Recovered<Ast>> {
     Tester::new().init().run(s, |c, p| c.query_desugar(&p))
 }
 
-pub fn resolve(s: impl AsRef<str>) -> Result<Program, Recovered<Program>> {
+pub fn resolve(s: impl AsRef<str>) -> Result<Ast, Recovered<Ast>> {
     Tester::new().init().run(s.as_ref(), |c, p| c.resolve(&p))
 }
 
-pub fn flatten(input: &str) -> Result<Program, Recovered<Program>> {
+pub fn flatten(input: &str) -> Result<Ast, Recovered<Ast>> {
     todo!()
     // Tester::new()
     //     .init()
     //     .run(input, |compiler, program| compiler.expand(&program))
 }
 
-pub fn lift(s: &str) -> Result<Program, Recovered<Program>> {
+pub fn lift(s: &str) -> Result<Ast, Recovered<Ast>> {
     Tester::new().init().run(s, |c, p| c.infer(&p))
 }
 
-pub fn infer(s: &str) -> Result<Program, Recovered<Program>> {
+pub fn infer(s: &str) -> Result<Ast, Recovered<Ast>> {
     Tester::new().init().run(s, |c, p| c.infer(&p))
 }
 
-pub fn monomorphise(s: &str) -> Result<Program, Recovered<Program>> {
+pub fn monomorphise(s: &str) -> Result<Ast, Recovered<Ast>> {
     Tester::new().init().run(s, |c, p| c.monomorphise(&p))
 }
 

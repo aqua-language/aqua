@@ -10,7 +10,8 @@ use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::PathPatField;
-use crate::ast::Program;
+use crate::ast::Place;
+use crate::ast::Ast;
 use crate::ast::QueryOp;
 use crate::ast::Segment;
 use crate::ast::Stmt;
@@ -29,6 +30,10 @@ use crate::ast::TypeBody;
 use crate::pass::infer::solver::Constraint;
 use crate::syntax::span::Span;
 
+fn x(mut x: Rc<String>) {
+    let y = Rc::make_mut(&mut x);
+}
+
 pub(crate) trait Mapper {
     #[inline(always)]
     fn enter_scope(&mut self) {}
@@ -36,14 +41,14 @@ pub(crate) trait Mapper {
     #[inline(always)]
     fn exit_scope(&mut self) {}
 
-    fn map_program(&mut self, program: &Program) -> Program {
+    fn map_program(&mut self, program: &Ast) -> Ast {
         self._map_program(program)
     }
     #[inline(always)]
-    fn _map_program(&mut self, program: &Program) -> Program {
+    fn _map_program(&mut self, program: &Ast) -> Ast {
         let span = self.map_span(&program.span);
         let stmts = self.map_top_stmts(&program.stmts);
-        Program::new(span, stmts)
+        Ast::new(span, stmts)
     }
 
     fn map_top_stmts(&mut self, stmts: &[Stmt]) -> Vec<Stmt> {
@@ -403,8 +408,8 @@ pub(crate) trait Mapper {
 
     #[inline(always)]
     fn _map_expr(&mut self, expr: &Expr) -> Expr {
-        let s = self.map_span(&expr.span_of());
-        let t = self.map_type(&expr.type_of());
+        let s = self.map_span(&expr.span());
+        let t = self.map_type(&expr.ty());
         match expr {
             Expr::Path(_, _, path) => {
                 let path = self.map_path(path);
@@ -462,7 +467,7 @@ pub(crate) trait Mapper {
             }
             Expr::Block(_, _, b) => {
                 let b = self.map_block(b);
-                Expr::Block(s, t, b)
+                Expr::Block(s, t, Rc::new(b))
             }
             Expr::Assoc(_, _, b, x, ts) => {
                 let b = self.map_impl(b);
@@ -586,11 +591,28 @@ pub(crate) trait Mapper {
                 let e = self.map_expr(e);
                 Expr::Closure(s, t, xts0, xts1, t1, Rc::new(e))
             }
-            Expr::Ref(_, _) => todo!(),
-            Expr::RefMut(_, _) => todo!(),
-            Expr::Place(_, _) => todo!(),
-            Expr::Deref(_, _, _) => todo!(),
+            Expr::Ref(_, _, e) => {
+                let e = self.map_expr(e);
+                Expr::Ref(s, t, Rc::new(e))
+            }
+            Expr::RefMut(_, _, e) => {
+                let e = self.map_expr(e);
+                Expr::RefMut(s, t, Rc::new(e))
+            }
+            Expr::Place(_, _, p) => {
+                let p = self.map_place(p);
+                Expr::Place(s, t, p)
+            }
+            Expr::Deref(_, _, e) => {
+                let e = self.map_expr(e);
+                Expr::Deref(s, t, Rc::new(e))
+            }
+            Expr::Unit(_, _) => Expr::Unit(s, t),
         }
+    }
+
+    fn map_place(&mut self, p: &Place) -> Place {
+        todo!()
     }
 
     fn map_query_stmts(&mut self, qs: &[QueryOp]) -> Vec<QueryOp> {
@@ -606,7 +628,7 @@ pub(crate) trait Mapper {
     }
     #[inline(always)]
     fn _map_query_stmt(&mut self, q: &QueryOp) -> QueryOp {
-        let s = self.map_span(&q.span_of());
+        let s = self.map_span(&q.span());
         match q {
             QueryOp::From(_, x, t, e) => {
                 let x = self.map_name(x);
@@ -764,7 +786,7 @@ pub(crate) trait Mapper {
         self.enter_scope();
         let span = self.map_span(&b.span);
         let stmts = self.map_stmts(&b.stmts);
-        let expr = self.map_expr(&b.expr);
+        let expr = b.expr.as_ref().map(|e| self.map_expr(e));
         self.exit_scope();
         Block::new(span, stmts, expr)
     }
@@ -805,10 +827,10 @@ pub(crate) trait Mapper {
                 let x = self.map_name(x);
                 Type::Generic(x)
             }
-            Type::Lambda(ts, t) => {
+            Type::Function(ts, t) => {
                 let ts = self.map_types(ts);
                 let t = self.map_type(t);
-                Type::Lambda(ts, Rc::new(t))
+                Type::Function(ts, Rc::new(t))
             }
             Type::Tuple(ts) => {
                 let ts = self.map_types(ts);
@@ -847,6 +869,7 @@ pub(crate) trait Mapper {
             }
             Type::Ref(_, _) => todo!(),
             Type::RefMut(_, _) => todo!(),
+            Type::Unit => Type::Unit,
         }
     }
 
@@ -864,8 +887,8 @@ pub(crate) trait Mapper {
     }
     #[inline(always)]
     fn _map_pattern(&mut self, p: &Pat) -> Pat {
-        let t = self.map_type(&p.type_of());
-        let s = self.map_span(&p.span_of());
+        let t = self.map_type(&p.ty());
+        let s = self.map_span(&p.span());
         match p {
             Pat::Path(_, _, path, ppfs) => {
                 let path = self.map_path(path);
@@ -918,6 +941,7 @@ pub(crate) trait Mapper {
                 let p = self.map_pattern(p);
                 Pat::Paren(s, t, Rc::new(p))
             }
+            Pat::Unit(_, _) => Pat::Unit(s, t),
         }
     }
 
@@ -1010,7 +1034,7 @@ pub(crate) trait Mappable {
     fn map(&self, mapper: &mut impl Mapper) -> Self;
 }
 
-impl Mappable for Program {
+impl Mappable for Ast {
     fn map(&self, mut mapper: &mut impl Mapper) -> Self {
         mapper.map_program(self)
     }

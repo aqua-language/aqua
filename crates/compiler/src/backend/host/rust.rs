@@ -2,7 +2,7 @@ use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Name;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
@@ -17,25 +17,25 @@ use crate::print::Print;
 // This wrapper causes the underlying structure to be printed as Rust code.
 struct Wrapper<T>(T, usize);
 
-impl Program {
-    pub fn rust(&self) -> impl std::fmt::Display + '_ {
+impl Ast {
+    pub fn to_rust(&self) -> impl std::fmt::Display + '_ {
         Wrapper(self, 0)
     }
 }
 
 impl crate::analysis::declare::Context {
-    pub fn rust(&self) -> impl std::fmt::Display + '_ {
+    pub fn to_rust(&self) -> impl std::fmt::Display + '_ {
         Wrapper(self, 0)
     }
 }
 
 impl Function {
-    pub fn rust(&self, indent: usize) -> impl std::fmt::Display + '_ {
+    pub fn to_rust(&self, indent: usize) -> impl std::fmt::Display + '_ {
         Wrapper(self, indent)
     }
 }
 
-impl<'a> std::fmt::Display for Wrapper<&'a Program> {
+impl<'a> std::fmt::Display for Wrapper<&'a Ast> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut p = Printer::new(f);
         p.program(self.0)
@@ -90,7 +90,7 @@ impl<'a, 'b> Printer<'a, 'b> {
 }
 
 impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
-    fn program(&mut self, p: &Program) -> std::fmt::Result {
+    fn program(&mut self, p: &Ast) -> std::fmt::Result {
         self.newline_sep(&p.stmts, Self::stmt)
     }
 
@@ -339,10 +339,13 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Expr::LetIn(_, _, _, _, _, _) => todo!(),
             Expr::Update(_, _, _, _, _) => todo!(),
             Expr::Anonymous(_, _) => unreachable!(),
-            Expr::Ref(_, _) => todo!(),
-            Expr::RefMut(_, _) => todo!(),
-            Expr::Place(_, _) => todo!(),
+            Expr::Ref(_, _, _) => todo!(),
+            Expr::RefMut(_, _, _) => todo!(),
+            Expr::Place(_, _, _) => todo!(),
             Expr::Deref(_, _, _) => todo!(),
+            Expr::Unit(_, _) => {
+                self.kw("()")?;
+            }
         }
         Ok(())
     }
@@ -352,7 +355,10 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             this.indented(|this| {
                 this.newline_sep(&b.stmts, Self::stmt)?;
                 this.newline()?;
-                this.expr(&b.expr)
+                if let Some(e) = b.expr.as_ref() {
+                    this.expr(e)?;
+                }
+                Ok(())
             })?;
             this.newline()
         })
@@ -382,7 +388,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Type::Unknown => unreachable!(),
             Type::Err => unreachable!(),
             Type::Generic(_) => unreachable!(),
-            Type::Lambda(ts, t) => {
+            Type::Function(ts, t) => {
                 self.kw("fn")?;
                 self.paren(|this| this.comma_sep(ts, Self::ty))?;
                 self.space()?;
@@ -392,6 +398,9 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             }
             Type::Tuple(ts) => {
                 self.paren(|this| this.comma_sep_trailing(ts, Self::ty))?;
+            }
+            Type::Unit => {
+                self.kw("()")?;
             }
             Type::Record(xts) => {
                 self.fields(xts.as_ref(), Self::type_field)?;

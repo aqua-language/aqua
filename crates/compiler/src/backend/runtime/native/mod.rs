@@ -43,7 +43,7 @@ impl<'a> std::fmt::Display for Wrapper<(&'a Dataflow, &'a declare::Context)> {
                      {dataflow}
                  }});
              }}",
-            decls = decls.rust(),
+            decls = decls.to_rust(),
             dataflow = Wrapper(dataflow, 2),
         }
     }
@@ -356,7 +356,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn fun(&mut self, f: &Function) -> std::fmt::Result {
-        f.rust(self.indent_level).fmt(self.f)
+        f.to_rust(self.indent_level).fmt(self.f)
     }
 
     // TODO: Remove this when we have ownership

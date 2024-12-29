@@ -7,3 +7,5 @@ pub mod span;
 pub mod spanned;
 pub mod symbol;
 pub mod splice;
+pub mod precedence;
+pub mod lookahead;

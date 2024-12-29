@@ -7,7 +7,7 @@ use super::QueryOp;
 use super::Stmt;
 
 impl Expr {
-    pub fn span_of(&self) -> Span {
+    pub fn span(&self) -> Span {
         match self {
             Expr::Int(s, ..) => *s,
             Expr::Float(s, ..) => *s,
@@ -51,16 +51,17 @@ impl Expr {
             Expr::Update(s, ..) => *s,
             Expr::Anonymous(s, ..) => *s,
             Expr::Closure(s, ..) => *s,
-            Expr::Ref(_, _) => todo!(),
-            Expr::RefMut(_, _) => todo!(),
-            Expr::Place(_, _) => todo!(),
+            Expr::Ref(_, _, _) => todo!(),
+            Expr::RefMut(_, _, _) => todo!(),
+            Expr::Place(_, _, _) => todo!(),
             Expr::Deref(_, _, _) => todo!(),
+            Expr::Unit(s, _) => *s,
         }
     }
 }
 
 impl Pat {
-    pub fn span_of(&self) -> Span {
+    pub fn span(&self) -> Span {
         match self {
             Pat::Path(s, ..) => *s,
             Pat::Var(s, ..) => *s,
@@ -77,12 +78,13 @@ impl Pat {
             Pat::Char(s, ..) => *s,
             Pat::Annotate(s, ..) => *s,
             Pat::Paren(s, ..) => *s,
+            Pat::Unit(s, _) => *s
         }
     }
 }
 
 impl QueryOp {
-    pub fn span_of(&self) -> Span {
+    pub fn span(&self) -> Span {
         match self {
             QueryOp::From(s, ..) => *s,
             QueryOp::Where(s, ..) => *s,
@@ -101,7 +103,7 @@ impl QueryOp {
 }
 
 impl Stmt {
-    pub fn span_of(&self) -> Span {
+    pub fn span(&self) -> Span {
         match self {
             Stmt::Var(s) => s.span,
             Stmt::Def(s) => s.span,
@@ -110,14 +112,14 @@ impl Stmt {
             Stmt::Struct(s) => s.span,
             Stmt::Enum(s) => s.span,
             Stmt::Type(s) => s.span,
-            Stmt::Expr(s) => s.span_of(),
+            Stmt::Expr(s) => s.span(),
             Stmt::Err(s) => *s,
         }
     }
 }
 
 impl Constraint {
-    pub fn span_of(&self) -> &Span {
+    pub fn span(&self) -> &Span {
         match self {
             Constraint::WhereClause(s, _) => s,
             Constraint::AssocDef(s, ..) => s,

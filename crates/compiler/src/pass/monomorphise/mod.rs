@@ -10,7 +10,7 @@ use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Impl;
 use crate::ast::Name;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
@@ -43,7 +43,7 @@ pub struct Context {
 }
 
 impl Pass for Context {
-    fn run(&mut self, p: &Program) -> Program {
+    fn run(&mut self, p: &Ast) -> Ast {
         p.visit(&mut self.decls);
         let stmts1 = p
             .stmts
@@ -52,7 +52,7 @@ impl Pass for Context {
             .collect::<Vec<_>>();
         let mut stmts0 = std::mem::take(&mut self.stmts);
         stmts0.extend(stmts1);
-        Program::new(p.span, stmts0)
+        Ast::new(p.span, stmts0)
     }
 
     fn report(&mut self) -> &mut Report {
@@ -289,7 +289,7 @@ impl Context {
                 .iter()
                 .zip(ts1.iter())
                 .try_for_each(|(t0, t1)| self.try_unify(t0, t1)),
-            (Type::Lambda(ts0, t0), Type::Lambda(ts1, t1)) if ts0.len() == ts1.len() => ts0
+            (Type::Function(ts0, t0), Type::Function(ts1, t1)) if ts0.len() == ts1.len() => ts0
                 .iter()
                 .chain([t0.as_ref()])
                 .zip(ts1.iter().chain([t1.as_ref()]))
@@ -319,8 +319,8 @@ impl Context {
 
 impl Mapper for Context {
     fn map_expr(&mut self, e: &Expr) -> Expr {
-        let t = self.map_type(e.type_of());
-        let s = e.span_of();
+        let t = self.map_type(e.ty());
+        let s = e.span();
         match e {
             Expr::Struct(_, _, x, ts, xes) => {
                 let stmt = self.decls.structs.get(x).unwrap().clone();

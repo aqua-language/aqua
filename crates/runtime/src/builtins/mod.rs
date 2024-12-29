@@ -30,6 +30,7 @@ pub mod im_string;
 pub mod channel;
 pub mod range;
 pub mod url;
+pub mod bag;
 
 // #[cfg(feature = "model")]
 // pub mod model;

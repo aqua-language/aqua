@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use ast::Program;
+use ast::Ast;
 use config::CompilerConfig;
 use diag::Report;
 use pass::Pass;
@@ -23,6 +23,9 @@ pub mod traversal;
 
 #[cfg(feature = "optimiser")]
 pub mod opt;
+pub mod mir;
+pub mod ast_to_mir;
+pub mod mir_to_ast;
 
 #[macro_export]
 macro_rules! aqua {
@@ -78,7 +81,7 @@ impl Compiler {
         }
     }
 
-    pub fn parse(&mut self, name: impl ToString, input: impl ToString) -> Program {
+    pub fn parse(&mut self, name: impl ToString, input: impl ToString) -> Ast {
         let input = input.to_string();
         let input: Rc<str> = Rc::from(input);
         let id = self.sources.add(name, input.clone());
@@ -89,42 +92,42 @@ impl Compiler {
 
     pub fn init(&mut self) -> &mut Self {
         let stmts = crate::builtins::declare(&mut self.sources);
-        let program = Program::new(Span::default(), stmts);
+        let program = Ast::new(Span::default(), stmts);
         self.compile(&program);
         self
     }
 
-    fn run_pass(program: &Program, pass: &mut impl Pass, report: &mut Report) -> Program {
+    fn run_pass(program: &Ast, pass: &mut impl Pass, report: &mut Report) -> Ast {
         let program = pass.run(program);
         report.append(pass.report());
         program
     }
 
-    pub fn desugar(&mut self, program: &Program) -> Program {
+    pub fn desugar(&mut self, program: &Ast) -> Ast {
         Self::run_pass(program, &mut self.desugar, &mut self.report)
     }
 
-    pub fn query_desugar(&mut self, program: &Program) -> Program {
+    pub fn query_desugar(&mut self, program: &Ast) -> Ast {
         let program = self.desugar(program);
         Self::run_pass(&program, &mut self.query_desugar, &mut self.report)
     }
 
-    pub fn resolve(&mut self, program: &Program) -> Program {
+    pub fn resolve(&mut self, program: &Ast) -> Ast {
         let program = self.query_desugar(program);
         Self::run_pass(&program, &mut self.resolve, &mut self.report)
     }
 
-    pub fn expand(&mut self, program: &Program) -> Program {
+    pub fn expand(&mut self, program: &Ast) -> Ast {
         let program = self.resolve.run(program);
         Self::run_pass(&program, &mut self.expand, &mut self.report)
     }
 
-    pub fn infer(&mut self, program: &Program) -> Program {
+    pub fn infer(&mut self, program: &Ast) -> Ast {
         let program = self.resolve(program);
         Self::run_pass(&program, &mut self.infer, &mut self.report)
     }
 
-    pub fn monomorphise(&mut self, program: &Program) -> Program {
+    pub fn monomorphise(&mut self, program: &Ast) -> Ast {
         let program = self.infer(program);
         if self.report.is_empty() {
             Self::run_pass(&program, &mut self.monomorphise, &mut self.report)
@@ -133,7 +136,7 @@ impl Compiler {
         }
     }
 
-    pub fn compile(&mut self, program: &Program) -> Program {
+    pub fn compile(&mut self, program: &Ast) -> Ast {
         self.monomorphise(program)
     }
 

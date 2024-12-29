@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::Impl;
 use crate::ast::Type;
@@ -47,9 +47,9 @@ impl Impl {
     }
 }
 
-impl Program {
+impl Ast {
     /// Expand all associated types in a program.
-    pub fn expand(&self) -> Program {
+    pub fn expand(&self) -> Ast {
         self.map(&mut Expand::new())
     }
 }

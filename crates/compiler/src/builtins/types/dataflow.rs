@@ -44,7 +44,7 @@ fn declare(ctx: &mut Context) {
         decls: &[
             ImplDecl::Def {
                 docs: "",
-                aqua: "def collocate(a:Dataflow, b:Dataflow): Dataflow;",
+                aqua: "def merge(a:Dataflow, b:Dataflow): Dataflow;",
                 codegen: None,
                 eval: |_ctx, v| {
                     let v0 = v[0].as_dataflow();

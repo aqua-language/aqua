@@ -11,11 +11,14 @@ use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Impl;
+use crate::ast::Loan;
+use crate::ast::Local;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::PathPatField;
-use crate::ast::Program;
+use crate::ast::Place;
+use crate::ast::Ast;
 use crate::ast::QueryOp;
 use crate::ast::Segment;
 use crate::ast::Stmt;
@@ -45,11 +48,11 @@ use crate::pass::infer::solver::Constraint;
 use crate::syntax::span::Span;
 
 pub(crate) trait Visitor {
-    fn visit_program(&mut self, program: &Program) {
+    fn visit_program(&mut self, program: &Ast) {
         self._visit_program(program);
     }
     #[inline(always)]
-    fn _visit_program(&mut self, program: &Program) {
+    fn _visit_program(&mut self, program: &Ast) {
         self.visit_stmts(&program.stmts);
     }
 
@@ -395,8 +398,8 @@ pub(crate) trait Visitor {
     }
     #[inline(always)]
     fn _visit_expr(&mut self, expr: &Expr) {
-        self.visit_span(&expr.span_of());
-        self.visit_type(&expr.type_of());
+        self.visit_span(&expr.span());
+        self.visit_type(&expr.ty());
         match expr {
             Expr::Path(_, _, path) => {
                 self.visit_path(path);
@@ -542,10 +545,19 @@ pub(crate) trait Visitor {
                 self.visit_type(t);
                 self.visit_expr(e);
             }
-            Expr::Ref(_, _) => todo!(),
-            Expr::RefMut(_, _) => todo!(),
-            Expr::Place(_, _) => todo!(),
-            Expr::Deref(_, _, _) => todo!(),
+            Expr::Ref(_, _, e) => {
+                self.visit_expr(e);
+            }
+            Expr::RefMut(_, _, e) => {
+                self.visit_expr(e);
+            }
+            Expr::Place(_, _, p) => {
+                self.visit_place(p);
+            }
+            Expr::Deref(_, _, e) => {
+                self.visit_expr(e);
+            }
+            Expr::Unit(_, _) => {}
         }
     }
 
@@ -578,7 +590,7 @@ pub(crate) trait Visitor {
         self._visit_query_stmt(q);
     }
     fn _visit_query_stmt(&mut self, q: &QueryOp) {
-        let s = self.visit_span(&q.span_of());
+        let s = self.visit_span(&q.span());
         match q {
             QueryOp::From(_, x, t, e) => {
                 self.visit_name(x);
@@ -703,7 +715,9 @@ pub(crate) trait Visitor {
     fn _visit_block(&mut self, b: &Block) {
         self.visit_span(&b.span);
         self.visit_stmts(&b.stmts);
-        self.visit_expr(&b.expr);
+        if let Some(e) = &b.expr {
+            self.visit_expr(e);
+        }
     }
 
     #[inline(always)]
@@ -737,7 +751,7 @@ pub(crate) trait Visitor {
             Type::Generic(x) => {
                 self.visit_name(x);
             }
-            Type::Lambda(ts, t) => {
+            Type::Function(ts, t) => {
                 self.visit_types(ts);
                 self.visit_type(t);
             }
@@ -768,9 +782,47 @@ pub(crate) trait Visitor {
                 self.visit_name(x);
                 self.visit_types(ts);
             }
-            Type::Ref(..) => todo!(),
-            Type::RefMut(..) => todo!(),
+            Type::Ref(loans, t) => {
+                self.visit_loans(loans);
+                self.visit_type(t);
+            }
+            Type::RefMut(loans, t) => {
+                self.visit_loans(loans);
+                self.visit_type(t);
+            }
+            Type::Unit => {}
         }
+    }
+
+    #[inline(always)]
+    fn visit_loans(&mut self, loans: &[Loan]) {
+        self._visit_loans(loans);
+    }
+    fn _visit_loans(&mut self, loans: &[Loan]) {
+        self.visit_iter(loans, Self::visit_loan);
+    }
+    #[inline(always)]
+    fn visit_loan(&mut self, loan: &Loan) {
+        self._visit_loan(loan);
+    }
+    #[inline(always)]
+    fn _visit_loan(&mut self, loan: &Loan) {
+        self.visit_place(&loan.place);
+    }
+    fn visit_place(&mut self, place: &Place) {
+        self._visit_place(&place);
+    }
+    #[inline(always)]
+    fn _visit_place(&mut self, place: &Place) {
+        self.visit_local(&place.local);
+    }
+    fn visit_local(&mut self, local: &Local) {
+        self._visit_local(local);
+    }
+    #[inline(always)]
+    fn _visit_local(&mut self, local: &Local) {
+        self.visit_name(&local.name);
+        self.visit_type(&local.ty);
     }
 
     #[inline(always)]
@@ -787,8 +839,8 @@ pub(crate) trait Visitor {
     }
     #[inline(always)]
     fn _visit_pattern(&mut self, p: &Pat) {
-        self.visit_span(&p.span_of());
-        self.visit_type(&p.type_of());
+        self.visit_span(&p.span());
+        self.visit_type(&p.ty());
         match p {
             Pat::Path(_, _, path, ppfs) => {
                 self.visit_path(path);
@@ -832,6 +884,7 @@ pub(crate) trait Visitor {
             Pat::Paren(_, _, p) => {
                 self.visit_pattern(p);
             }
+            Pat::Unit(_, _) => {}
         }
     }
 
@@ -921,6 +974,8 @@ pub(crate) trait Visitor {
             Value::Range(v) => self._visit_value_range(v),
             Value::Iterator(_) => {}
             Value::Storage(_) => todo!(),
+            Value::Bag(_) => todo!(),
+            Value::Unit(_) => {}
         }
     }
 
@@ -1100,7 +1155,7 @@ pub(crate) trait Visitable {
     fn visit(&self, visitor: &mut impl Visitor);
 }
 
-impl Visitable for Program {
+impl Visitable for Ast {
     fn visit(&self, mut visitor: &mut impl Visitor) {
         visitor.visit_program(self);
     }

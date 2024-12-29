@@ -126,6 +126,7 @@ impl<'a> Lexer<'a> {
                             "into" => Token::Into,
                             "join" => Token::Join,
                             "match" => Token::Match,
+                            "mut" => Token::Mut,
                             "let" => Token::Let,
                             "of" => Token::Of,
                             "on" => Token::On,
@@ -334,6 +335,10 @@ impl<'a> Lexer<'a> {
                         self.pos += c.len_utf8();
                     }
                     continue;
+                }
+                '&' => {
+                    self.pos += 1;
+                    Token::Ampersand
                 }
                 c => {
                     self.pos += c.len_utf8();

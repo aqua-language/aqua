@@ -1,20 +1,17 @@
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::diag::Report;
 
-pub mod controlflow;
 pub mod desugar;
 pub mod expand;
-pub mod flatten;
 pub mod infer;
 #[allow(unused)]
 pub mod lift;
-pub mod loops;
 pub mod monomorphise;
 pub mod query_desugar;
 pub mod resolve;
 
 pub trait Pass: std::fmt::Debug {
-    fn run(&mut self, program: &Program) -> Program;
+    fn run(&mut self, program: &Ast) -> Ast;
     fn report(&mut self) -> &mut Report;
 }
 

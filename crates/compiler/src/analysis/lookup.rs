@@ -1,5 +1,5 @@
 use crate::ast::Expr;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::syntax::span::Span;
 use crate::traversal::visitor::Visitor;
@@ -15,7 +15,7 @@ pub enum Output {
 }
 
 impl Context {
-    pub fn lookup(program: &Program, span: Span) -> Option<Output> {
+    pub fn lookup(program: &Ast, span: Span) -> Option<Output> {
         let mut this = Self { span, output: None };
         this.visit_program(program);
         this.output
@@ -24,7 +24,7 @@ impl Context {
 
 impl Visitor for Context {
     fn visit_expr(&mut self, e: &Expr) {
-        if self.output.is_none() && e.span_of().contains(&self.span) {
+        if self.output.is_none() && e.span().contains(&self.span) {
             self._visit_expr(e);
             if self.output.is_none() {
                 self.output = Some(Output::Expr(e.clone()));
@@ -33,7 +33,7 @@ impl Visitor for Context {
     }
 
     fn visit_stmt(&mut self, s: &Stmt) {
-        if self.output.is_none() && s.span_of().contains(&self.span) {
+        if self.output.is_none() && s.span().contains(&self.span) {
             self._visit_stmt(s);
             if self.output.is_none() {
                 self.output = Some(Output::Stmt(s.clone()));

@@ -1,10 +1,11 @@
 use std::fmt::Display;
 
+use crate::analysis::declare;
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Name;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
@@ -14,31 +15,30 @@ use crate::ast::StmtVar;
 use crate::ast::Type;
 use crate::backend::codegen::Codegen;
 use crate::builtins::value::Function;
-use crate::analysis::declare;
 use crate::print::Print;
 
 // This wrapper causes the underlying structure to be printed as Java code.
 struct Wrapper<T>(T, usize);
 
-impl Program {
-    pub fn java(&self) -> impl Display + '_ {
+impl Ast {
+    pub fn to_java(&self) -> impl Display + '_ {
         Wrapper(self, 0)
     }
 }
 
 impl declare::Context {
-    pub fn java(&self) -> impl Display + '_ {
+    pub fn to_java(&self) -> impl Display + '_ {
         Wrapper(self, 0)
     }
 }
 
 impl Function {
-    pub fn java(&self, indent: usize) -> impl Display + '_ {
+    pub fn to_java(&self, indent: usize) -> impl Display + '_ {
         Wrapper(self, indent)
     }
 }
 
-impl<'a> std::fmt::Display for Wrapper<&'a Program> {
+impl<'a> std::fmt::Display for Wrapper<&'a Ast> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut p = Printer::new(f);
         p.indent_level = self.1;
@@ -95,7 +95,7 @@ impl<'a, 'b> Printer<'a, 'b> {
 }
 
 impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
-    fn program(&mut self, p: &Program) -> std::fmt::Result {
+    fn program(&mut self, p: &Ast) -> std::fmt::Result {
         self.newline_sep(&p.stmts, Self::stmt)
     }
 
@@ -340,10 +340,11 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Expr::LetIn(_, _, _, _, _, _) => todo!(),
             Expr::Update(_, _, _, _, _) => todo!(),
             Expr::Anonymous(_, _) => unreachable!(),
-            Expr::Ref(_, _) => todo!(),
-            Expr::RefMut(_, _) => todo!(),
-            Expr::Place(_, _) => todo!(),
+            Expr::Ref(_, _, _) => todo!(),
+            Expr::RefMut(_, _, _) => todo!(),
+            Expr::Place(_, _, _) => todo!(),
             Expr::Deref(_, _, _) => todo!(),
+            Expr::Unit(_, _) => todo!(),
         }
         Ok(())
     }
@@ -352,7 +353,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
         self.paren(|this| {
             this.paren(|this| {
                 this.lit("Supplier")?;
-                this.angle(|this| this.ty(b.expr.type_of()))
+                this.angle(|this| this.ty(b.ty()))
             })?;
             this.space()?;
             this.paren(|_| Ok(()))?;
@@ -365,7 +366,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                     this.newline()?;
                     this.kw("return")?;
                     this.space()?;
-                    this.expr(&b.expr)?;
+                    this.expr(&b.expr.as_ref().unwrap())?;
                     this.punct(";")
                 })?;
                 this.newline()
@@ -404,7 +405,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Type::Unknown => unreachable!(),
             Type::Err => unreachable!(),
             Type::Generic(_) => unreachable!(),
-            Type::Lambda(ts, t) => {
+            Type::Function(ts, t) => {
                 self.kw("Function")?;
                 self.lit(ts.len())?;
                 self.angle(|this| {
@@ -445,6 +446,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Type::Enum(_, _) => todo!(),
             Type::Ref(_, _) => todo!(),
             Type::RefMut(_, _) => todo!(),
+            Type::Unit => todo!(),
         }
         Ok(())
     }

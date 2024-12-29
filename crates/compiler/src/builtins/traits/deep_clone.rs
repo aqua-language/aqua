@@ -62,8 +62,10 @@ impl DeepClone for Value {
             Value::Backend(_) => unreachable!(),
             Value::Range(v) => Value::Range(v.deep_clone()),
             Value::Iterator(_) => unreachable!(),
-            Value::KeyedStream(_) => todo!(),
+            Value::KeyedStream(_) => unreachable!(),
             Value::Storage(_) => todo!(),
+            Value::Bag(_) => todo!(),
+            Value::Unit(v) => Value::Unit(v.deep_clone()),
         }
     }
 }

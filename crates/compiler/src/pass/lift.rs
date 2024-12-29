@@ -11,7 +11,7 @@ use crate::ast::ExprBody;
 use crate::ast::Impl;
 use crate::ast::Map;
 use crate::ast::Name;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
@@ -39,7 +39,7 @@ pub struct Context {
 }
 
 impl Pass for Context {
-    fn run(&mut self, program: &Program) -> Program {
+    fn run(&mut self, program: &Ast) -> Ast {
         self.lift(program)
     }
 
@@ -103,7 +103,7 @@ impl Context {
         Self::default()
     }
 
-    pub fn lift(&mut self, program: &Program) -> Program {
+    pub fn lift(&mut self, program: &Ast) -> Ast {
         self.map_program(program)
     }
 }
@@ -143,14 +143,14 @@ impl Mapper for Context {
         self.stack.scopes.pop();
     }
 
-    fn map_program(&mut self, program: &Program) -> Program {
+    fn map_program(&mut self, program: &Ast) -> Ast {
         self.visit_program(program);
         for stmt in &program.stmts {
             let stmt = self.map_stmt(stmt);
             self.top.push(stmt);
         }
         let stmts = std::mem::take(&mut self.top);
-        Program::new(program.span, stmts)
+        Ast::new(program.span, stmts)
     }
 
     fn map_stmt_var(&mut self, s: &StmtVar) -> StmtVar {
@@ -276,7 +276,7 @@ impl Mapper for Context {
                 _ => Some(self.map_stmt(stmt)),
             })
             .collect();
-        let expr = self.map_expr(&b.expr);
+        let expr = b.expr.as_ref().map(|e| self.map_expr(e));
         Block::new(b.span, stmts, expr)
     }
 }

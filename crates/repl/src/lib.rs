@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use compiler::ast::Program;
+use compiler::ast::Ast;
 use compiler::syntax::parser::Parser;
 use compiler::Compiler;
 use config::ReplConfig;

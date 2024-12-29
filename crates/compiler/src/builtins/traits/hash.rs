@@ -66,6 +66,8 @@ impl Hash for Value {
             Value::Range(v) => v.hash(state),
             Value::Iterator(_) => unreachable!(),
             Value::Storage(_) => todo!(),
+            Value::Bag(_) => todo!(),
+            Value::Unit(v) => v.hash(state),
         }
     }
 }

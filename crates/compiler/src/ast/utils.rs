@@ -22,13 +22,6 @@ impl Expr {
         }
     }
 
-    pub fn is_unit(&self) -> bool {
-        match self {
-            Expr::Tuple(_, _, v) if v.is_empty() => true,
-            _ => false,
-        }
-    }
-
     pub fn is_place(&self) -> bool {
         match self {
             Expr::Var(_, _, _) => true,
@@ -63,7 +56,7 @@ impl StmtTraitDef {
     pub fn type_of(&self) -> Type {
         let ts = self.params.values().cloned().collect();
         let t = self.ty.clone();
-        Type::Lambda(ts, Rc::new(t))
+        Type::Function(ts, Rc::new(t))
     }
 }
 
@@ -71,6 +64,6 @@ impl StmtDef {
     pub fn type_of(&self) -> Type {
         let ts = self.params.values().cloned().collect();
         let t = self.ty.clone();
-        Type::Lambda(ts, Rc::new(t))
+        Type::Function(ts, Rc::new(t))
     }
 }

@@ -1,21 +1,22 @@
 use runtime::prelude::Send;
 use runtime::prelude::Sync;
 
+use crate::analysis::declare;
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Map;
 use crate::ast::Name;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtVar;
 use crate::ast::Type;
 use crate::builtins::types::function::Function;
 use crate::builtins::types::record::Record;
 use crate::builtins::types::tuple::Tuple;
+use crate::builtins::types::unit::Unit;
 use crate::builtins::types::variant::Variant;
 use crate::builtins::value::Value;
-use crate::analysis::declare;
 use crate::traversal::visitor::Visitable;
 
 #[derive(Debug, Default, Send, Sync, Clone)]
@@ -84,7 +85,7 @@ impl Context {
         v
     }
 
-    pub fn interpret(&mut self, p: &Program) {
+    pub fn interpret(&mut self, p: &Ast) {
         p.visit(&mut self.decls);
         p.stmts.iter().for_each(|stmt| self.stmt(stmt));
     }
@@ -116,7 +117,11 @@ impl Context {
     fn eval_block(&mut self, b: &Block) -> Value {
         self.scoped(|this| {
             b.stmts.iter().for_each(|s| this.stmt(s));
-            this.eval_expr(&b.expr)
+            if let Some(e) = &b.expr {
+                this.eval_expr(e)
+            } else {
+                Tuple::new(vec![]).into()
+            }
         })
     }
 
@@ -235,10 +240,11 @@ impl Context {
             Expr::Closure(_, _, _xts0, _xts1, _t, _e) => {
                 todo!()
             }
-            Expr::Ref(_, _) => todo!(),
+            Expr::Ref(_, _, _) => todo!(),
             Expr::Place(..) => todo!(),
-            Expr::RefMut(_, _) => todo!(),
+            Expr::RefMut(_, _, _) => todo!(),
             Expr::Deref(_, _, _) => todo!(),
+            Expr::Unit(_, _) => Unit.into()
         }
     }
 }

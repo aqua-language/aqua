@@ -5,11 +5,15 @@ use crate::ast::ExprBody;
 use crate::ast::Impl;
 use crate::ast::ImplVar;
 use crate::ast::Index;
+use crate::ast::Loan;
+use crate::ast::Local;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::PathPatField;
-use crate::ast::Program;
+use crate::ast::Place;
+use crate::ast::PlaceElem;
+use crate::ast::Ast;
 use crate::ast::QueryOp;
 use crate::ast::Segment;
 use crate::ast::Stmt;
@@ -66,7 +70,7 @@ impl<'a, 'b> Printer<'a, 'b> {
         self.ty(t)
     }
 
-    fn program(&mut self, p: &Program) -> std::fmt::Result {
+    fn program(&mut self, p: &Ast) -> std::fmt::Result {
         self.stmts(&p.stmts)
     }
 
@@ -564,10 +568,13 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.expr(e)?;
             }
-            Expr::Ref(_, _) => todo!(),
-            Expr::RefMut(_, _) => todo!(),
-            Expr::Place(_, _) => todo!(),
+            Expr::Ref(_, _, _) => todo!(),
+            Expr::RefMut(_, _, _) => todo!(),
+            Expr::Place(_, _, _) => todo!(),
             Expr::Deref(_, _, _) => todo!(),
+            Expr::Unit(_, _) => {
+                self.lit("()")?;
+            }
         }
         Ok(())
     }
@@ -579,9 +586,9 @@ impl<'a, 'b> Printer<'a, 'b> {
                     this.newline()?;
                     this.newline_sep(&b.stmts, |this, s| this.stmt(s))?;
                 }
-                if this.verbose || !b.expr.is_unit() {
+                if let Some(e) = &b.expr {
                     this.newline()?;
-                    this.expr(&b.expr)?;
+                    this.expr(e)?;
                 }
                 Ok(())
             })?;
@@ -602,7 +609,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             self.paren(|this| {
                 this._expr(expr)?;
                 this.punct(":")?;
-                this.ty(expr.type_of())
+                this.ty(expr.ty())
             })?;
         } else {
             self._expr(expr)?;
@@ -814,7 +821,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             Type::Generic(x) => {
                 self.name(x)?;
             }
-            Type::Lambda(ts, t) => {
+            Type::Function(ts, t) => {
                 if ts.len() == 1 {
                     self.ty(&ts[0])?;
                 } else {
@@ -850,10 +857,50 @@ impl<'a, 'b> Printer<'a, 'b> {
             Type::Paren(t) => {
                 self.paren(|this| this.ty(t))?;
             }
-            Type::Ref(_, _) => todo!(),
+            Type::Ref(loans, t) => {
+                self.punct("&")?;
+                self.comma_sep(loans, Self::loan)?;
+                self.ty(t)?;
+            }
             Type::RefMut(_, _) => todo!(),
+            Type::Unit => {
+                self.lit("()")?;
+            }
         }
         Ok(())
+    }
+
+    fn loan(&mut self, loan: &Loan) -> std::fmt::Result {
+        if loan.mutable {
+            self.punct("mut")?;
+        }
+        self.place(&loan.place)
+    }
+
+    fn place(&mut self, place: &Place) -> std::fmt::Result {
+        self.local(&place.local)?;
+        for elem in &place.elems {
+            match elem {
+                PlaceElem::Index(i) => {
+                    self.punct(".")?;
+                    self.lit(i)?;
+                }
+                PlaceElem::Deref => {
+                    self.punct(".")?;
+                    self.lit("*")?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn local(&mut self, local: &Local) -> std::fmt::Result {
+        if local.mutable {
+            self.kw("mut")?;
+        }
+        self.name(&local.name)?;
+        self.punct(":")?;
+        self.ty(&local.ty)
     }
 
     fn pat(&mut self, p: &Pat) -> std::fmt::Result {
@@ -861,7 +908,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             self.paren(|this| {
                 this._pat(p)?;
                 this.punct(":")?;
-                this.ty(p.type_of())
+                this.ty(p.ty())
             })
         } else {
             self._pat(p)
@@ -940,6 +987,9 @@ impl<'a, 'b> Printer<'a, 'b> {
             }
             Pat::Paren(_, _, p) => {
                 self.paren(|this| this.pat(p))?;
+            }
+            Pat::Unit(_, _) => {
+                self.lit("()")?;
             }
         }
         Ok(())
@@ -1065,7 +1115,7 @@ impl std::fmt::Display for Block {
     }
 }
 
-impl std::fmt::Display for Program {
+impl std::fmt::Display for Ast {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Printer::new(f).program(self)
     }
@@ -1181,7 +1231,7 @@ impl std::fmt::Display for Trait {
 
 struct Verbose<T>(T);
 
-impl Program {
+impl Ast {
     pub fn verbose(&self) -> impl std::fmt::Display + '_ {
         Verbose(self)
     }
@@ -1241,7 +1291,7 @@ impl Impl {
     }
 }
 
-impl<'a> std::fmt::Display for Verbose<&'a Program> {
+impl<'a> std::fmt::Display for Verbose<&'a Ast> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Printer::new(f).verbose().program(self.0)
     }

@@ -6,7 +6,7 @@ use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::PathPatField;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
@@ -65,7 +65,7 @@ pub struct Context {
 }
 
 impl Pass for Context {
-    fn run(&mut self, program: &Program) -> Program {
+    fn run(&mut self, program: &Ast) -> Ast {
         self.map_program(program)
     }
 
@@ -323,11 +323,11 @@ impl Mapper for Context {
                     e0
                 } else {
                     self.report.err(
-                        e.span_of(),
+                        e.span(),
                         "Invalid left-hand side of assignment",
                         "Expected a variable, index, or field expression.",
                     );
-                    Expr::Err(e.span_of(), e.type_of().clone())
+                    Expr::Err(e.span(), e.ty().clone())
                 };
                 let e1 = self.map_expr(e1);
                 Expr::Assign(*s, t, Rc::new(e0), Rc::new(e1))
@@ -512,8 +512,8 @@ impl Mapper for Context {
                 }
             }
             Pat::Var(_, _, x) => {
-                let t = self.map_type(p.type_of());
-                let s = p.span_of();
+                let t = self.map_type(p.ty());
+                let s = p.span();
                 Pat::Var(s, t, *x)
             }
             _ => self._map_pattern(p),
@@ -649,7 +649,7 @@ impl Context {
 
     fn expected_name(&mut self, e: &Expr) {
         self.report.err(
-            e.span_of(),
+            e.span(),
             "Expected a field label.",
             "Only `<name> = <expr>` is allowed.",
         );
@@ -662,8 +662,8 @@ impl Context {
     }
 
     fn expr_field(&mut self, e: &Expr) -> Option<(Name, Expr)> {
-        let s = e.span_of();
-        let t = self.map_type(e.type_of());
+        let s = e.span();
+        let t = self.map_type(e.ty());
         match e {
             Expr::Field(_, _, e, x) => {
                 let e = self.map_expr(e);
@@ -715,7 +715,7 @@ impl Context {
             }
             _ => {
                 self.report.err(
-                    e.span_of(),
+                    e.span(),
                     "Not a field.",
                     "Expected `<name> = <expr>`, `<name>` or `<expr>.<name>`.",
                 );
@@ -761,7 +761,7 @@ impl Context {
                 PathPatField::Named(x, p) => xps.insert(*x, p.clone()),
                 PathPatField::Unnamed(p) => {
                     self.report.err(
-                        p.span_of(),
+                        p.span(),
                         format!("Expected `{p} = <pat>`.",),
                         format!("Expected named pattern `{p} = <pat>`."),
                     );

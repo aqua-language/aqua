@@ -1,5 +1,5 @@
 use crate::ast::Expr;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::Type;
 use crate::syntax::span::Span;
@@ -35,7 +35,7 @@ impl Visitor for GatherConstraints<'_> {
     }
 
     fn visit_expr(&mut self, e: &Expr) {
-        self.span = e.span_of();
+        self.span = e.span();
         self._visit_expr(e);
         if let Expr::Assoc(s, t, i, x, ts) = e {
             self.ctx.add_constraint(Constraint::AssocDef(
@@ -49,7 +49,7 @@ impl Visitor for GatherConstraints<'_> {
     }
 
     fn visit_stmt(&mut self, s: &Stmt) {
-        self.span = s.span_of();
+        self.span = s.span();
         match s {
             Stmt::Var(s) => self.visit_stmt_var(s),
             Stmt::Expr(s) => self.visit_expr(s),
@@ -58,7 +58,7 @@ impl Visitor for GatherConstraints<'_> {
     }
 }
 
-impl Program {
+impl Ast {
     pub fn gather_constraints(&self, ctx: &mut Context) {
         self.visit(&mut GatherConstraints::new(ctx, self.span));
     }

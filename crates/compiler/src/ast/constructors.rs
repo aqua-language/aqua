@@ -12,7 +12,7 @@ use super::Index;
 use super::Map;
 use super::Name;
 use super::Path;
-use super::Program;
+use super::Ast;
 use super::Segment;
 use super::Stmt;
 use super::StmtDef;
@@ -28,9 +28,9 @@ use super::Trait;
 use super::Type;
 use super::TypeBody;
 
-impl Program {
-    pub fn new(span: Span, stmts: Vec<Stmt>) -> Program {
-        Program { span, stmts }
+impl Ast {
+    pub fn new(span: Span, stmts: Vec<Stmt>) -> Ast {
+        Ast { span, stmts }
     }
 }
 
@@ -181,12 +181,8 @@ impl StmtTraitDef {
 }
 
 impl Block {
-    pub fn new(span: Span, stmts: Vec<Stmt>, expr: Expr) -> Block {
-        Block {
-            span,
-            stmts,
-            expr: Rc::new(expr),
-        }
+    pub fn new(span: Span, stmts: Vec<Stmt>, expr: Option<Expr>) -> Block {
+        Block { span, stmts, expr }
     }
 }
 

@@ -1,9 +1,10 @@
+use super::Block;
 use super::Expr;
 use super::Pat;
 use super::Type;
 
 impl Expr {
-    pub fn type_of(&self) -> &Type {
+    pub fn ty(&self) -> &Type {
         match self {
             Expr::Int(_, t, ..) => t,
             Expr::Float(_, t, ..) => t,
@@ -47,16 +48,17 @@ impl Expr {
             Expr::Update(_, t, ..) => t,
             Expr::Anonymous(_, t) => t,
             Expr::Closure(_, t, ..) => t,
-            Expr::Ref(_, _) => todo!(),
-            Expr::RefMut(_, _) => todo!(),
-            Expr::Place(_, _) => todo!(),
-            Expr::Deref(_, _, _) => todo!(),
+            Expr::Ref(_, t, _) => t,
+            Expr::RefMut(_, t, _) => t,
+            Expr::Place(_, t, _) => t,
+            Expr::Deref(_, t, _) => t,
+            Expr::Unit(_, t) => t,
         }
     }
 }
 
 impl Pat {
-    pub fn type_of(&self) -> &Type {
+    pub fn ty(&self) -> &Type {
         match self {
             Pat::Path(_, t, ..) => t,
             Pat::Var(_, t, ..) => t,
@@ -73,6 +75,17 @@ impl Pat {
             Pat::Char(_, t, ..) => t,
             Pat::Annotate(_, t, ..) => t,
             Pat::Paren(_, t, ..) => t,
+            Pat::Unit(_, t) => t,
+        }
+    }
+}
+
+impl Block {
+    pub fn ty(&self) -> &Type {
+        if let Some(e) = &self.expr {
+            e.ty()
+        } else {
+            &Type::Unit
         }
     }
 }

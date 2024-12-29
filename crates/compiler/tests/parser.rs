@@ -1,8 +1,15 @@
 #[macro_use]
 mod common;
 use common::dsl::expr_assoc_unknown;
+use common::dsl::expr_deref;
+use common::dsl::expr_ref;
+use common::dsl::expr_ref_mut;
+use common::dsl::pat_unit;
 use common::dsl::query_join_on;
 use common::dsl::sugared::expr_anonymous;
+use common::dsl::ty_ref;
+use common::dsl::ty_ref_mut;
+use common::dsl::ty_unit;
 use common::passes::parse_expr;
 use compiler::aqua;
 use compiler::ast::Type;
@@ -450,9 +457,9 @@ fn test_parser_pat_record2() {
 }
 
 #[test]
-fn test_parser_pat_tuple0() {
+fn test_parser_pat_unit0() {
     let a = parse_pat(aqua!("()")).unwrap();
-    let b = pat_tuple([]);
+    let b = pat_unit();
     check!(a, b);
 }
 
@@ -1120,9 +1127,9 @@ fn test_parser_expr_array0() {
 }
 
 #[test]
-fn test_parser_expr_tuple0() {
+fn test_parser_expr_unit0() {
     let a = parse_expr(aqua!("()")).unwrap();
-    let b = expr_tuple([]);
+    let b = expr_unit();
     check!(a, b);
 }
 
@@ -1200,7 +1207,7 @@ fn test_parser_program_brace5() {
             stmt_expr(expr_block([], expr_int("1"))),
             stmt_expr(expr_block([], expr_int("2"))),
         ],
-        expr_unit(),
+        None,
     ))]);
     check!(a, b);
 }
@@ -1208,14 +1215,14 @@ fn test_parser_program_brace5() {
 #[test]
 fn test_parser_program_brace6() {
     let a = parse(aqua!("{;}")).unwrap();
-    let b = program([stmt_expr(expr_block([], expr_unit()))]);
+    let b = program([stmt_expr(expr_block([], None))]);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_program_brace7() {
     let a = parse(aqua!("{;;;;;;;;}")).unwrap();
-    let b = program([stmt_expr(expr_block([], expr_unit()))]);
+    let b = program([stmt_expr(expr_block([], None))]);
     check!(a, b);
 }
 
@@ -1243,7 +1250,7 @@ fn test_parser_program_paren1() {
 #[test]
 fn test_parser_program_paren2() {
     let a = parse(aqua!("({});")).unwrap();
-    let b = program([stmt_expr(expr_paren(expr_block([], expr_unit())))]);
+    let b = program([stmt_expr(expr_paren(expr_block([], None)))]);
     check!(a, b);
 }
 
@@ -1696,9 +1703,9 @@ fn test_parser_type_never() {
 }
 
 #[test]
-fn test_parser_type_unit() {
+fn test_parser_type_unit0() {
     let a = parse_type(aqua!("()")).unwrap();
-    let b = Type::Tuple(vec![]);
+    let b = ty_unit();
     check!(a, b);
 }
 
@@ -1720,13 +1727,6 @@ fn test_parser_type_record1() {
 fn test_parser_type_record2() {
     let a = parse_type(aqua!("record(x:i32, y:i32)")).unwrap();
     let b = ty_record([("x", ty("i32")), ("y", ty("i32"))]);
-    check!(a, b);
-}
-
-#[test]
-fn test_parser_type_tuple0() {
-    let a = parse_type(aqua!("()")).unwrap();
-    let b = ty_tuple([]);
     check!(a, b);
 }
 
@@ -1826,6 +1826,41 @@ fn test_parser_anonymous_impl() {
 }
 
 #[test]
+fn test_parser_ref_expr0() {
+    let a = parse_expr(aqua!("&1")).unwrap();
+    let b = expr_ref(expr_int("1"));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_ref_mut_expr1() {
+    let a = parse_expr(aqua!("&mut 1")).unwrap();
+    let b = expr_ref_mut(expr_int("1"));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_deref_expr0() {
+    let a = parse_expr(aqua!("*x")).unwrap();
+    let b = expr_deref(expr_var("x"));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_ref_type0() {
+    let a = parse_type(aqua!("&i32")).unwrap();
+    let b = ty_ref(ty("i32"));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_ref_mut_type1() {
+    let a = parse_type(aqua!("&mut i32")).unwrap();
+    let b = ty_ref_mut(ty("i32"));
+    check!(a, b);
+}
+
+#[test]
 fn test_parser_recover0() {
     let a = parse(aqua!("def f(x: i32): i32 = 1")).unwrap_err();
     let b = program([stmt_err()]);
@@ -1878,7 +1913,7 @@ fn test_parser_recover2() {
             │
           1 │ def f(x: i32): i32 = +;
             │                      ┬
-            │                      ╰── Expected one of `{`, `[`, `(`, `-`, `!`, `_`, ...
+            │                      ╰── Expected one of `&`, `{`, `[`, `(`, `-`, `!`, ...
          ───╯
          
          Error: Unexpected token `;`
@@ -1886,7 +1921,7 @@ fn test_parser_recover2() {
             │
           1 │ def f(x: i32): i32 = +;
             │                       ┬
-            │                       ╰── Expected one of `{`, `[`, `(`, `-`, `!`, `_`, ...
+            │                       ╰── Expected one of `&`, `{`, `[`, `(`, `-`, `!`, ...
          ───╯"
     );
 }
@@ -1903,7 +1938,7 @@ fn test_parser_recover3() {
             │
           1 │ def f(x: +): i32 = 1;
             │          ┬
-            │          ╰── Expected one of `[`, `(`, `!`, `_`, `struct`, `record`, ...
+            │          ╰── Expected one of `&`, `[`, `(`, `!`, `_`, `struct`, ...
          ───╯"
     );
 }

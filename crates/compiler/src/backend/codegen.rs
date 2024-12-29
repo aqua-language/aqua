@@ -1,7 +1,7 @@
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::Name;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
@@ -13,7 +13,7 @@ use crate::builtins::value::Function;
 use crate::print::Print;
 
 pub trait Codegen<'a>: Print<'a> {
-    fn program(&mut self, p: &Program) -> std::fmt::Result;
+    fn program(&mut self, p: &Ast) -> std::fmt::Result;
 
     fn param(&mut self, xt: &(Name, Type)) -> std::fmt::Result;
 

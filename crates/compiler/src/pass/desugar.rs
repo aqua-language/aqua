@@ -7,7 +7,7 @@ use crate::ast::Impl;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Type;
 use crate::pass::Pass;
 use crate::syntax::splice::Splice;
@@ -26,7 +26,7 @@ pub struct Context {
 }
 
 impl Pass for Context {
-    fn run(&mut self, program: &Program) -> Program {
+    fn run(&mut self, program: &Ast) -> Ast {
         self.map_program(program)
     }
 
@@ -60,7 +60,7 @@ impl Context {
                 e
             } else {
                 let xts = xs.into_iter().map(|x| (x, Type::Unknown)).collect();
-                Expr::Lambda(e.span_of(), Type::Unknown, xts, Type::Unknown, Rc::new(e))
+                Expr::Lambda(e.span(), Type::Unknown, xts, Type::Unknown, Rc::new(e))
             }
         }
     }
@@ -68,7 +68,7 @@ impl Context {
 
 impl Mapper for Context {
     fn map_expr(&mut self, e: &Expr) -> Expr {
-        let t = self.map_type(e.type_of());
+        let t = self.map_type(e.ty());
         match e {
             Expr::InfixBinaryOp(s, _, op, e0, e1) => {
                 let e0 = self.map_expr(e0);

@@ -3,7 +3,6 @@ use super::Pat;
 use super::Type;
 
 impl Expr {
-    #[inline(always)]
     pub fn with_type(self, t: Type) -> Expr {
         match self {
             Expr::Int(s, _, v) => Expr::Int(s, t, v),
@@ -50,16 +49,16 @@ impl Expr {
             Expr::LetIn(s, _, x, t1, e0, e1) => Expr::LetIn(s, t, x, t1, e0, e1),
             Expr::Update(s, _, x, e0, e1) => Expr::Update(s, t, x, e0, e1),
             Expr::Anonymous(s, _) => Expr::Anonymous(s, t),
-            Expr::Ref(_, _) => todo!(),
-            Expr::RefMut(_, _) => todo!(),
-            Expr::Place(_, _) => todo!(),
+            Expr::Ref(_, _, _) => todo!(),
+            Expr::RefMut(_, _, _) => todo!(),
+            Expr::Place(_, _, _) => todo!(),
             Expr::Deref(_, _, _) => todo!(),
+            Expr::Unit(_, _) => todo!(),
         }
     }
 }
 
 impl Pat {
-    #[inline(always)]
     pub fn with_type(self, t: Type) -> Pat {
         match self {
             Pat::Path(s, _, p, a) => Pat::Path(s, t, p, a),
@@ -77,6 +76,7 @@ impl Pat {
             Pat::Char(s, _, v) => Pat::Char(s, t, v),
             Pat::Annotate(s, _, p) => Pat::Annotate(s, t, p),
             Pat::Paren(s, _, p) => Pat::Paren(s, t, p),
+            Pat::Unit(s, _) => Pat::Unit(s, t),
         }
     }
 }

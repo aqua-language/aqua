@@ -76,6 +76,7 @@ pub mod prelude {
     // pub use crate::builtins::url::Url;
     pub use crate::builtins::vec::Vec;
     pub use crate::builtins::writer::Writer;
+    pub use crate::builtins::bag::Bag;
     pub use crate::traits::Data;
     pub use crate::traits::DeepClone;
 

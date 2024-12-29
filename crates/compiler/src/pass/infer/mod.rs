@@ -24,7 +24,7 @@ use crate::ast::ExprBody;
 use crate::ast::Impl;
 use crate::ast::ImplVar;
 use crate::ast::Name;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtImpl;
@@ -56,11 +56,11 @@ pub struct Context {
     pub report: Report,
     pub decls: declare::Context,
     pub depth: usize,
-    pub commit: bool,
+    pub rollback: bool,
 }
 
 impl Pass for Context {
-    fn run(&mut self, program: &Program) -> Program {
+    fn run(&mut self, program: &Ast) -> Ast {
         program.visit(&mut self.decls);
         program.map(self)
     }
@@ -112,7 +112,7 @@ impl Context {
             report: Report::new(),
             decls: declare::Context::default(),
             depth: 0,
-            commit: false,
+            rollback: false,
         }
     }
 
@@ -254,7 +254,7 @@ impl Context {
                 .iter()
                 .zip(ts1.iter())
                 .try_for_each(|(t0, t1)| self.try_unify(t0, t1)),
-            (Type::Lambda(ts0, t0), Type::Lambda(ts1, t1)) if ts0.len() == ts1.len() => ts0
+            (Type::Function(ts0, t0), Type::Function(ts1, t1)) if ts0.len() == ts1.len() => ts0
                 .iter()
                 .chain([t0.as_ref()])
                 .zip(ts1.iter().chain([t1.as_ref()]))
@@ -360,10 +360,10 @@ impl Mapper for Context {
         self.expr_stack.pop();
     }
 
-    fn map_program(&mut self, program: &Program) -> Program {
+    fn map_program(&mut self, program: &Ast) -> Ast {
         let program = program.annotate(self);
         let stmts = self.map_stmts(&program.stmts);
-        let program = Program::new(program.span, stmts);
+        let program = Ast::new(program.span, stmts);
         let p = program.apply(self);
         self.solve_constraints(p.span);
         p.defaults(self);
@@ -410,7 +410,7 @@ impl Mapper for Context {
                 }
                 let e = e.annotate(self);
                 self.visit_expr(&e);
-                self.unify(s.span, e.span_of(), &s.ty, e.type_of());
+                self.unify(s.span, e.span(), &s.ty, e.ty());
                 self.solve_constraints(s.span);
                 let stmt = StmtDef::new(
                     s.span,
@@ -440,9 +440,9 @@ impl Mapper for Context {
 
     fn map_stmt_var(&mut self, s: &StmtVar) -> StmtVar {
         self.visit_expr(&s.expr);
-        self.unify(s.span, s.expr.span_of(), &s.ty, s.expr.type_of());
+        self.unify(s.span, s.expr.span(), &s.ty, s.expr.ty());
         self.bind(s.name, (s.span, s.ty.clone()));
-        StmtVar::new(s.expr.span_of(), s.name, s.ty.clone(), s.expr.clone())
+        StmtVar::new(s.expr.span(), s.name, s.ty.clone(), s.expr.clone())
     }
 }
 
@@ -480,7 +480,7 @@ impl Visitor for Context {
                         .unwrap()
                         .instantiate(&gsub);
                     self.visit_expr(&e);
-                    self.unify(e.span_of(), stmt.span, e.type_of(), &t2);
+                    self.unify(e.span(), stmt.span, e.ty(), &t2);
                 }
                 let t1 = Type::Struct(*x, ts.clone());
                 self.unify(*s, stmt.span, t0, &t1);
@@ -500,13 +500,13 @@ impl Visitor for Context {
                     .unwrap()
                     .instantiate(&gsub);
                 self.visit_expr(e);
-                self.unify(e.span_of(), stmt.span, e.type_of(), &t2);
+                self.unify(e.span(), stmt.span, e.ty(), &t2);
                 let t1 = Type::Enum(*x, ts.clone());
                 self.unify(*s, stmt.span, t0, &t1);
             }
             Expr::Tuple(s, t0, es) => {
                 self.visit_exprs(es);
-                let ts = es.iter().map(|e| e.type_of().clone()).collect::<Vec<_>>();
+                let ts = es.iter().map(|e| e.ty().clone()).collect::<Vec<_>>();
                 let t1 = Type::Tuple(ts);
                 self.unify(*s, *s, t0, &t1);
             }
@@ -528,7 +528,7 @@ impl Visitor for Context {
                     .map(|p| Constraint::WhereClause(*s, p.instantiate(&gsub)))
                     .collect::<Vec<_>>();
                 self.add_constraints(preds);
-                let t2 = Type::Lambda(
+                let t2 = Type::Function(
                     stmt.params.values().cloned().collect::<Vec<_>>(),
                     Rc::new(stmt.ty.clone()),
                 )
@@ -536,23 +536,23 @@ impl Visitor for Context {
                 self.unify(*s, stmt.span, t0, &t2);
             }
             Expr::Call(s, t0, e1, es) => {
-                let ts = es.iter().map(|e| e.type_of().clone()).collect::<Vec<_>>();
-                let t2 = Type::Lambda(ts, Rc::new(t0.clone()));
-                self.unify(*s, e1.span_of(), e1.type_of(), &t2);
+                let ts = es.iter().map(|e| e.ty().clone()).collect::<Vec<_>>();
+                let t2 = Type::Function(ts, Rc::new(t0.clone()));
+                self.unify(*s, e1.span(), e1.ty(), &t2);
                 self.visit_expr(e1);
                 self.visit_exprs(es);
             }
             Expr::Block(s, t0, b) => {
                 self.visit_block(b);
-                self.unify(*s, e.span_of(), t0, b.expr.type_of());
+                self.unify(*s, e.span(), t0, b.ty());
             }
             Expr::Field(s, t0, e, x) => {
                 self.visit_expr(e);
-                self.add_constraint(Constraint::Field(*s, t0.clone(), e.type_of().clone(), *x));
+                self.add_constraint(Constraint::Field(*s, t0.clone(), e.ty().clone(), *x));
             }
             Expr::Index(s, t0, e, i) => {
                 self.visit_expr(e);
-                let t = e.type_of().apply(self);
+                let t = e.ty().apply(self);
                 let Type::Tuple(ts) = &t else {
                     self.report.err(
                         *s,
@@ -569,16 +569,16 @@ impl Visitor for Context {
                     );
                     return;
                 };
-                self.unify(*s, e.span_of(), t0, t1);
+                self.unify(*s, e.span(), t0, t1);
             }
             Expr::Array(s, t0, es) => {
                 self.visit_exprs(es);
                 let t1 = es
                     .first()
-                    .map(|e| e.type_of().clone())
+                    .map(|e| e.ty().clone())
                     .unwrap_or_else(|| self.fresh_tv(TypeVarKind::General));
                 for e in es.iter() {
-                    self.unify(*s, e.span_of(), e.type_of(), &t1)
+                    self.unify(*s, e.span(), e.ty(), &t1)
                 }
                 let t2 = Type::Builtin(Name::from("Array"), vec![t1]);
                 self.unify(*s, *s, t0, &t2);
@@ -587,7 +587,7 @@ impl Visitor for Context {
             Expr::Assign(s, t0, e0, e1) => {
                 self.visit_expr(e0);
                 self.visit_expr(e1);
-                self.unify(*s, e0.span_of(), e0.type_of(), e1.type_of());
+                self.unify(*s, e0.span(), e0.ty(), e1.ty());
                 self.unify(*s, *s, t0, &unit());
             }
             Expr::Return(_, _, _) => todo!(),
@@ -599,25 +599,25 @@ impl Visitor for Context {
                     self.bind(*x, (x.span, t.clone()));
                 }
                 let ts0 = xts0.iter().map(|(_, t)| t.clone()).collect::<Vec<_>>();
-                let t2 = Type::Lambda(ts0, Rc::new(t1.clone()));
+                let t2 = Type::Function(ts0, Rc::new(t1.clone()));
                 self.unify(*s, *s, t0, &t2);
                 self.visit_expr(e0);
-                self.unify(*s, e0.span_of(), &t1, e0.type_of());
+                self.unify(*s, e0.span(), &t1, e0.ty());
                 self.exit_scope();
             }
             Expr::Match(_, _, _, _) => todo!(),
             Expr::While(s, t0, e0, e1) => {
                 self.visit_expr(e0);
                 self.visit_expr(e1);
-                self.unify(*s, e0.span_of(), e0.type_of(), &bool());
+                self.unify(*s, e0.span(), e0.ty(), &bool());
                 self.unify(*s, *s, t0, &unit());
-                self.unify(*s, e1.span_of(), t0, e1.type_of());
+                self.unify(*s, e1.span(), t0, e1.ty());
             }
             Expr::Record(s, t0, xes) => {
                 xes.iter().for_each(|(_, e)| self.visit_expr(e));
                 let xts = xes
                     .iter()
-                    .map(|(x, e)| (*x, e.type_of().clone()))
+                    .map(|(x, e)| (*x, e.ty().clone()))
                     .collect::<Map<_, _>>();
                 let t1 = Type::Record(xts);
                 self.unify(*s, *s, t0, &t1);
@@ -626,7 +626,7 @@ impl Visitor for Context {
                 self.visit_expr(e0);
                 self.visit_expr(e1);
                 self.unify(*s, *s, t0, &unit());
-                self.unify(*s, *s, t0, &e1.type_of());
+                self.unify(*s, *s, t0, &e1.ty());
             }
             Expr::Assoc(s, t, i, x1, ts1) => {
                 self.type_scope().constraints.insert(Constraint::AssocDef(
@@ -651,9 +651,9 @@ impl Visitor for Context {
                 self.visit_expr(e0);
                 self.visit_expr(e1);
                 self.visit_expr(e2);
-                self.unify(*s, *s, e0.type_of(), &bool());
-                self.unify(*s, e1.span_of(), t, e1.type_of());
-                self.unify(*s, e2.span_of(), t, e2.type_of());
+                self.unify(*s, *s, e0.ty(), &bool());
+                self.unify(*s, e1.span(), t, e1.ty());
+                self.unify(*s, e2.span(), t, e2.ty());
             }
             Expr::IntSuffix(..) => unreachable!(),
             Expr::FloatSuffix(..) => unreachable!(),
@@ -666,6 +666,7 @@ impl Visitor for Context {
             Expr::RefMut(..) => todo!(),
             Expr::Place(..) => todo!(),
             Expr::Deref(..) => todo!(),
+            Expr::Unit(s, t) => self.unify(*s, *s, t, &Type::Unit),
         }
     }
 }

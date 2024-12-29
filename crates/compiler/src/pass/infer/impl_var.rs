@@ -34,6 +34,13 @@ impl ImplVarValue {
             ImplVarValue::Unknown => None,
         }
     }
+
+    pub fn is_unknown(self) -> bool {
+        match self {
+            ImplVarValue::Known(_) => false,
+            ImplVarValue::Unknown => true,
+        }
+    }
 }
 
 impl std::fmt::Display for ImplVarValue {

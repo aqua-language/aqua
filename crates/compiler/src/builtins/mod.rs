@@ -92,6 +92,7 @@ pub mod types {
     pub mod vec;
     pub mod window;
     pub mod writer;
+    pub mod unit;
 }
 mod functions {
     mod io;

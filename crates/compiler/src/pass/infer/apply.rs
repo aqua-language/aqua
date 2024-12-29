@@ -2,7 +2,7 @@
 use std::rc::Rc;
 
 use crate::ast::Impl;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::Type;
@@ -58,8 +58,8 @@ impl Impl {
     }
 }
 
-impl Program {
-    pub fn apply(&self, ctx: &mut Context) -> Program {
+impl Ast {
+    pub fn apply(&self, ctx: &mut Context) -> Ast {
         self.map(&mut Apply::new(ctx))
     }
 }

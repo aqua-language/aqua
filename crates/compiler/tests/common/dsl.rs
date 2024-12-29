@@ -12,7 +12,8 @@ use compiler::ast::Index;
 use compiler::ast::Map;
 use compiler::ast::Name;
 use compiler::ast::Pat;
-use compiler::ast::Program;
+use compiler::ast::Place;
+use compiler::ast::Ast;
 use compiler::ast::QueryOp;
 use compiler::ast::Stmt;
 use compiler::ast::StmtDef;
@@ -31,8 +32,8 @@ use compiler::ast::TypeBody;
 use compiler::ast::TypeVar;
 use compiler::syntax::span::Span;
 
-pub fn program<const N: usize>(ss: [Stmt; N]) -> Program {
-    Program::new(span(), vec(ss))
+pub fn program<const N: usize>(ss: [Stmt; N]) -> Ast {
+    Ast::new(span(), vec(ss))
 }
 
 pub fn stmt_trait<const N: usize, const M: usize, const K: usize, const L: usize>(
@@ -161,7 +162,7 @@ pub fn ty_tuple<const N: usize>(ts: [Type; N]) -> Type {
 }
 
 pub fn ty_lambda<const N: usize>(ts: [Type; N], t: Type) -> Type {
-    Type::Lambda(vec(ts), Rc::new(t))
+    Type::Function(vec(ts), Rc::new(t))
 }
 
 pub fn ty_var(id: u32) -> Type {
@@ -187,7 +188,7 @@ pub fn ty_record<const N: usize>(xts: [(&'static str, Type); N]) -> Type {
 }
 
 pub fn ty_unit() -> Type {
-    Type::Tuple(vec([]))
+    Type::Unit
 }
 
 pub fn pat_record<const N: usize>(xps: [(&'static str, Pat); N]) -> Pat {
@@ -612,6 +613,26 @@ pub fn expr_assign(e0: Expr, e1: Expr) -> Expr {
     Expr::Assign(span(), Type::Unknown, Rc::new(e0), Rc::new(e1))
 }
 
+pub fn expr_ref(e: Expr) -> Expr {
+    Expr::Ref(span(), Type::Unknown, Rc::new(e))
+}
+
+pub fn expr_ref_mut(e: Expr) -> Expr {
+    Expr::RefMut(span(), Type::Unknown, Rc::new(e))
+}
+
+pub fn expr_deref(e: Expr) -> Expr {
+    Expr::Deref(span(), Type::Unknown, Rc::new(e))
+}
+
+pub fn ty_ref(t: Type) -> Type {
+    Type::Ref(vec![], Rc::new(t))
+}
+
+pub fn ty_ref_mut(t: Type) -> Type {
+    Type::RefMut(vec![], Rc::new(t))
+}
+
 // pub fn stmt_mod<const N: usize>(x: &'static str, ss: [Stmt; N]) -> Stmt {
 //     StmtMod::new(span(), name(x), Vec(ss)).into()
 // }
@@ -645,7 +666,7 @@ pub fn stmt_expr(e: Expr) -> Stmt {
 }
 
 pub fn expr_unit() -> Expr {
-    Expr::Tuple(span(), Type::Unknown, vec([]))
+    Expr::Unit(span(), Type::Unknown)
 }
 
 pub fn expr_struct<const N: usize, const M: usize>(
@@ -802,7 +823,7 @@ pub fn pat_string(s: &'static str) -> Pat {
 }
 
 pub fn pat_unit() -> Pat {
-    Pat::Tuple(span(), Type::Unknown, vec([]))
+    Pat::Unit(span(), Type::Unknown)
 }
 
 pub fn pat_bool(b: bool) -> Pat {
@@ -857,14 +878,14 @@ pub fn expr_if(e0: Expr, b0: Block) -> Expr {
         span(),
         Type::Unknown,
         Rc::new(e0),
-        Rc::new(Expr::Block(span(), Type::Unknown, b0)),
-        Rc::new(Expr::Block(span(), Type::Unknown, block([], expr_unit()))),
+        Rc::new(Expr::Block(span(), Type::Unknown, Rc::new(b0))),
+        Rc::new(Expr::Block(span(), Type::Unknown, Rc::new(block([], None)))),
     )
 }
 
 pub fn expr_if_else(e0: Expr, b0: Block, b1: Block) -> Expr {
-    let e1 = Expr::Block(span(), Type::Unknown, b0);
-    let e2 = Expr::Block(span(), Type::Unknown, b1);
+    let e1 = Expr::Block(span(), Type::Unknown, Rc::new(b0));
+    let e2 = Expr::Block(span(), Type::Unknown, Rc::new(b1));
     Expr::IfElse(span(), Type::Unknown, Rc::new(e0), Rc::new(e1), Rc::new(e2))
 }
 
@@ -892,16 +913,16 @@ pub fn expr_char(c: char) -> Expr {
     Expr::Char(span(), Type::Unknown, c)
 }
 
-pub fn block<const N: usize>(ss: [Stmt; N], e: Expr) -> Block {
-    Block::new(span(), vec(ss), e)
+pub fn block<const N: usize>(ss: [Stmt; N], e: impl Into<Option<Expr>>) -> Block {
+    Block::new(span(), vec(ss), e.into())
 }
 
-pub fn expr_block<const N: usize>(ss: [Stmt; N], e: Expr) -> Expr {
-    Expr::Block(span(), Type::Unknown, block(ss, e))
+pub fn expr_block<const N: usize>(ss: [Stmt; N], e: impl Into<Option<Expr>>) -> Expr {
+    Expr::Block(span(), Type::Unknown, Rc::new(block(ss, e)))
 }
 
-pub fn spanned_expr_block<const N: usize>(span: Span, ss: [Stmt; N], e: Expr) -> Expr {
-    Expr::Block(span, Type::Unknown, block(ss, e))
+pub fn spanned_expr_block<const N: usize>(span: Span, ss: [Stmt; N], e: Option<Expr>) -> Expr {
+    Expr::Block(span, Type::Unknown, Rc::new(block(ss, e)))
 }
 
 pub fn expr_err() -> Expr {
@@ -1024,7 +1045,7 @@ pub fn aggr_if(x0: &'static str, x1: &'static str, e1: Expr, e2: Expr) -> Aggr {
 }
 
 pub fn expr_while(e: Expr, b: Block) -> Expr {
-    let e1 = Expr::Block(span(), Type::Unknown, b);
+    let e1 = Expr::Block(span(), Type::Unknown, Rc::new(b));
     Expr::While(span(), Type::Unknown, Rc::new(e), Rc::new(e1))
 }
 

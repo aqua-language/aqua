@@ -1,5 +1,5 @@
 use crate::ast::Impl;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::StmtDef;
 use crate::ast::Type;
 use crate::pass::infer::intrinstics::default_float;
@@ -44,7 +44,7 @@ impl Impl {
     }
 }
 
-impl Program {
+impl Ast {
     /// Set default values for all type variables in a program.
     pub fn defaults(&self, ctx: &mut Context) {
         Defaults::new(ctx).visit_program(self);

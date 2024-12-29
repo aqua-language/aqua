@@ -16,7 +16,7 @@ impl<K> Set<K> {
     where
         K: PartialEq,
     {
-        if !self.0.contains(&k) {
+        if !self.contains(&k) {
             self.0.push(k)
         }
     }

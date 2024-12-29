@@ -51,10 +51,11 @@ impl Expr {
             Expr::LetIn(_, t, x, t1, e0, e1) => Expr::LetIn(span, t, x, t1, e0, e1),
             Expr::Update(_, t, x, e0, e1) => Expr::Update(span, t, x, e0, e1),
             Expr::Anonymous(_, t) => Expr::Anonymous(span, t),
-            Expr::Ref(_, _) => todo!(),
-            Expr::RefMut(_, _) => todo!(),
-            Expr::Place(_, _) => todo!(),
-            Expr::Deref(_, _, _) => todo!(),
+            Expr::Ref(_, t, e) => Expr::Ref(span, t, e),
+            Expr::RefMut(_, t, e) => Expr::RefMut(span, t, e),
+            Expr::Place(_, t, e) => Expr::Place(span, t, e),
+            Expr::Deref(_, t, e) => Expr::Deref(span, t, e),
+            Expr::Unit(_, t) => Expr::Unit(span, t),
         }
     }
 }
@@ -77,6 +78,7 @@ impl Pat {
             Pat::Char(_, t, v) => Pat::Char(s, t, v),
             Pat::Annotate(_, t, p) => Pat::Annotate(s, t, p),
             Pat::Paren(_, t, p) => Pat::Paren(s, t, p),
+            Pat::Unit(_, t) => Pat::Unit(s, t),
         }
     }
 }

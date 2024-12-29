@@ -24,6 +24,7 @@ use super::types::keyed_stream::KeyedStream;
 pub use super::types::record::Record;
 pub use super::types::stream::Stream;
 pub use super::types::tuple::Tuple;
+use super::types::unit::Unit;
 pub use super::types::variant::Variant;
 
 use std::rc::Rc;
@@ -47,6 +48,7 @@ pub enum Value {
     I32(i32),
     I64(i64),
     I8(i8),
+    Bag(runtime::prelude::Bag<Value>),
     Option(runtime::builtins::option::Option<Rc<Value>>),
     Path(Path),
     Reader(Reader),
@@ -76,6 +78,7 @@ pub enum Value {
     Range(runtime::builtins::range::Range<Rc<Value>>),
     Iterator(Adaptor),
     Storage(super::types::storage::Storage),
+    Unit(Unit),
 }
 
 impl Value {

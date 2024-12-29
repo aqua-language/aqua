@@ -2,6 +2,7 @@ use super::types::backend::Backend;
 use super::types::iterator::Adaptor;
 use super::types::keyed_stream::KeyedStream;
 use super::types::storage::Storage;
+use super::types::unit::Unit;
 use super::value::Value;
 use crate::builtins::types::array::Array;
 use crate::builtins::types::dataflow::Dataflow;
@@ -11,19 +12,20 @@ use crate::builtins::types::record::Record;
 use crate::builtins::types::stream::Stream;
 use crate::builtins::types::tuple::Tuple;
 use crate::builtins::types::variant::Variant;
-use runtime::builtins::url::Url;
-use runtime::builtins::window::Window;
 use runtime::builtins::blob::Blob;
 use runtime::builtins::dict::Dict;
 use runtime::builtins::duration::Duration;
-use runtime::builtins::format::Format;
 use runtime::builtins::file::File;
+use runtime::builtins::format::Format;
 use runtime::builtins::path::Path;
 use runtime::builtins::reader::Reader;
 use runtime::builtins::set::Set;
 use runtime::builtins::socket::SocketAddr;
 use runtime::builtins::time::Time;
+use runtime::builtins::url::Url;
+use runtime::builtins::window::Window;
 use runtime::builtins::writer::Writer;
+use runtime::prelude::Bag;
 use std::cmp::Ordering;
 use std::rc::Rc;
 
@@ -64,6 +66,7 @@ conv!(Duration, Duration, as_duration);
 conv!(Dataflow, Dataflow, as_dataflow);
 conv!(Format, Format, as_format);
 conv!(File, File, as_file);
+conv!(Bag<Value>, Bag, as_bag);
 conv!(
     runtime::builtins::option::Option<Rc<Value>>,
     Option,
@@ -101,3 +104,4 @@ conv!(Instance, Instance, as_instance);
 conv!(Ordering, Ordering, as_ordering);
 conv!(Backend, Backend, as_backend);
 conv!(Url, Url, as_url);
+conv!(Unit, Unit, as_unit);

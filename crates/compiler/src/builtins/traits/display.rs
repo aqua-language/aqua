@@ -66,6 +66,8 @@ impl std::fmt::Display for Value {
             Value::Url(v) => write!(f, "{v}"),
             Value::Iterator(_) => unreachable!(),
             Value::Storage(_) => todo!(),
+            Value::Bag(_) => todo!(),
+            Value::Unit(v) => write!(f, "{v}")
         }
     }
 }

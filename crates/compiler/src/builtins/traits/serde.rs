@@ -84,6 +84,8 @@ impl Serialize for Value {
             Value::Range(v) => v.serialize(serializer),
             Value::Iterator(_) => unreachable!(),
             Value::Storage(v) => v.serialize(serializer),
+            Value::Bag(_) => todo!(),
+            Value::Unit(v) => v.serialize(serializer),
         }
     }
 }
@@ -295,7 +297,7 @@ impl<'de> DeserializeSeed<'de> for Seed {
         D: Deserializer<'de>,
     {
         match self.0 {
-            Type::Lambda(_, _) => unreachable!(),
+            Type::Function(_, _) => unreachable!(),
             Type::Tuple(ts) if ts.is_empty() => <() as Deserialize>::deserialize(deserializer)
                 .map(|()| Value::from(Tuple::new(vec![]))),
             Type::Tuple(ts) => {
@@ -403,6 +405,7 @@ impl<'de> DeserializeSeed<'de> for Seed {
             Type::Alias(..) => unreachable!(),
             Type::Ref(_, _) => todo!(),
             Type::RefMut(_, _) => todo!(),
+            Type::Unit => todo!(),
         }
     }
 }

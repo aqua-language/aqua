@@ -1,9 +1,12 @@
+//! Replaces `Type::Unknown` and `Impl::Unknown` with `Type::Var(v)` and `Impl::Var(v)`
+//! respectively.
+
 use std::rc::Rc;
 
 use crate::ast::Expr;
 use crate::ast::Impl;
 use crate::ast::Pat;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtImpl;
 use crate::ast::StmtTrait;
@@ -82,8 +85,8 @@ impl StmtTrait {
     }
 }
 
-impl Program {
-    pub fn annotate(&self, ctx: &mut Context) -> Program {
+impl Ast {
+    pub fn annotate(&self, ctx: &mut Context) -> Ast {
         Annotate::new(ctx).map_program(self)
     }
 }

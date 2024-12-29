@@ -1,5 +1,5 @@
 use crate::ast::Expr;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::Type;
 use crate::diag::Report;
 use crate::traversal::visitor::Visitor;
@@ -16,7 +16,7 @@ impl Context {
     }
 }
 
-pub fn check(program: &Program) -> Report {
+pub fn check(program: &Ast) -> Report {
     let mut ctx = Context::new();
     ctx.visit_program(program);
     ctx.report

@@ -14,7 +14,7 @@ use crate::ast::Expr;
 use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Path;
-use crate::ast::Program;
+use crate::ast::Ast;
 use crate::ast::QueryOp;
 use crate::ast::Type;
 use crate::diag::Report;
@@ -38,7 +38,7 @@ pub struct Context {
 }
 
 impl Pass for Context {
-    fn run(&mut self, program: &Program) -> Program {
+    fn run(&mut self, program: &Ast) -> Ast {
         self.map_program(program)
     }
 
@@ -398,7 +398,7 @@ mod util {
     }
 
     pub(super) fn expr_field(e: Rc<Expr>, x: Name) -> Expr {
-        Expr::Field(e.span_of() + x.span, Type::Unknown, e, x)
+        Expr::Field(e.span() + x.span, Type::Unknown, e, x)
     }
 
     /// Direct call

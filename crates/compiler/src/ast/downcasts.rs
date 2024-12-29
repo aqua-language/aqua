@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crate::pass::infer::solver::Constraint;
 
 use super::BuiltinDef;
@@ -11,7 +9,6 @@ use super::Map;
 use super::Name;
 use super::Pat;
 use super::Path;
-use super::Place;
 use super::Stmt;
 use super::StmtDef;
 use super::StmtEnum;
@@ -164,6 +161,7 @@ impl Expr {
                 let xt = e.as_param()?;
                 Some(Map::from(vec![xt]))
             }
+            Expr::Unit(_, _) => Some(Map::new()),
             _ => {
                 let xt = self.as_param()?;
                 Some(Map::from(vec![xt]))
@@ -231,16 +229,6 @@ impl Expr {
                 let x = p.as_name()?;
                 Some((x, self))
             }
-            _ => None,
-        }
-    }
-
-    pub fn as_place(&self) -> Option<Place> {
-        match self {
-            // x
-            Expr::Path(_, _, p) => Some(Place::Var(*p.as_name()?)),
-            // e.x
-            Expr::Field(_, _, e, x) => Some(Place::Field(Rc::new(e.as_place()?), *x)),
             _ => None,
         }
     }
