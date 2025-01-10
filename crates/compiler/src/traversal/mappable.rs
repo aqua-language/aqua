@@ -1,3 +1,4 @@
+use crate::ast::passes::infer::solver::Constraint;
 use crate::ast::Ast;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
@@ -10,7 +11,6 @@ use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::Type;
-use crate::passes::infer::solver::Constraint;
 
 use super::mapper::Mapper;
 

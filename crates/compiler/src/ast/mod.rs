@@ -1,3 +1,4 @@
+pub mod passes;
 mod constructors;
 mod downcasts;
 mod get_span;

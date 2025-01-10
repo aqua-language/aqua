@@ -6,6 +6,7 @@ use runtime::prelude::Format;
 use runtime::prelude::Set;
 use runtime::prelude::Window;
 
+use crate::ast::passes::infer::solver::Constraint;
 use crate::ast::Aggr;
 use crate::ast::Ast;
 use crate::ast::Block;
@@ -26,12 +27,12 @@ use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
+use crate::ast::StmtLocal;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::StmtLocal;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
@@ -45,7 +46,6 @@ use crate::builtins::value::Stream;
 use crate::builtins::value::Tuple;
 use crate::builtins::value::Value;
 use crate::builtins::value::Variant;
-use crate::passes::infer::solver::Constraint;
 use crate::syntax::span::Span;
 
 pub(crate) trait Visitor {

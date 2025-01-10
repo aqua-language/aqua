@@ -1,4 +1,4 @@
-use crate::passes::infer::solver::Constraint;
+use crate::ast::passes::infer::solver::Constraint;
 use crate::syntax::span::Span;
 
 use super::Block;

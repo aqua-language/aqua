@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use crate::ast::passes::Pass;
 use crate::ast::Ast;
 use crate::ast::Expr;
 use crate::ast::Impl;
@@ -24,7 +25,6 @@ use crate::ast::TypeBody;
 use crate::collections::map::Map;
 use crate::diag::Diagnostic;
 use crate::diag::Report;
-use crate::pass::Pass;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 

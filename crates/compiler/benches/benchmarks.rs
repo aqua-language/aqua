@@ -3,8 +3,7 @@ use std::rc::Rc;
 
 use compiler::analysis;
 use compiler::aqua;
-use compiler::pass;
-use compiler::pass::Pass as _;
+use compiler::ast::passes::Pass as _;
 use compiler::syntax::lexer::Lexer;
 use compiler::syntax::parser::Parser;
 use compiler::syntax::source::Cache;
@@ -247,7 +246,7 @@ fn desugar(bencher: Bencher, arg: Input) {
         .with_inputs(|| {
             let mut compiler = Compiler::default();
             let program = compiler.parse(arg.name, arg.code);
-            let ctx = compiler::pass::desugar::Context::new();
+            let ctx = compiler::ast::passes::desugar::Context::new();
             (ctx, program)
         })
         .bench_local_values(|(mut ctx, program)| {
@@ -262,7 +261,7 @@ fn querycomp(bencher: Bencher, arg: Input) {
             let mut compiler = Compiler::default();
             let program = compiler.parse(arg.name, arg.code);
             let program = compiler.run_query_desugar(&program);
-            let ctx = pass::query_desugar::Context::new();
+            let ctx = compiler::ast::passes::query_desugar::Context::new();
             (ctx, program)
         })
         .bench_local_values(|(mut ctx, program)| ctx.run(&program));
@@ -275,7 +274,7 @@ fn resolve(bencher: Bencher, arg: Input) {
             compiler.init();
             let program = compiler.parse(arg.name, arg.code);
             let program = compiler.run_resolve(&program);
-            let ctx = pass::query_desugar::Context::new();
+            let ctx = compiler::ast::passes::query_desugar::Context::new();
             (ctx, program)
         })
         .bench_local_values(|(mut ctx, program)| ctx.run(&program));
@@ -288,7 +287,7 @@ fn infer(bencher: Bencher, arg: Input) {
             compiler.init();
             let program = compiler.parse(arg.name, arg.code);
             let program = compiler.run_infer(&program);
-            let ctx = pass::query_desugar::Context::new();
+            let ctx = compiler::ast::passes::query_desugar::Context::new();
             (ctx, program)
         })
         .bench_local_values(|(mut ctx, program)| ctx.run(&program));

@@ -1,4 +1,4 @@
-use crate::passes::infer::solver::Constraint;
+use crate::ast::passes::infer::solver::Constraint;
 
 use super::BuiltinDef;
 use super::BuiltinType;
@@ -14,10 +14,10 @@ use super::Stmt;
 use super::StmtDef;
 use super::StmtEnum;
 use super::StmtImpl;
+use super::StmtLocal;
 use super::StmtStruct;
 use super::StmtTrait;
 use super::StmtType;
-use super::StmtLocal;
 use super::Trait;
 use super::Type;
 use super::TypeBody;

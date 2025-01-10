@@ -1,8 +1,8 @@
+use crate::ast::passes::infer::solver::Constraint;
 use crate::ast::Ast;
 use crate::ast::Expr;
 use crate::ast::Stmt;
 use crate::ast::Type;
-use crate::passes::infer::solver::Constraint;
 
 use super::visitor::Visitor;
 

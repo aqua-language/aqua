@@ -2,6 +2,7 @@
 
 use std::rc::Rc;
 
+use crate::ast::passes::infer::solver::Constraint;
 use crate::ast::Ast;
 use crate::ast::Block;
 use crate::ast::Expr;
@@ -29,7 +30,6 @@ use crate::ast::StmtType;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
-use crate::passes::infer::solver::Constraint;
 use crate::syntax::span::Span;
 
 pub(crate) trait Mapper {

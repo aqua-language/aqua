@@ -4,8 +4,8 @@ use common::dsl::ty;
 use common::dsl::ty_builtin;
 use common::dsl::ty_tuple;
 
-use compiler::pass::infer::type_var::TypeVarKind;
-use compiler::pass::infer::Context;
+use compiler::ast::passes::infer::type_var::TypeVarKind;
+use compiler::ast::passes::infer::Context;
 
 #[test]
 fn test_unify_atom0() {

@@ -2,6 +2,7 @@ use std::rc::Rc;
 
 use smol_str::format_smolstr;
 
+use crate::ast::passes::Pass;
 use crate::ast::Ast;
 use crate::ast::Expr;
 use crate::ast::Impl;
@@ -10,7 +11,6 @@ use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Type;
-use crate::pass::Pass;
 use crate::syntax::span::Span;
 use crate::syntax::splice::Splice;
 use crate::syntax::splice::SpliceIterator;
