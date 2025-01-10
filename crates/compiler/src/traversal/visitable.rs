@@ -2,7 +2,7 @@ use crate::ast::Ast;
 use crate::ast::Expr;
 use crate::ast::Stmt;
 use crate::ast::Type;
-use crate::pass::infer::solver::Constraint;
+use crate::passes::infer::solver::Constraint;
 
 use super::visitor::Visitor;
 

@@ -30,7 +30,7 @@ use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
 use crate::ast::TypeVar;
-use crate::pass::infer::solver::Constraint;
+use crate::passes::infer::solver::Constraint;
 use crate::print::Print;
 
 struct Printer<'a, 'b> {

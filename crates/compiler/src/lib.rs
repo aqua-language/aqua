@@ -3,7 +3,7 @@ use std::rc::Rc;
 use ast::Ast;
 use config::CompilerConfig;
 use diag::Report;
-use pass::Pass;
+use passes::Pass;
 use syntax::lexer::Lexer;
 use syntax::parser::Parser;
 use syntax::span::Span;
@@ -12,7 +12,7 @@ pub mod analysis;
 pub mod ast;
 pub mod backend;
 pub mod diag;
-pub mod pass;
+pub mod passes;
 // pub mod ffi;
 pub mod builtins;
 pub mod collections;
@@ -37,16 +37,16 @@ macro_rules! aqua {
 #[derive(Debug)]
 pub struct Compiler {
     pub sources: syntax::source::Cache,
-    desugar: pass::desugar::Context,
-    query_desugar: pass::query_desugar::Context,
-    resolve: pass::resolve::Context,
-    lift: pass::lift::Context,
-    flatten: pass::flatten::Context,
-    expand: pass::expand::Context,
-    capture: pass::capture::Context,
-    infer: pass::infer::Context,
-    // ast_to_mir: pass::ast_to_mir::Context,
-    monomorphise: pass::monomorphise::Context,
+    desugar: passes::desugar::Context,
+    query_desugar: passes::query_desugar::Context,
+    resolve: passes::resolve::Context,
+    lift: passes::lift::Context,
+    flatten: passes::flatten::Context,
+    expand: passes::expand::Context,
+    capture: passes::capture::Context,
+    infer: passes::infer::Context,
+    // ast_to_mir: passes::ast_to_mir::Context,
+    monomorphise: passes::monomorphise::Context,
     pub interpreter: interpret::Context,
     pub report: Report,
     pub config: CompilerConfig,
@@ -62,16 +62,16 @@ impl Compiler {
     pub fn new(config: CompilerConfig) -> Self {
         Compiler {
             sources: syntax::source::Cache::new(),
-            desugar: pass::desugar::Context::new(),
-            query_desugar: pass::query_desugar::Context::new(),
-            resolve: pass::resolve::Context::new(),
-            lift: pass::lift::Context::new(),
-            flatten: pass::flatten::Context::new(),
-            expand: pass::expand::Context::new(),
-            capture: pass::capture::Context::new(),
-            infer: pass::infer::Context::new(),
-            // ast_to_mir: pass::ast_to_mir::Context::new(),
-            monomorphise: pass::monomorphise::Context::new(),
+            desugar: passes::desugar::Context::new(),
+            query_desugar: passes::query_desugar::Context::new(),
+            resolve: passes::resolve::Context::new(),
+            lift: passes::lift::Context::new(),
+            flatten: passes::flatten::Context::new(),
+            expand: passes::expand::Context::new(),
+            capture: passes::capture::Context::new(),
+            infer: passes::infer::Context::new(),
+            // ast_to_mir: passes::ast_to_mir::Context::new(),
+            monomorphise: passes::monomorphise::Context::new(),
             report: Report::new(),
             interpreter: interpret::Context::new(),
             config,
