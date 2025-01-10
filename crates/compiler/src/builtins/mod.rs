@@ -220,11 +220,11 @@ impl<'s> Context<'s> {
         self.report.append(&mut parser.report);
         self.report.append(&mut lexer.report);
         if self.report.is_empty() {
-            result.unwrap()
+            result.unwrap().v
         } else {
             panic!(
                 "Internal Compiler Error: {}",
-                self.report.string(&mut self.sources).unwrap()
+                self.report.to_string(&mut self.sources).unwrap()
             );
         }
     }

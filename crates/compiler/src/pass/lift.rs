@@ -1,29 +1,22 @@
-//! Lift defs to the top-level
+//! Lift functions, structs, enums, and traits to the top-level scope.
 //! * Assume defs can only capture defs, and not vars or generics.
 
 use std::rc::Rc;
 
-use runtime::HashMap;
+use std::collections::HashMap;
 
+use crate::ast::Ast;
 use crate::ast::Block;
 use crate::ast::Expr;
-use crate::ast::ExprBody;
-use crate::ast::Impl;
 use crate::ast::Map;
 use crate::ast::Name;
-use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
-use crate::ast::StmtTrait;
-use crate::ast::StmtTraitDef;
-use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::StmtVar;
 use crate::ast::Type;
-use crate::ast::TypeBody;
 use crate::diag::Report;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
@@ -32,15 +25,15 @@ use super::Pass;
 
 #[derive(Debug)]
 pub struct Context {
-    stack: Stack,
-    pub top: Vec<Stmt>,
-    pub unique: HashMap<Name, usize>,
+    unique: HashMap<Name, usize>,
+    stack: Vec<Map<Name, Name>>,
+    pub stmts: Vec<Stmt>,
     pub report: Report,
 }
 
 impl Pass for Context {
     fn run(&mut self, program: &Ast) -> Ast {
-        self.lift(program)
+        self.map_program(program)
     }
 
     fn report(&mut self) -> &mut Report {
@@ -48,51 +41,12 @@ impl Pass for Context {
     }
 }
 
-#[derive(Debug)]
-struct Stack {
-    unique: HashMap<Name, usize>,
-    scopes: Vec<Scope>,
-}
-
-impl Stack {
-    fn new() -> Stack {
-        Stack {
-            unique: HashMap::default(),
-            scopes: vec![Scope::new()],
-        }
-    }
-
-    fn bind(&mut self, old: Name) -> Name {
-        let uid = self
-            .unique
-            .entry(old)
-            .and_modify(|uid| *uid += 1)
-            .or_insert_with(|| 0);
-        let new = if *uid == 0 { old } else { old.suffix(uid) };
-        self.scopes.last_mut().unwrap().0.insert(old, new);
-        new
-    }
-
-    fn get(&self, x: &Name) -> Name {
-        *self.scopes.iter().rev().find_map(|s| s.0.get(x)).unwrap()
-    }
-}
-
-#[derive(Debug)]
-struct Scope(Map<Name, Name>);
-
-impl Scope {
-    fn new() -> Scope {
-        Scope(Map::new())
-    }
-}
-
 impl Default for Context {
     fn default() -> Self {
         Self {
-            stack: Stack::new(),
-            top: vec![],
             unique: HashMap::default(),
+            stack: vec![Map::new()],
+            stmts: vec![],
             report: Report::new(),
         }
     }
@@ -103,30 +57,46 @@ impl Context {
         Self::default()
     }
 
-    pub fn lift(&mut self, program: &Ast) -> Ast {
-        self.map_program(program)
+    fn bind(&mut self, old: Name) -> Name {
+        let uid = *self
+            .unique
+            .entry(old)
+            .and_modify(|uid| *uid += 1)
+            .or_insert(0);
+        let new = if uid == 0 { old } else { old.with_suffix(uid) };
+        self.stack.last_mut().unwrap().insert(old, new);
+        new
+    }
+
+    fn get(&self, x: &Name) -> Name {
+        *self
+            .stack
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(x))
+            .expect("Should be resolved")
     }
 }
 
 impl Visitor for Context {
     fn visit_stmt(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::Var(_) => {}
+            Stmt::Local(_) => {}
             Stmt::Def(s) => {
-                self.stack.bind(s.name);
+                self.bind(s.name);
             }
             Stmt::Trait(s) => {
-                self.stack.bind(s.name);
+                self.bind(s.name);
             }
-            Stmt::Impl(s) => {}
+            Stmt::Impl(_) => {}
             Stmt::Struct(s) => {
-                self.stack.bind(s.name);
+                self.bind(s.name);
             }
             Stmt::Enum(s) => {
-                self.stack.bind(s.name);
+                self.bind(s.name);
             }
             Stmt::Type(s) => {
-                self.stack.bind(s.name);
+                self.bind(s.name);
             }
             Stmt::Expr(_) => {}
             Stmt::Err(_) => {}
@@ -135,46 +105,24 @@ impl Visitor for Context {
 }
 
 impl Mapper for Context {
-    fn enter_scope(&mut self) {
-        self.stack.scopes.push(Scope::new());
-    }
-
-    fn exit_scope(&mut self) {
-        self.stack.scopes.pop();
-    }
-
     fn map_program(&mut self, program: &Ast) -> Ast {
         self.visit_program(program);
         for stmt in &program.stmts {
             let stmt = self.map_stmt(stmt);
-            self.top.push(stmt);
+            self.stmts.push(stmt);
         }
-        let stmts = std::mem::take(&mut self.top);
+        let stmts = std::mem::take(&mut self.stmts);
         Ast::new(program.span, stmts)
     }
 
-    fn map_stmt_var(&mut self, s: &StmtVar) -> StmtVar {
-        let span = s.span;
-        let ty = self.map_type(&s.ty);
-        let expr = self.map_expr(&s.expr);
-        let name = self.stack.get(&s.name);
-        StmtVar::new(span, name, ty, expr)
-    }
-
     fn map_stmt_def(&mut self, s: &StmtDef) -> StmtDef {
-        let name = self.stack.get(&s.name);
+        let name = self.get(&s.name);
         let generics = self.map_generics(&s.generics);
-        let params = self.map_params(&s.params).into();
+        let params = self.map_locals(&s.params).into();
         let ty = self.map_type(&s.ty);
         let where_clause = self.map_impls(&s.where_clause);
         let body = self.map_stmt_def_body(&s.body);
         StmtDef::new(s.span, name, generics, params, ty, where_clause, body)
-    }
-
-    fn map_param(&mut self, (x, t): &(Name, Type)) -> (Name, Type) {
-        let name = self.stack.bind(*x);
-        let ty = self.map_type(t);
-        (name, ty)
     }
 
     fn map_stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
@@ -187,40 +135,42 @@ impl Mapper for Context {
     }
 
     fn map_stmt_struct(&mut self, s: &StmtStruct) -> StmtStruct {
-        let name = self.stack.get(&s.name);
+        let name = self.get(&s.name);
         let generics = self.map_generics(&s.generics);
         let fields = self.map_type_fields(&s.fields).into();
         StmtStruct::new(s.span, name, generics, fields)
     }
 
     fn map_stmt_enum(&mut self, s: &StmtEnum) -> StmtEnum {
-        let name = self.stack.get(&s.name);
+        let name = self.get(&s.name);
         let generics = self.map_generics(&s.generics);
         let variants = self.map_type_variants(&s.variants).into();
         StmtEnum::new(s.span, name, generics, variants)
     }
 
     fn map_stmt_type(&mut self, s: &StmtType) -> StmtType {
-        let name = self.stack.get(&s.name);
+        let name = self.get(&s.name);
         let generics = self.map_generics(&s.generics);
         let ty = self.map_stmt_type_body(&s.body);
         StmtType::new(s.span, name, generics, ty)
     }
 
-    fn map_generic(&mut self, x: &Name) -> Name {
-        self.stack.bind(*x)
-    }
-
     fn map_type(&mut self, ty: &Type) -> Type {
         match ty {
             Type::Builtin(x, ts) => {
-                let x = self.stack.get(x);
+                let x = self.get(x);
                 let ts = self.map_types(ts);
                 Type::Builtin(x, ts)
             }
-            Type::Generic(x) => {
-                let x = self.stack.get(x);
-                Type::Generic(x)
+            Type::Struct(x, ts) => {
+                let x = self.get(x);
+                let ts = self.map_types(ts);
+                Type::Struct(x, ts)
+            }
+            Type::Enum(x, ts) => {
+                let x = self.get(x);
+                let ts = self.map_types(ts);
+                Type::Enum(x, ts)
             }
             _ => self._map_type(ty),
         }
@@ -230,26 +180,21 @@ impl Mapper for Context {
         match e {
             Expr::Struct(s, t, x, ts, xes) => {
                 let t = self.map_type(t);
-                let x = self.stack.get(x);
+                let x = self.get(x);
                 let ts = self.map_types(ts);
                 let xes = self.map_expr_fields(xes).into();
                 Expr::Struct(*s, t, x, ts, xes)
             }
             Expr::Enum(s, t, x0, ts, x1, e) => {
                 let t = self.map_type(t);
-                let x0 = self.stack.get(x0);
+                let x0 = self.get(x0);
                 let ts = self.map_types(ts);
                 let e = self.map_expr(e);
                 Expr::Enum(*s, t, x0, ts, *x1, Rc::new(e))
             }
-            Expr::Var(s, t, x) => {
-                let t = self.map_type(t);
-                let x = self.stack.get(x);
-                Expr::Var(*s, t, x)
-            }
             Expr::Def(s, t, x, ts) => {
                 let t = self.map_type(t);
-                let x = self.stack.get(x);
+                let x = self.get(x);
                 let ts = self.map_types(ts);
                 Expr::Def(*s, t, x, ts)
             }
@@ -258,25 +203,23 @@ impl Mapper for Context {
     }
 
     fn map_block(&mut self, b: &Block) -> Block {
+        self.stack.push(Map::new());
         self.visit_stmts(&b.stmts);
         let stmts = b
             .stmts
             .iter()
-            .filter_map(|stmt| match stmt {
-                Stmt::Def(_)
-                | Stmt::Trait(_)
-                | Stmt::Impl(_)
-                | Stmt::Struct(_)
-                | Stmt::Enum(_)
-                | Stmt::Type(_) => {
-                    let stmt = self.map_stmt(stmt);
-                    self.top.push(stmt);
+            .filter_map(|stmt| {
+                let stmt = self.map_stmt(stmt);
+                if stmt.is_local() {
+                    Some(stmt)
+                } else {
+                    self.stmts.push(stmt);
                     None
                 }
-                _ => Some(self.map_stmt(stmt)),
             })
             .collect();
         let expr = b.expr.as_ref().map(|e| self.map_expr(e));
+        self.stack.pop().unwrap();
         Block::new(b.span, stmts, expr)
     }
 }

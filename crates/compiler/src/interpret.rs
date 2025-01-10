@@ -2,14 +2,14 @@ use runtime::prelude::Send;
 use runtime::prelude::Sync;
 
 use crate::analysis::declare;
+use crate::ast::Ast;
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Map;
 use crate::ast::Name;
-use crate::ast::Ast;
 use crate::ast::Stmt;
-use crate::ast::StmtVar;
+use crate::ast::StmtLocal;
 use crate::ast::Type;
 use crate::builtins::types::function::Function;
 use crate::builtins::types::record::Record;
@@ -17,7 +17,7 @@ use crate::builtins::types::tuple::Tuple;
 use crate::builtins::types::unit::Unit;
 use crate::builtins::types::variant::Variant;
 use crate::builtins::value::Value;
-use crate::traversal::visitor::Visitable;
+use crate::traversal::visitable::Visitable;
 
 #[derive(Debug, Default, Send, Sync, Clone)]
 pub struct Context {
@@ -92,7 +92,7 @@ impl Context {
 
     fn stmt(&mut self, s: &Stmt) {
         match s {
-            Stmt::Var(s) => self.stmt_var(s),
+            Stmt::Local(s) => self.stmt_var(s),
             Stmt::Def(_) => {}
             Stmt::Trait(_) => {}
             Stmt::Impl(_) => {}
@@ -104,9 +104,9 @@ impl Context {
         }
     }
 
-    fn stmt_var(&mut self, s: &StmtVar) {
+    fn stmt_var(&mut self, s: &StmtLocal) {
         let value = self.eval_expr(&s.expr);
-        self.stack.bind(s.name, value);
+        self.stack.bind(s.local.name, value);
     }
 
     /// Todo: Remove this once we can compile to SSA.
@@ -172,7 +172,7 @@ impl Context {
             Expr::Enum(_, _, _, _, x1, e) => Variant::new(*x1, self.eval_expr(e)).into(),
             Expr::Field(_, _, e, x) => self.eval_expr(e).as_record()[x].clone(),
             Expr::Index(_, _, e, i) => self.eval_expr(e).as_tuple()[i].clone(),
-            Expr::Var(_, _, x) => self.stack.get(x).clone(),
+            Expr::Local(_, _, x, _) => self.stack.get(x).clone(),
             Expr::Def(_, _, x, _) => {
                 let s = self.decls.defs.get(x).unwrap().clone();
                 Function::new(s.params.clone(), s.body.clone()).into()
@@ -183,8 +183,8 @@ impl Context {
                 let vs = es.iter().map(|e| self.eval_expr(e)).collect::<Vec<_>>();
                 match f.body {
                     ExprBody::UserDefined(e) => self.scoped(|ctx| {
-                        for (x, v) in f.params.keys().zip(vs) {
-                            ctx.stack.bind(*x, v)
+                        for (l, v) in f.params.iter().zip(vs) {
+                            ctx.stack.bind(l.name, v)
                         }
                         ctx.eval_expr(&e)
                     }),
@@ -198,7 +198,7 @@ impl Context {
             Expr::Match(_, _, _, _) => unreachable!(),
             Expr::Array(_, _, _) => unreachable!(),
             Expr::Assign(_, _, e0, e1) => match e0.as_ref() {
-                Expr::Var(_, _, x) => {
+                Expr::Local(_, _, x, _) => {
                     let v = self.eval_expr(e1);
                     self.stack.update(*x, v.clone());
                     v
@@ -210,7 +210,7 @@ impl Context {
             Expr::Break(_, _) => unreachable!(),
             Expr::While(_, _, e0, e1) => {
                 while self.eval_expr(e0).as_bool() {
-                    self.eval_expr(e1);
+                    self.eval_block(e1);
                 }
                 Tuple::new(vec![]).into()
             }
@@ -227,24 +227,22 @@ impl Context {
             Expr::Dot(_, _, _, _, _, _) => unreachable!(),
             Expr::IfElse(_, _, e0, e1, e2) => {
                 if self.eval_expr(e0).as_bool() {
-                    self.eval_expr(e1)
+                    self.eval_block(e1)
                 } else {
-                    self.eval_expr(e2)
+                    self.eval_block(e2)
                 }
             }
             Expr::IntSuffix(_, _, _, _) => unreachable!(),
             Expr::FloatSuffix(_, _, _, _) => unreachable!(),
-            Expr::LetIn(_, _, _, _, _, _) => todo!(),
-            Expr::Update(_, _, _, _, _) => todo!(),
             Expr::Anonymous(_, _) => unreachable!(),
-            Expr::Closure(_, _, _xts0, _xts1, _t, _e) => {
+            Expr::Closure(_, _, _, _xts0, _xts1, _t, _e) => {
                 todo!()
             }
-            Expr::Ref(_, _, _) => todo!(),
+            Expr::Ref(_, _, _, _) => todo!(),
             Expr::Place(..) => todo!(),
-            Expr::RefMut(_, _, _) => todo!(),
             Expr::Deref(_, _, _) => todo!(),
-            Expr::Unit(_, _) => Unit.into()
+            Expr::Loop(_, _, _) => todo!(),
+            Expr::Unit(_, _) => Unit.into(),
         }
     }
 }

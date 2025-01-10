@@ -21,11 +21,11 @@ pub mod print;
 pub mod syntax;
 pub mod traversal;
 
+pub mod ast_to_mir;
+pub mod mir;
+pub mod mir_to_ast;
 #[cfg(feature = "optimiser")]
 pub mod opt;
-pub mod mir;
-pub mod ast_to_mir;
-pub mod mir_to_ast;
 
 #[macro_export]
 macro_rules! aqua {
@@ -40,8 +40,12 @@ pub struct Compiler {
     desugar: pass::desugar::Context,
     query_desugar: pass::query_desugar::Context,
     resolve: pass::resolve::Context,
+    lift: pass::lift::Context,
+    flatten: pass::flatten::Context,
     expand: pass::expand::Context,
+    capture: pass::capture::Context,
     infer: pass::infer::Context,
+    // ast_to_mir: pass::ast_to_mir::Context,
     monomorphise: pass::monomorphise::Context,
     pub interpreter: interpret::Context,
     pub report: Report,
@@ -50,30 +54,23 @@ pub struct Compiler {
 
 impl Default for Compiler {
     fn default() -> Self {
-        Compiler {
-            sources: syntax::source::Cache::default(),
-            desugar: pass::desugar::Context::new(),
-            query_desugar: pass::query_desugar::Context::new(),
-            resolve: pass::resolve::Context::new(),
-            expand: pass::expand::Context::new(),
-            infer: pass::infer::Context::new(),
-            monomorphise: pass::monomorphise::Context::new(),
-            report: Report::new(),
-            interpreter: interpret::Context::new(),
-            config: CompilerConfig::default(),
-        }
+        Self::new(CompilerConfig::default())
     }
 }
 
 impl Compiler {
     pub fn new(config: CompilerConfig) -> Self {
         Compiler {
-            sources: syntax::source::Cache::default(),
+            sources: syntax::source::Cache::new(),
             desugar: pass::desugar::Context::new(),
             query_desugar: pass::query_desugar::Context::new(),
             resolve: pass::resolve::Context::new(),
+            lift: pass::lift::Context::new(),
+            flatten: pass::flatten::Context::new(),
             expand: pass::expand::Context::new(),
+            capture: pass::capture::Context::new(),
             infer: pass::infer::Context::new(),
+            // ast_to_mir: pass::ast_to_mir::Context::new(),
             monomorphise: pass::monomorphise::Context::new(),
             report: Report::new(),
             interpreter: interpret::Context::new(),
@@ -87,7 +84,7 @@ impl Compiler {
         let id = self.sources.add(name, input.clone());
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
-        parser.parse(Parser::program).unwrap()
+        parser.parse(Parser::program).unwrap().v
     }
 
     pub fn init(&mut self) -> &mut Self {
@@ -103,32 +100,53 @@ impl Compiler {
         program
     }
 
-    pub fn desugar(&mut self, program: &Ast) -> Ast {
+    pub fn run_desugar(&mut self, program: &Ast) -> Ast {
         Self::run_pass(program, &mut self.desugar, &mut self.report)
     }
 
-    pub fn query_desugar(&mut self, program: &Ast) -> Ast {
-        let program = self.desugar(program);
+    pub fn run_query_desugar(&mut self, program: &Ast) -> Ast {
+        let program = self.run_desugar(program);
         Self::run_pass(&program, &mut self.query_desugar, &mut self.report)
     }
 
-    pub fn resolve(&mut self, program: &Ast) -> Ast {
-        let program = self.query_desugar(program);
+    pub fn run_resolve(&mut self, program: &Ast) -> Ast {
+        let program = self.run_query_desugar(program);
         Self::run_pass(&program, &mut self.resolve, &mut self.report)
     }
 
-    pub fn expand(&mut self, program: &Ast) -> Ast {
-        let program = self.resolve.run(program);
+    pub fn run_lift(&mut self, program: &Ast) -> Ast {
+        let program = self.run_resolve(program);
+        Self::run_pass(&program, &mut self.lift, &mut self.report)
+    }
+
+    pub fn run_flatten(&mut self, program: &Ast) -> Ast {
+        let program = self.run_lift(program);
+        Self::run_pass(&program, &mut self.flatten, &mut self.report)
+    }
+
+    pub fn run_expand(&mut self, program: &Ast) -> Ast {
+        let program = self.run_flatten(program);
         Self::run_pass(&program, &mut self.expand, &mut self.report)
     }
 
-    pub fn infer(&mut self, program: &Ast) -> Ast {
-        let program = self.resolve(program);
+    pub fn run_capture(&mut self, program: &Ast) -> Ast {
+        let program = self.run_expand(program);
+        Self::run_pass(&program, &mut self.capture, &mut self.report)
+    }
+
+    pub fn run_infer(&mut self, program: &Ast) -> Ast {
+        let program = self.run_capture(program);
         Self::run_pass(&program, &mut self.infer, &mut self.report)
     }
 
-    pub fn monomorphise(&mut self, program: &Ast) -> Ast {
-        let program = self.infer(program);
+    pub fn _run_ast_to_mir(&mut self, _program: &Ast) -> Ast {
+        // let program = self.run_infer(program);
+        todo!()
+        // Self::run_pass(&program, &mut self.ast_to_mir, &mut self.report)
+    }
+
+    pub fn run_monomorphise(&mut self, program: &Ast) -> Ast {
+        let program = self.run_infer(program);
         if self.report.is_empty() {
             Self::run_pass(&program, &mut self.monomorphise, &mut self.report)
         } else {
@@ -137,7 +155,7 @@ impl Compiler {
     }
 
     pub fn compile(&mut self, program: &Ast) -> Ast {
-        self.monomorphise(program)
+        self.run_monomorphise(program)
     }
 
     pub fn run(&mut self, name: impl ToString, input: impl ToString) {

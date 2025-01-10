@@ -1,7 +1,9 @@
 use crate::analysis::declare;
 use crate::ast::Ast;
+use crate::ast::Stmt;
 use crate::ast::Type;
 use crate::ast::TypeBody;
+use crate::diag::Diagnostic;
 use crate::diag::Report;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
@@ -11,7 +13,7 @@ use super::Pass;
 #[derive(Debug)]
 pub struct Context {
     decls: crate::analysis::declare::Context,
-    fuel: u32,
+    depth: u32,
     report: Report,
 }
 
@@ -20,7 +22,7 @@ impl Context {
         Context {
             decls: declare::Context::new(),
             report: Report::new(),
-            fuel: 50,
+            depth: 0,
         }
     }
 }
@@ -44,21 +46,34 @@ impl Mapper for Context {
                 let TypeBody::UserDefined(t1) = stmt.body else {
                     unreachable!()
                 };
-                if self.fuel > 0 {
-                    self.fuel -= 1;
+                if self.depth < 50 {
+                    self.depth += 1;
                     let t1 = self.map_type(&t1);
-                    self.fuel += 1;
+                    self.depth -= 1;
                     t1
                 } else {
-                    self.report.err(
+                    self.report.add(Diagnostic::err2(
                         x.span,
+                        stmt.span,
                         "Potential cycle detected when trying to expand type alias.",
-                        "Type aliases can only be expanded up to 50 times.",
-                    );
+                        "Type aliases can only be nested up to 50 times.",
+                        "Tried to expand this type alias.",
+                    ));
                     Type::Err
                 }
             }
             _ => self._map_type(t),
         }
+    }
+
+    // Filter out type aliases
+    fn map_program(&mut self, program: &Ast) -> Ast {
+        let stmts = program
+            .stmts
+            .iter()
+            .map(|stmt| self.map_stmt(stmt))
+            .filter(|s| !matches!(s, Stmt::Type(s) if matches!(s.body, TypeBody::UserDefined(_))))
+            .collect();
+        Ast::new(program.span, stmts)
     }
 }

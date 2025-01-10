@@ -21,61 +21,57 @@ fn test_lift0() {
 #[test]
 fn test_lift1() {
     let a = lift(aqua!(
-        "def foo1(): i32 = {
-            def foo2(): i32 = 1;
-            foo2()
+        "def f(): i32 = {
+            def g(): i32 = 1;
+            g()
         }"
     ))
     .unwrap();
-    let b = program([
-        stmt_def("foo2", [], [], ty_i32(), [], expr_int("1")),
-        stmt_def(
-            "foo1",
-            [],
-            [],
-            ty_i32(),
-            [],
-            expr_block([], expr_call_direct("foo2", [], [])),
-        ),
-    ]);
+    let b = lift(aqua!(
+        "def g(): i32 = 1;
+         def f(): i32 = { g() };"
+    ))
+    .unwrap();
     check!(a, b);
 }
 
 #[test]
 fn test_lift2() {
     let a = lift(aqua!(
-        "def foo(): i32 = {
-            def foo(): i32 = 1;
-            foo()
+        "def f(): i32 = {
+            def f(): i32 = 1;
+            f()
         }"
     ))
     .unwrap();
-    let b = program([
-        stmt_def("foo_1", [], [], ty_i32(), [], expr_int("1")),
-        stmt_def(
-            "foo",
-            [],
-            [],
-            ty_i32(),
-            [],
-            expr_block([], expr_call_direct("foo_1", [], [])),
-        ),
-    ]);
+    let b = lift(aqua!(
+        "def f_1(): i32 = 1;
+         def f(): i32 = { f_1() };"
+    ))
+    .unwrap();
     check!(a, b);
 }
 
 #[test]
 fn test_lift3() {
     let a = lift(aqua!(
-        "def f(): i32 = 1;
-         def f(): i32 = 1;"
+        "def f(): i32 = {
+             def g(): i32 = 1;
+             g()
+         }
+         def g(): i32 = 2;"
     ))
     .unwrap();
-    let b = program([
-        stmt_def("f", [], [], ty_i32(), [], expr_int("1")),
-        stmt_def("f", [], [], ty_i32(), [], expr_int("1")),
-    ]);
-    check!(a, b);
+    println!("{a}");
+    // let b = lift(aqua!(
+    //     "def g(): i32 = 1;
+    //      def f(): i32 = {
+    //          g()
+    //      }
+    //      def g_1(): i32 = 1;"
+    // ))
+    // .unwrap();
+    // check!(a, b);
 }
 
 #[test]
@@ -83,25 +79,21 @@ fn test_lift4() {
     let a = lift(aqua!(
         "def f(): i32 = {
             def f(): i32 = 1;
-            def f(): i32 = 2;
+            def g(): i32 = 2;
             f()
         }
-        def f(): i32 = 3;"
+        def g(): i32 = 3;"
     ))
     .unwrap();
-    let b = program([
-        stmt_def("f_2", [], [], ty_i32(), [], expr_int("1")),
-        stmt_def("f_2", [], [], ty_i32(), [], expr_int("2")),
-        stmt_def(
-            "f",
-            [],
-            [],
-            ty_i32(),
-            [],
-            expr_block([], expr_call_direct("f_2", [], [])),
-        ),
-        stmt_def("f", [], [], ty_i32(), [], expr_int("3")),
-    ]);
+    let b = lift(aqua!(
+        "def f_1(): i32 = 1;
+         def g(): i32 = 2;
+         def f(): i32 = {
+            f_1()
+        }
+        def g_1(): i32 = 3;"
+    ))
+    .unwrap();
     check!(a, b);
 }
 

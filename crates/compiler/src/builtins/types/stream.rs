@@ -38,16 +38,20 @@ pub enum Operator {
 fn declare(ctx: &mut Context) {
     ctx.declare(Decl::Type {
         docs: "",
-        aqua: "type Stream[T];",
+        aqua: aqua! {
+            "type Stream[T];"
+        },
         codegen: None,
     });
 
     ctx.declare(Decl::Impl {
-        aqua: "impl[T] Stream[T] where Serde[T]",
+        aqua: aqua! {
+            "impl[T] Stream[T] where Serde[T]"
+        },
         decls: &[
             ImplDecl::Def {
                 docs: "",
-                aqua: indoc::indoc! {
+                aqua: aqua! {
                     "def source(
                          reader: Reader,
                          format: Format,
@@ -68,7 +72,9 @@ fn declare(ctx: &mut Context) {
             },
             ImplDecl::Def {
                 docs: "",
-                aqua: "def sink(stream: Stream[T], writer: Writer, format: Format): Dataflow;",
+                aqua: aqua! {
+                    "def sink(stream: Stream[T], writer: Writer, format: Format): Dataflow;"
+                },
                 codegen: None,
                 eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
@@ -79,7 +85,9 @@ fn declare(ctx: &mut Context) {
             },
             ImplDecl::Def {
                 docs: "",
-                aqua: "def take(s: Stream[T], n: i32): Stream[T];",
+                aqua: aqua!{
+                    "def take(s: Stream[T], n: i32): Stream[T];"
+                },
                 codegen: None,
                 eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
@@ -89,7 +97,9 @@ fn declare(ctx: &mut Context) {
             },
             ImplDecl::Def {
                 docs: "",
-                aqua: "def map[U](s: Stream[T], f: T => U): Stream[U];",
+                aqua: aqua! {
+                    "def map[U](s: Stream[T], f: T => U): Stream[U];"
+                },
                 codegen: None,
                 eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
@@ -99,7 +109,9 @@ fn declare(ctx: &mut Context) {
             },
             ImplDecl::Def {
                 docs: "",
-                aqua: "def filter(s: Stream[T], f: T => bool): Stream[T];",
+                aqua: aqua!{
+                    "def filter(s: Stream[T], f: T => bool): Stream[T];"
+                },
                 codegen: None,
                 eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
@@ -109,7 +121,9 @@ fn declare(ctx: &mut Context) {
             },
             ImplDecl::Def {
                 docs: "",
-                aqua: "def flatmap[U](s: Stream[T], f: T => Vec[U]): Stream[U];",
+                aqua: aqua!{
+                    "def flatmap[U](s: Stream[T], f: T => Vec[U]): Stream[U];"
+                },
                 codegen: None,
                 eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
@@ -119,7 +133,9 @@ fn declare(ctx: &mut Context) {
             },
             ImplDecl::Def {
                 docs: "",
-                aqua: "def flatten(s: Stream[Vec[T]]): Stream[T];",
+                aqua: aqua!{
+                    "def flatten(s: Stream[Vec[T]]): Stream[T];"
+                },
                 codegen: None,
                 eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
@@ -128,7 +144,9 @@ fn declare(ctx: &mut Context) {
             },
             ImplDecl::Def {
                 docs: "",
-                aqua:"def window[U](s: Stream[T], w: Window, f: Vec[T] => U): Stream[U];",
+                aqua: aqua!{
+                    "def window[U](s: Stream[T], w: Window, f: Vec[T] => U): Stream[U];"
+                },
                 codegen: None,
                 eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
@@ -139,7 +157,9 @@ fn declare(ctx: &mut Context) {
             },
             ImplDecl::Def {
                 docs: "",
-                aqua:"def incrWindow[P,U](s: Stream[T], a: Window, f1: T=>P, f2: (P,P)=>P, f2: P=>U): Stream[U];",
+                aqua: aqua!{
+                    "def incrWindow[P,U](s: Stream[T], a: Window, f1: T=>P, f2: (P,P)=>P, f3: P=>U): Stream[U];"
+                },
                 codegen: None,
                 eval: |_ctx, v| {
                     let v0 = v[0].as_stream();
@@ -250,8 +270,8 @@ impl Stream {
     ) -> runtime::prelude::Stream<Value> {
         match self.kind().clone() {
             Operator::Source(r, e, f, d0, d1) => {
-                let t = f.params.values().next().unwrap().clone();
-                let seed = crate::builtins::traits::serde::Seed::new(t, ctx0.decls.clone());
+                let l = f.params.iter().next().unwrap().clone();
+                let seed = crate::builtins::traits::serde::Seed::new(l.ty, ctx0.decls.clone());
                 let mut ctx0 = ctx0.clone();
                 runtime::prelude::Stream::dyn_source(
                     ctx1,

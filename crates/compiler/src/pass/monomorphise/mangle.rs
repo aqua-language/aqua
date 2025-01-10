@@ -109,8 +109,7 @@ impl Mangler {
             Type::Err => unreachable!(),
             Type::Unknown => unreachable!(),
             Type::Alias(..) => unreachable!(),
-            Type::Ref(_, _) => todo!(),
-            Type::RefMut(_, _) => todo!(),
+            Type::Ref(_, _, _) => todo!(),
             Type::Unit => self.write("Unit"),
         }
     }

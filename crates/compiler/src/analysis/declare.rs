@@ -35,7 +35,7 @@ impl Context {
 impl Visitor for Context {
     fn visit_stmt(&mut self, s: &Stmt) {
         match s {
-            Stmt::Var(_) => {}
+            Stmt::Local(_) => {}
             Stmt::Def(s) => {
                 self.defs.insert(s.name, s.clone());
             }

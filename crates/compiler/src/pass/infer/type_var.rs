@@ -5,8 +5,8 @@ use ena::unify::UnifyValue;
 use crate::ast::Type;
 use crate::ast::TypeVar;
 
-use super::intrinstics::floats;
-use super::intrinstics::ints;
+use super::primitives::floats;
+use super::primitives::ints;
 
 impl UnifyKey for TypeVar {
     type Value = TypeVarValue;
@@ -60,21 +60,12 @@ impl TypeVarKind {
 }
 
 impl TypeVarKind {
-    pub fn is_compatible(self, other: TypeVarKind) -> bool {
+    pub fn merge(self, other: TypeVarKind) -> Option<TypeVarKind> {
         match (self, other) {
-            (TypeVarKind::General, _) | (_, TypeVarKind::General) => true,
-            (TypeVarKind::Int, TypeVarKind::Int) => true,
-            (TypeVarKind::Float, TypeVarKind::Float) => true,
-            _ => false,
-        }
-    }
-
-    pub fn merge(self, other: TypeVarKind) -> TypeVarKind {
-        match (self, other) {
-            (TypeVarKind::General, k) | (k, TypeVarKind::General) => k,
-            (TypeVarKind::Int, TypeVarKind::Int) => TypeVarKind::Int,
-            (TypeVarKind::Float, TypeVarKind::Float) => TypeVarKind::Float,
-            _ => unreachable!(),
+            (TypeVarKind::General, k) | (k, TypeVarKind::General) => Some(k),
+            (TypeVarKind::Int, TypeVarKind::Int) => Some(TypeVarKind::Int),
+            (TypeVarKind::Float, TypeVarKind::Float) => Some(TypeVarKind::Float),
+            _ => None,
         }
     }
 
@@ -131,7 +122,10 @@ impl UnifyValue for TypeVarValue {
     fn unify_values(t0: &TypeVarValue, t1: &TypeVarValue) -> Result<TypeVarValue, NoError> {
         use TypeVarValue::*;
         match (t0, t1) {
-            (Unknown(k1), Unknown(k2)) => Ok(Unknown(k1.merge(*k2))),
+            (Unknown(k1), Unknown(k2)) => {
+                let k = k1.merge(*k2).expect("Type variables should be unifiable");
+                Ok(Unknown(k))
+            }
             (Unknown(_), t) | (t, Unknown(_)) => Ok(t.clone()),
             (Known(_), Known(_)) => unreachable!(),
         }

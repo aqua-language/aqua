@@ -334,7 +334,7 @@ fn test_lexer_err1() {
     assert_eq!(l.next(), Some((1..1, Token::Eof, "")));
     assert_eq!(l.next(), None);
     assert_eq!(
-        l.lexer.report.string(&mut l.cache).unwrap(),
+        l.lexer.report.to_string(&mut l.cache).unwrap(),
         indoc::indoc! {"
            Error: Unexpected character
               ╭─[test:1:1]

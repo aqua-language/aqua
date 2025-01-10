@@ -15,7 +15,6 @@ use runtime::prelude::Sync;
 
 use crate::builtins::value::Value;
 
-use crate::collections::keyvec::KeyVec;
 pub use crate::collections::map::Map;
 use crate::interpret::Context;
 use crate::syntax::span::Span;
@@ -30,12 +29,12 @@ pub struct Ast {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct IR {
-    pub defs: KeyVec<StmtDef>,
-    pub tys: KeyVec<StmtType>,
-    pub traits: KeyVec<StmtTrait>,
-    pub impls: KeyVec<StmtImpl>,
-    pub structs: KeyVec<StmtStruct>,
-    pub enums: KeyVec<StmtEnum>,
+    pub defs: Map<Name, StmtDef>,
+    pub tys: Map<Name, StmtType>,
+    pub traits: Map<Name, StmtTrait>,
+    pub impls: Map<Name, StmtImpl>,
+    pub structs: Map<Name, StmtStruct>,
+    pub enums: Map<Name, StmtEnum>,
     pub stmts: Vec<Stmt>,
 }
 
@@ -114,8 +113,7 @@ pub enum Type {
     Never,
     Unit,
     Paren(Rc<Type>),
-    Ref(Vec<Loan>, Rc<Type>),
-    RefMut(Vec<Loan>, Rc<Type>),
+    Ref(Vec<Loan>, Rc<Type>, bool),
     Err,
     Unknown, // A placeholder for a type that has not been annotated yet.
 }
@@ -126,12 +124,18 @@ pub struct Loan {
     pub mutable: bool,
 }
 
+impl Loan {
+    pub fn new(place: Place, mutable: bool) -> Loan {
+        Loan { place, mutable }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TypeVar(pub u32);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Stmt {
-    Var(Rc<StmtVar>),
+    Local(Rc<StmtLocal>),
     Def(Rc<StmtDef>),
     Trait(Rc<StmtTrait>),
     Impl(Rc<StmtImpl>),
@@ -154,16 +158,15 @@ pub struct StmtTraitDef {
     pub span: Span,
     pub name: Name,
     pub generics: Vec<Name>,
-    pub params: KeyVec<Local>,
+    pub params: Vec<Local>,
     pub ty: Type,
     pub where_clause: Vec<Impl>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct StmtVar {
+pub struct StmtLocal {
     pub span: Span,
-    pub name: Name,
-    pub ty: Type,
+    pub local: Local,
     pub expr: Expr,
 }
 
@@ -172,7 +175,7 @@ pub struct StmtDef {
     pub span: Span,
     pub name: Name,
     pub generics: Vec<Name>,
-    pub params: KeyVec<Local>,
+    pub params: Vec<Local>,
     pub ty: Type,
     pub where_clause: Vec<Impl>,
     pub body: ExprBody,
@@ -183,7 +186,7 @@ pub struct StmtDefBuiltin {
     pub span: Span,
     pub name: Name,
     pub generics: Vec<Name>,
-    pub params: KeyVec<Local>,
+    pub params: Vec<Local>,
     pub ty: Type,
     pub where_clause: Vec<Impl>,
     pub fun: fn(&mut Context, &[Value]) -> Value,
@@ -259,7 +262,7 @@ pub struct BuiltinType {
     pub codegen: Option<Codegen>,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct Index {
     pub span: Span,
     pub data: usize,
@@ -276,28 +279,47 @@ impl From<usize> for Index {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Place {
+    pub span: Span,
     pub local: Local,
     pub elems: Vec<PlaceElem>,
 }
 
+impl Place {
+    pub fn new(span: Span, local: Local, elems: Vec<PlaceElem>) -> Place {
+        Place { span, local, elems }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Local {
+    pub span: Span,
     pub name: Name,
     pub ty: Type,
     pub mutable: bool,
 }
 
+impl Local {
+    pub fn new(span: Span, name: Name, ty: Type, mutable: bool) -> Local {
+        Local {
+            span,
+            name,
+            ty,
+            mutable,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum PlaceElem {
-    Index(usize),
-    Deref,
+    Index(Span, Type, Index),
+    Field(Span, Type, Name),
+    Deref(Span, Type),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Expr {
     Path(Span, Type, Path),
-    Ref(Span, Type, Rc<Expr>),
-    RefMut(Span, Type, Rc<Expr>),
+    Ref(Span, Type, Rc<Expr>, bool),
     Place(Span, Type, Place),
     Deref(Span, Type, Rc<Expr>),
     Int(Span, Type, Symbol),
@@ -313,13 +335,11 @@ pub enum Expr {
     Record(Span, Type, Map<Name, Expr>),
     Enum(Span, Type, Name, Vec<Type>, Name, Rc<Expr>),
     Field(Span, Type, Rc<Expr>, Name),
-    Update(Span, Type, Rc<Expr>, Name, Rc<Expr>),
     Index(Span, Type, Rc<Expr>, Index),
-    Var(Span, Type, Name),
+    Local(Span, Type, Name, bool),
     Def(Span, Type, Name, Vec<Type>),
     Call(Span, Type, Rc<Expr>, Vec<Expr>),
     Block(Span, Type, Rc<Block>),
-    Closure(Span, Type, Map<Name, Type>, Map<Name, Type>, Type, Rc<Expr>),
     Query(Span, Type, Name, Type, Rc<Expr>, Vec<QueryOp>),
     QueryInto(
         Span,
@@ -334,15 +354,17 @@ pub enum Expr {
     ),
     Assoc(Span, Type, Impl, Name, Vec<Type>),
     Match(Span, Type, Rc<Expr>, Map<Pat, Expr>),
-    IfElse(Span, Type, Rc<Expr>, Rc<Expr>, Rc<Expr>),
+    IfElse(Span, Type, Rc<Expr>, Rc<Block>, Rc<Block>),
     Array(Span, Type, Vec<Expr>),
     Assign(Span, Type, Rc<Expr>, Rc<Expr>),
     Return(Span, Type, Rc<Expr>),
     Continue(Span, Type),
     Break(Span, Type),
-    While(Span, Type, Rc<Expr>, Rc<Expr>),
-    Lambda(Span, Type, Map<Name, Type>, Type, Rc<Expr>),
-    For(Span, Type, Name, Rc<Expr>, Rc<Expr>),
+    While(Span, Type, Rc<Expr>, Rc<Block>),
+    Lambda(Span, Type, Vec<Local>, Type, Rc<Expr>),
+    Closure(Span, Type, usize, Vec<Local>, Vec<Place>, Type, Rc<Expr>),
+    For(Span, Type, Name, Rc<Expr>, Rc<Block>),
+    Loop(Span, Type, Rc<Block>),
     Err(Span, Type),
     InfixBinaryOp(Span, Type, Token, Rc<Expr>, Rc<Expr>),
     PrefixUnaryOp(Span, Type, Token, Rc<Expr>),
@@ -350,7 +372,6 @@ pub enum Expr {
     Annotate(Span, Type, Rc<Expr>),
     Paren(Span, Type, Rc<Expr>),
     Dot(Span, Type, Rc<Expr>, Name, Vec<Type>, Vec<Expr>),
-    LetIn(Span, Type, Name, Type, Rc<Expr>, Rc<Expr>),
     Anonymous(Span, Type),
 }
 

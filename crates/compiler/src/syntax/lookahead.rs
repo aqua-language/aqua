@@ -68,6 +68,7 @@ impl Lookahead for Stmt {
         .or(Token::Struct)
         .or(Token::Enum)
         .or(Token::Impl)
+        .or(Token::Val)
         .or(Token::Var)
         .or(Expr::FIRST);
     const FOLLOW: Token = Token::Eof;

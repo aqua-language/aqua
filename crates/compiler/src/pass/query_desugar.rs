@@ -10,11 +10,12 @@ use util::call_window;
 use util::typed_lambda;
 
 use crate::ast::Aggr;
+use crate::ast::Ast;
 use crate::ast::Expr;
+use crate::ast::Local;
 use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Path;
-use crate::ast::Ast;
 use crate::ast::QueryOp;
 use crate::ast::Type;
 use crate::diag::Report;
@@ -107,7 +108,7 @@ impl Context {
         let elam = Expr::Lambda(
             s,
             Type::Unknown,
-            vec![(x, t)].into(),
+            vec![Local::new(x.span, x, t, false)].into(),
             Type::Unknown,
             Rc::new(estruct),
         );
@@ -379,6 +380,7 @@ mod util {
 
     use crate::ast::Expr;
     use crate::ast::Impl;
+    use crate::ast::Local;
     use crate::ast::Map;
     use crate::ast::Name;
     use crate::ast::Path;
@@ -459,11 +461,13 @@ mod util {
         )
     }
 
-    pub(super) fn lambda<const N: usize>(s: Span, x: [Name; N], e: Expr) -> Expr {
+    pub(super) fn lambda<const N: usize>(s: Span, xs: [Name; N], e: Expr) -> Expr {
         Expr::Lambda(
             s,
             Type::Unknown,
-            x.iter().map(|x| (*x, Type::Unknown)).collect::<Map<_, _>>(),
+            xs.iter()
+                .map(|x| Local::new(x.span, *x, Type::Unknown, false))
+                .collect::<Vec<_>>(),
             Type::Unknown,
             Rc::new(e),
         )
@@ -473,7 +477,10 @@ mod util {
         Expr::Lambda(
             s,
             Type::Unknown,
-            xt.iter().cloned().collect::<Map<_, _>>(),
+            xt.iter()
+                .cloned()
+                .map(|(x, t)| Local::new(x.span, x, t, false))
+                .collect::<Vec<_>>(),
             Type::Unknown,
             Rc::new(e),
         )

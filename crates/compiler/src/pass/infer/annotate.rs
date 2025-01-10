@@ -44,7 +44,7 @@ impl<'a> Mapper for Annotate<'a> {
     fn map_stmt(&mut self, s: &Stmt) -> Stmt {
         match s {
             Stmt::Expr(e) => Stmt::Expr(Rc::new(self.map_expr(e))),
-            Stmt::Var(s) => Stmt::Var(Rc::new(self.map_stmt_var(s))),
+            Stmt::Local(s) => Stmt::Local(Rc::new(self.map_stmt_local(s))),
             s => s.clone(),
         }
     }

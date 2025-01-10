@@ -9,7 +9,7 @@ impl Expr {
             Expr::Float(s, _, v) => Expr::Float(s, t, v),
             Expr::Bool(s, _, v) => Expr::Bool(s, t, v),
             Expr::String(s, _, v) => Expr::String(s, t, v),
-            Expr::Var(s, _, x) => Expr::Var(s, t, x),
+            Expr::Local(s, _, x, m) => Expr::Local(s, t, x, m),
             Expr::Def(s, _, x, ts) => Expr::Def(s, t, x, ts),
             Expr::Call(s, _, e, es) => Expr::Call(s, t, e, es),
             Expr::Block(s, _, b) => Expr::Block(s, t, b),
@@ -31,10 +31,12 @@ impl Expr {
             Expr::Lambda(s, _, ps, t1, e) => Expr::Lambda(s, t, ps, t1, e),
             Expr::Match(s, _, e, pes) => Expr::Match(s, t, e, pes),
             Expr::Err(s, _) => Expr::Err(s, t),
-            Expr::While(s, _, e0, e1) => Expr::While(s, t, e0, e1),
+            Expr::While(s, _, e, b) => Expr::While(s, t, e, b),
             Expr::Record(s, _, xes) => Expr::Record(s, t, xes),
             Expr::Path(s, _, p) => Expr::Path(s, t, p),
-            Expr::Closure(s, _, xts0, xts1, t1, e) => Expr::Closure(s, t, xts0, xts1, t1, e),
+            Expr::Closure(s, _, uid, xts0, xts1, t1, e) => {
+                Expr::Closure(s, t, uid, xts0, xts1, t1, e)
+            }
             Expr::For(s, _, x, e, b) => Expr::For(s, t, x, e, b),
             Expr::Char(s, _, v) => Expr::Char(s, t, v),
             Expr::InfixBinaryOp(s, _, op, e0, e1) => Expr::InfixBinaryOp(s, t, op, e0, e1),
@@ -46,14 +48,12 @@ impl Expr {
             Expr::IfElse(s, _, e, b0, b1) => Expr::IfElse(s, t, e, b0, b1),
             Expr::IntSuffix(s, _, v, x) => Expr::IntSuffix(s, t, v, x),
             Expr::FloatSuffix(s, _, v, x) => Expr::FloatSuffix(s, t, v, x),
-            Expr::LetIn(s, _, x, t1, e0, e1) => Expr::LetIn(s, t, x, t1, e0, e1),
-            Expr::Update(s, _, x, e0, e1) => Expr::Update(s, t, x, e0, e1),
             Expr::Anonymous(s, _) => Expr::Anonymous(s, t),
-            Expr::Ref(_, _, _) => todo!(),
-            Expr::RefMut(_, _, _) => todo!(),
-            Expr::Place(_, _, _) => todo!(),
-            Expr::Deref(_, _, _) => todo!(),
-            Expr::Unit(_, _) => todo!(),
+            Expr::Ref(s, _, e, m) => Expr::Ref(s, t, e, m),
+            Expr::Place(s, _, p) => Expr::Place(s, t, p),
+            Expr::Deref(s, _, e) => Expr::Deref(s, t, e),
+            Expr::Loop(s, _, b) => Expr::Loop(s, t, b),
+            Expr::Unit(s, _) => Expr::Unit(s, t),
         }
     }
 }

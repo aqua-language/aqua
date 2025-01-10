@@ -31,7 +31,7 @@ fn main() -> Result<()> {
             let time = std::time::Instant::now();
             compiler.init();
             let program = compiler.parse(&name, &source);
-            let _program = compiler.infer(&program);
+            let _program = compiler.run_infer(&program);
             let duration = time.elapsed().as_millis() as f64 / 1000.0;
             if compiler.report.is_empty() {
                 message("Finished", format_args!("in {duration}s"));
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
             match cmd.mode {
                 InspectMode::Desugar => {
                     let program = compiler.parse(&name, &source);
-                    let program = compiler.desugar(&program);
+                    let program = compiler.run_desugar(&program);
                     if compiler.report.is_empty() {
                         println!("{}", program.verbose());
                     } else {
@@ -76,7 +76,7 @@ fn main() -> Result<()> {
                 InspectMode::Type => {
                     let program = compiler.parse(&name, &source);
                     compiler.init();
-                    let program = compiler.infer(&program);
+                    let program = compiler.run_infer(&program);
                     if compiler.report.is_empty() {
                         println!("{}", program.verbose());
                     } else {

@@ -1,6 +1,7 @@
 use crate::pass::infer::solver::Constraint;
 use crate::syntax::span::Span;
 
+use super::Block;
 use super::Expr;
 use super::Pat;
 use super::QueryOp;
@@ -17,7 +18,7 @@ impl Expr {
             Expr::Tuple(s, ..) => *s,
             Expr::Enum(s, ..) => *s,
             Expr::Field(s, ..) => *s,
-            Expr::Var(s, ..) => *s,
+            Expr::Local(s, ..) => *s,
             Expr::Def(s, ..) => *s,
             Expr::Call(s, ..) => *s,
             Expr::Block(s, ..) => *s,
@@ -47,15 +48,13 @@ impl Expr {
             Expr::IfElse(s, ..) => *s,
             Expr::IntSuffix(s, ..) => *s,
             Expr::FloatSuffix(s, ..) => *s,
-            Expr::LetIn(s, ..) => *s,
-            Expr::Update(s, ..) => *s,
             Expr::Anonymous(s, ..) => *s,
             Expr::Closure(s, ..) => *s,
-            Expr::Ref(_, _, _) => todo!(),
-            Expr::RefMut(_, _, _) => todo!(),
-            Expr::Place(_, _, _) => todo!(),
-            Expr::Deref(_, _, _) => todo!(),
-            Expr::Unit(s, _) => *s,
+            Expr::Ref(s, ..) => *s,
+            Expr::Place(s, ..) => *s,
+            Expr::Deref(s, ..) => *s,
+            Expr::Loop(s, ..) => *s,
+            Expr::Unit(s, ..) => *s,
         }
     }
 }
@@ -105,7 +104,7 @@ impl QueryOp {
 impl Stmt {
     pub fn span(&self) -> Span {
         match self {
-            Stmt::Var(s) => s.span,
+            Stmt::Local(s) => s.span,
             Stmt::Def(s) => s.span,
             Stmt::Trait(s) => s.span,
             Stmt::Impl(s) => s.span,
@@ -124,7 +123,13 @@ impl Constraint {
             Constraint::WhereClause(s, _) => s,
             Constraint::AssocDef(s, ..) => s,
             Constraint::AssocType(s, ..) => s,
-            Constraint::Field(s, ..) => s,
+            Constraint::PlaceElem(s, ..) => s,
         }
+    }
+}
+
+impl Block {
+    pub fn span(&self) -> Span {
+        self.span
     }
 }

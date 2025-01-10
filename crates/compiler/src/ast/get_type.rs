@@ -1,6 +1,12 @@
+use std::rc::Rc;
+
 use super::Block;
 use super::Expr;
 use super::Pat;
+use super::Place;
+use super::PlaceElem;
+use super::StmtDef;
+use super::StmtTraitDef;
 use super::Type;
 
 impl Expr {
@@ -13,7 +19,7 @@ impl Expr {
             Expr::Struct(_, t, ..) => t,
             Expr::Tuple(_, t, ..) => t,
             Expr::Enum(_, t, ..) => t,
-            Expr::Var(_, t, ..) => t,
+            Expr::Local(_, t, ..) => t,
             Expr::Def(_, t, ..) => t,
             Expr::Call(_, t, ..) => t,
             Expr::Block(_, t, ..) => t,
@@ -21,7 +27,6 @@ impl Expr {
             Expr::QueryInto(_, t, ..) => t,
             Expr::Field(_, t, ..) => t,
             Expr::Assoc(_, t, ..) => t,
-            Expr::Err(_, t) => t,
             Expr::Index(_, t, ..) => t,
             Expr::Array(_, t, ..) => t,
             Expr::Assign(_, t, ..) => t,
@@ -44,15 +49,14 @@ impl Expr {
             Expr::IfElse(_, t, ..) => t,
             Expr::IntSuffix(_, t, ..) => t,
             Expr::FloatSuffix(_, t, ..) => t,
-            Expr::LetIn(_, t, ..) => t,
-            Expr::Update(_, t, ..) => t,
             Expr::Anonymous(_, t) => t,
             Expr::Closure(_, t, ..) => t,
-            Expr::Ref(_, t, _) => t,
-            Expr::RefMut(_, t, _) => t,
-            Expr::Place(_, t, _) => t,
-            Expr::Deref(_, t, _) => t,
+            Expr::Ref(_, t, ..) => t,
+            Expr::Place(_, t, ..) => t,
+            Expr::Deref(_, t, ..) => t,
             Expr::Unit(_, t) => t,
+            Expr::Loop(_, t, ..) => t,
+            Expr::Err(_, t) => t,
         }
     }
 }
@@ -87,5 +91,37 @@ impl Block {
         } else {
             &Type::Unit
         }
+    }
+}
+
+impl StmtTraitDef {
+    pub fn ty(&self) -> Type {
+        let ts = self.params.iter().map(|l| l.ty.clone()).collect();
+        let t = self.ty.clone();
+        Type::Function(ts, Rc::new(t))
+    }
+}
+
+impl StmtDef {
+    pub fn ty(&self) -> Type {
+        let ts = self.params.iter().map(|l| l.ty.clone()).collect();
+        let t = self.ty.clone();
+        Type::Function(ts, Rc::new(t))
+    }
+}
+
+impl PlaceElem {
+    pub fn ty(&self) -> &Type {
+        match self {
+            PlaceElem::Field(_, t, ..) => t,
+            PlaceElem::Index(_, t, ..) => t,
+            PlaceElem::Deref(_, t) => t,
+        }
+    }
+}
+
+impl Place {
+    pub fn ty(&self) -> &Type {
+        self.elems.last().unwrap().ty()
     }
 }

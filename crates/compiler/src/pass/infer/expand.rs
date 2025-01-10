@@ -4,7 +4,7 @@ use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::Impl;
 use crate::ast::Type;
-use crate::traversal::mapper::Mappable;
+use crate::traversal::mappable::Mappable;
 use crate::traversal::mapper::Mapper;
 
 use super::Constraint;
@@ -33,7 +33,7 @@ impl Mapper for Expand {
 
     fn map_stmt(&mut self, s: &Stmt) -> Stmt {
         match s {
-            Stmt::Var(s) => Stmt::Var(Rc::new(self.map_stmt_var(s))),
+            Stmt::Local(s) => Stmt::Local(Rc::new(self.map_stmt_local(s))),
             Stmt::Expr(s) => Stmt::Expr(Rc::new(self.map_expr(s))),
             _ => s.clone(),
         }

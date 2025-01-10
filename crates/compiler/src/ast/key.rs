@@ -9,7 +9,7 @@ use super::StmtTrait;
 use super::StmtTraitDef;
 use super::StmtTraitType;
 use super::StmtType;
-use super::StmtVar;
+use super::StmtLocal;
 
 impl Key for StmtDef {
     type K = Name;
@@ -18,10 +18,10 @@ impl Key for StmtDef {
     }
 }
 
-impl Key for StmtVar {
+impl Key for StmtLocal {
     type K = Name;
     fn key(&self) -> &Self::K {
-        &self.name
+        &self.local.name
     }
 }
 

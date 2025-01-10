@@ -2,6 +2,9 @@ use std::rc::Rc;
 
 use super::Expr;
 use super::Name;
+use super::Place;
+use super::PlaceElem;
+use super::Stmt;
 use super::StmtDef;
 use super::StmtImpl;
 use super::StmtTrait;
@@ -24,9 +27,61 @@ impl Expr {
 
     pub fn is_place(&self) -> bool {
         match self {
-            Expr::Var(_, _, _) => true,
-            Expr::Field(_, _, e, _) => e.is_place(),
-            Expr::Index(_, _, e, _) => e.is_place(),
+            Expr::Local(..)
+            | Expr::Field(..)
+            | Expr::Index(..)
+            | Expr::Deref(..)
+            | Expr::Place(..) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_def(&self) -> bool {
+        match self {
+            Expr::Def(..) => true,
+            _ => false,
+        }
+    }
+
+    pub fn rc(&self) -> Rc<Expr> {
+        Rc::new(self.clone())
+    }
+}
+
+impl Type {
+    pub fn rc(&self) -> Rc<Type> {
+        Rc::new(self.clone())
+    }
+
+    pub fn is_copy(&self) -> bool {
+        todo!()
+    }
+
+    pub fn downgrade(&self) -> Type {
+        if let Type::Ref(loans, t, true) = self {
+            Type::Ref(loans.clone(), t.clone(), false)
+        } else {
+            self.clone()
+        }
+    }
+}
+
+impl Stmt {
+    pub fn is_local(&self) -> bool {
+        match self {
+            Stmt::Local(_) | Stmt::Expr(_) | Stmt::Err(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_global(&self) -> bool {
+        match self {
+            Stmt::Def(_)
+            | Stmt::Trait(_)
+            | Stmt::Impl(_)
+            | Stmt::Struct(_)
+            | Stmt::Enum(_)
+            | Stmt::Type(_) => true,
             _ => false,
         }
     }
@@ -43,27 +98,66 @@ impl StmtImpl {
 }
 
 impl StmtTrait {
-    pub fn get_def(&self, x: &Name) -> Option<&Rc<StmtTraitDef>> {
+    pub fn find_def(&self, x: &Name) -> Option<&Rc<StmtTraitDef>> {
         self.defs.iter().find(|stmt| stmt.name == *x)
     }
 
-    pub fn get_type(&self, x: &Name) -> Option<&Rc<StmtTraitType>> {
+    pub fn find_type(&self, x: &Name) -> Option<&Rc<StmtTraitType>> {
         self.types.iter().find(|stmt| stmt.name == *x)
     }
 }
 
-impl StmtTraitDef {
-    pub fn type_of(&self) -> Type {
-        let ts = self.params.values().cloned().collect();
-        let t = self.ty.clone();
-        Type::Function(ts, Rc::new(t))
+impl Place {
+    pub fn is_prefix_of(&self, other: &Place) -> bool {
+        if self.local.name != other.local.name {
+            return false;
+        }
+        let mut iter1 = self.elems.iter();
+        let mut iter2 = other.elems.iter();
+        loop {
+            match (iter1.next(), iter2.next()) {
+                (Some(elem1), Some(elem2)) => {
+                    if elem1 != elem2 {
+                        return false;
+                    }
+                }
+                (None, Some(_)) => return true,
+                (Some(_), None) => return false,
+                (None, None) => return true,
+            }
+        }
     }
-}
+    pub fn is_mutable(&self) -> bool {
+        if self.elems.is_empty() && self.local.mutable {
+            return true;
+        }
+        self.is_mutable_rec()
+    }
 
-impl StmtDef {
-    pub fn type_of(&self) -> Type {
-        let ts = self.params.values().cloned().collect();
-        let t = self.ty.clone();
-        Type::Function(ts, Rc::new(t))
+    fn is_mutable_rec(&self) -> bool {
+        let mut t = &self.local.ty;
+        for elem in self.elems.iter().rev() {
+            t = match elem {
+                PlaceElem::Index(_, _, i) => match t {
+                    Type::Tuple(ts) => &ts[i.data],
+                    _ => return false,
+                },
+                PlaceElem::Field(_, _, _) => match t {
+                    Type::Struct(_, _) => todo!(),
+                    _ => return false,
+                },
+                PlaceElem::Deref(_, _) => match t {
+                    Type::Ref(_, _, m) => {
+                        if !m {
+                            return false;
+                        } else {
+                            t
+                        }
+                    }
+                    _ => return false,
+                },
+            };
+        }
+        true
     }
 }

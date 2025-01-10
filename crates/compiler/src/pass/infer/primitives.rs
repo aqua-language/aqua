@@ -27,10 +27,6 @@ pub fn char() -> Type {
     Type::Builtin("char".into(), vec![])
 }
 
-pub fn unit() -> Type {
-    Type::Tuple(vec![])
-}
-
 pub fn string() -> Type {
     Type::Builtin("String".into(), vec![])
 }

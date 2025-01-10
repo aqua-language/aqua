@@ -6,7 +6,7 @@ use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::Type;
-use crate::traversal::mapper::Mappable;
+use crate::traversal::mappable::Mappable;
 use crate::traversal::mapper::Mapper;
 
 use super::impl_var::ImplVarValue;
@@ -46,7 +46,7 @@ impl Mapper for Apply<'_> {
     fn map_stmt(&mut self, s: &Stmt) -> Stmt {
         match s {
             Stmt::Expr(e) => Stmt::Expr(Rc::new(self.map_expr(e))),
-            Stmt::Var(v) => Stmt::Var(Rc::new(self.map_stmt_var(v))),
+            Stmt::Local(v) => Stmt::Local(Rc::new(self.map_stmt_local(v))),
             s => s.clone(),
         }
     }

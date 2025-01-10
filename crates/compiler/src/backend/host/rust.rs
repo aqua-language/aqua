@@ -1,14 +1,15 @@
+use crate::ast::Ast;
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
+use crate::ast::Local;
 use crate::ast::Name;
-use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
+use crate::ast::StmtLocal;
 use crate::ast::StmtStruct;
 use crate::ast::StmtType;
-use crate::ast::StmtVar;
 use crate::ast::Type;
 use crate::backend::codegen::Codegen;
 use crate::builtins::value::Function;
@@ -94,16 +95,20 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
         self.newline_sep(&p.stmts, Self::stmt)
     }
 
-    fn param(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
-        self.name(x)?;
+    fn local(&mut self, l: &Local) -> std::fmt::Result {
+        if l.mutable {
+            self.kw("mut")?;
+            self.space()?;
+        }
+        self.name(&l.name)?;
         self.punct(":")?;
         self.space()?;
-        self.ty(t)
+        self.ty(&l.ty)
     }
 
     fn stmt(&mut self, s: &Stmt) -> std::fmt::Result {
         match s {
-            Stmt::Var(s) => self.stmt_var(s),
+            Stmt::Local(s) => self.stmt_var(s),
             Stmt::Def(s) => self.stmt_def(s),
             Stmt::Impl(_) => unreachable!(),
             Stmt::Expr(s) => self.stmt_expr(s),
@@ -115,13 +120,10 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
         }
     }
 
-    fn stmt_var(&mut self, s: &StmtVar) -> std::fmt::Result {
+    fn stmt_var(&mut self, s: &StmtLocal) -> std::fmt::Result {
         self.kw("let")?;
         self.space()?;
-        self.name(&s.name)?;
-        self.punct(":")?;
-        self.space()?;
-        self.ty(&s.ty)?;
+        self.local(&s.local)?;
         self.space()?;
         self.punct("=")?;
         self.space()?;
@@ -135,7 +137,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.kw("fn")?;
                 self.space()?;
                 self.name(&s.name)?;
-                self.paren(|this| this.comma_sep(&s.params, Self::param))?;
+                self.paren(|this| this.comma_sep(&s.params, Self::local))?;
                 self.space()?;
                 self.punct("->")?;
                 self.space()?;
@@ -155,7 +157,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.punct(":")?;
                 self.space()?;
                 self.kw("fn")?;
-                self.paren(|this| this.comma_sep(s.params.values(), Self::ty))?;
+                self.paren(|this| this.comma_sep(s.params.iter().map(|v| &v.ty), Self::ty))?;
                 self.space()?;
                 self.punct("->")?;
                 self.space()?;
@@ -244,11 +246,8 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.name(x1)?;
                 self.paren(|this| this.expr(e))?;
             }
-            Expr::Var(_, _, x) => {
+            Expr::Local(_, _, x, _) => {
                 self.name(x)?;
-                self.punct(".")?;
-                self.lit("clone")?;
-                self.paren(|_| Ok(()))?;
             }
             Expr::Def(_, _, name, _) => {
                 self.name(name)?;
@@ -291,7 +290,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.kw("break")?;
             }
             Expr::Lambda(_, _, ps, t, e) => {
-                self.bars(|this| this.comma_sep(ps, Self::param))?;
+                self.bars(|this| this.comma_sep(ps, Self::local))?;
                 self.punct("->")?;
                 self.space()?;
                 self.ty(t)?;
@@ -303,12 +302,12 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 })?;
             }
             Expr::Match(..) => unreachable!(),
-            Expr::While(_, _, e0, e1) => {
+            Expr::While(_, _, e, b) => {
                 self.kw("while")?;
                 self.space()?;
-                self.expr(e0)?;
+                self.expr(e)?;
                 self.space()?;
-                self.expr(e1)?;
+                self.block(b)?;
             }
             Expr::Record(_, _, xts) => {
                 self.fields(xts.as_ref(), Self::expr_field)?;
@@ -320,29 +319,27 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Expr::Annotate(_, _, _) => unreachable!(),
             Expr::Paren(_, _, _) => unreachable!(),
             Expr::Dot(_, _, _, _, _, _) => unreachable!(),
-            Expr::IfElse(_, _, e0, e1, e2) => {
+            Expr::IfElse(_, _, e, b0, b1) => {
                 self.kw("if")?;
                 self.space()?;
-                self.expr(e0)?;
+                self.expr(e)?;
                 self.space()?;
-                self.expr(e1)?;
+                self.block(b0)?;
                 self.space()?;
                 self.kw("else")?;
                 self.space()?;
-                self.expr(e2)?;
+                self.block(b1)?;
             }
-            Expr::Closure(_, _, _xts0, _xts1, _t, _e) => {
+            Expr::Closure(_, _, _, _xts0, _xts1, _t, _e) => {
                 todo!()
             }
             Expr::IntSuffix(_, _, _, _) => unreachable!(),
             Expr::FloatSuffix(_, _, _, _) => unreachable!(),
-            Expr::LetIn(_, _, _, _, _, _) => todo!(),
-            Expr::Update(_, _, _, _, _) => todo!(),
             Expr::Anonymous(_, _) => unreachable!(),
-            Expr::Ref(_, _, _) => todo!(),
-            Expr::RefMut(_, _, _) => todo!(),
+            Expr::Ref(_, _, _, _) => todo!(),
             Expr::Place(_, _, _) => todo!(),
             Expr::Deref(_, _, _) => todo!(),
+            Expr::Loop(_, _, _) => todo!(),
             Expr::Unit(_, _) => {
                 self.kw("()")?;
             }
@@ -432,8 +429,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.space()?;
                 self.fields(ts, Self::ty)?;
             }
-            Type::Ref(_, _) => todo!(),
-            Type::RefMut(_, _) => todo!(),
+            Type::Ref(_, _, _) => todo!(),
         }
         Ok(())
     }
@@ -451,7 +447,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
     }
 
     fn fun(&mut self, f: &Function) -> std::fmt::Result {
-        self.bars(|this| this.comma_sep(&f.params, Self::param))?;
+        self.bars(|this| this.comma_sep(&f.params, Self::local))?;
         self.space()?;
         self.expr(f.body.as_udf().unwrap())
     }

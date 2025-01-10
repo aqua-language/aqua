@@ -1,6 +1,6 @@
 use crate::ast::Impl;
 use crate::ast::Type;
-use crate::traversal::mapper::Mappable;
+use crate::traversal::mappable::Mappable;
 use crate::traversal::mapper::Mapper;
 
 use super::Constraint;
@@ -17,7 +17,7 @@ impl<'a> Canonicalize<'a> {
 impl<'a> Mapper for Canonicalize<'a> {
     fn map_type(&mut self, t: &Type) -> Type {
         if let Type::Var(x) = t {
-            Type::Var(self.0.type_scope().type_table.find(*x))
+            Type::Var(self.0.type_ctx().type_union_find.find(*x))
         } else {
             self._map_type(t)
         }

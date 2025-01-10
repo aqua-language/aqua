@@ -39,16 +39,6 @@ fn declare(ctx: &mut Context) {
         codegen: None,
     });
 
-    ctx.declare(Decl::Type {
-        docs: "",
-        aqua: "type Bag[T];",
-        codegen: Some(Codegen {
-            rust: "Bag",
-            java: "Bag",
-            egglog: None,
-        }),
-    });
-
     ctx.declare(Decl::Impl {
         aqua: "impl[T] Serde[Bag[T]] where Serde[T]",
         decls: &[],

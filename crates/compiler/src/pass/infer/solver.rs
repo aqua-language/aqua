@@ -1,8 +1,10 @@
 use crate::ast::Impl;
 use crate::ast::Name;
+use crate::ast::PlaceElem;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::collections::set::Set;
+use crate::diag::Diagnostic;
 use crate::syntax::span::Span;
 
 use super::Context;
@@ -15,8 +17,8 @@ pub enum Constraint {
     AssocDef(Span, Type, Impl, Name, Vec<Type>),
     // Generated when referring to an associated type.
     AssocType(Span, Type, Impl, Name, Vec<Type>),
-    // Generated when referring to a field.
-    Field(Span, Type, Type, Name),
+    // Generated when accessing a place.
+    PlaceElem(Span, Type, PlaceElem),
 }
 
 #[derive(Debug)]
@@ -51,6 +53,51 @@ enum RetryError {
     MaxDepth,
 }
 
+impl Error {
+    fn into_diagnostic(self, c: &Constraint) -> Diagnostic {
+        match self {
+            Error::Retry(RetryError::MultipleImplsFound(candidates)) => {
+                let msg = candidates
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| format!("{}: {}", i + 1, c))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                Diagnostic::err(
+                    *c.span(),
+                    "Ambiguous trait implementation",
+                    format!("Found multiple solutions for constraint {c}:\n{msg}"),
+                )
+            }
+            Error::Retry(RetryError::MaxDepth) => Diagnostic::err(
+                *c.span(),
+                "Trait solver timed out",
+                "The trait solver reached the maximum recursion depth",
+            ),
+            Error::Retry(RetryError::StructNotFound) => Diagnostic::err(
+                *c.span(),
+                "Could not infer which struct is being accessed.",
+                "Please provide a type annotation.",
+            ),
+            Error::Fatal(FatalError::ImplNotFound) => Diagnostic::err(
+                *c.span(),
+                "Unsatisfiable trait constraint",
+                format!("No solution found for constraint {c}"),
+            ),
+            Error::Fatal(FatalError::NotAStruct(t)) => Diagnostic::err(
+                *c.span(),
+                "Not a struct or record",
+                format!("Attempted to index into {t} which is not a struct or record"),
+            ),
+            Error::Fatal(FatalError::FieldNotFound(x, t)) => Diagnostic::err(
+                *c.span(),
+                "Field not found",
+                format!("Field {x} not found in type {t}"),
+            ),
+        }
+    }
+}
+
 impl Context {
     pub fn solve_constraints(&mut self, span: Span) {
         let mut constraints = self.take_constraints();
@@ -73,7 +120,7 @@ impl Context {
                     }
                     Err(e @ Error::Fatal(_)) => {
                         let c = c.apply(self);
-                        self.report_solver_error(&c, &e);
+                        self.report.add(e.into_diagnostic(&c));
                     }
                     Err(e @ Error::Retry(_)) => {
                         retries.push((c, e));
@@ -87,16 +134,16 @@ impl Context {
             // If we did not solve any constraints, we failed.
             if num_solved == 0 && fuel > 0 {
                 retries
-                    .iter()
-                    .for_each(|(c, e)| self.report_solver_error(c, e));
+                    .into_iter()
+                    .for_each(|(c, e)| self.report.add(e.into_diagnostic(&c)));
                 break;
             }
             if fuel == 100 {
-                self.report.err(
+                self.report.add(Diagnostic::err(
                     span,
                     "Infinite loop detected",
                     "Unable to solve constraints",
-                );
+                ));
                 break;
             }
             // Retry solving the constraints that we failed to solve.
@@ -106,60 +153,6 @@ impl Context {
                 constraints.iter().for_each(|c| c.defaults(self));
             }
             fuel += 1;
-        }
-    }
-
-    fn report_solver_error(&mut self, c: &Constraint, e: &Error) {
-        match e {
-            Error::Retry(RetryError::MultipleImplsFound(candidates)) => {
-                let msg = candidates
-                    .iter()
-                    .enumerate()
-                    .map(|(i, c)| format!("{}: {}", i + 1, c))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                self.report.err(
-                    *c.span(),
-                    "Ambiguous trait implementation",
-                    format!("Found multiple solutions for constraint {c}:\n{msg}"),
-                );
-            }
-            Error::Retry(RetryError::MaxDepth) => {
-                self.report.err(
-                    *c.span(),
-                    "Trait solver timed out",
-                    "The trait solver reached the maximum recursion depth",
-                );
-            }
-            Error::Retry(RetryError::StructNotFound) => {
-                self.report.err(
-                    *c.span(),
-                    "Could not infer which struct is being accessed.",
-                    "Please provide a type annotation.",
-                );
-            }
-            Error::Fatal(FatalError::ImplNotFound) => {
-                self.report.err(
-                    *c.span(),
-                    "Unsatisfiable trait constraint",
-                    format!("No solution found for constraint {c}"),
-                );
-            }
-            Error::Fatal(FatalError::NotAStruct(t)) => {
-                self.report.err(
-                    *c.span(),
-                    "Not a struct or record",
-                    format!("Attempted to index into {t} which is not a struct or record"),
-                );
-            }
-            Error::Fatal(FatalError::FieldNotFound(x, t)) => {
-                let t = t.apply(self);
-                self.report.err(
-                    *c.span(),
-                    "Field not found",
-                    format!("Field {x} not found in type {t}"),
-                );
-            }
         }
     }
 
@@ -186,7 +179,7 @@ impl Context {
             Constraint::AssocType(_, _, _, _, _) => {
                 todo!();
             }
-            Constraint::Field(s, t0, t1, x) => self.solve_field(s, t0, t1, x).map(|_| ()),
+            Constraint::PlaceElem(s, t, p) => self.solve_place_elem(s, t, p).map(|_| ()),
         }
     }
 
@@ -219,44 +212,59 @@ impl Context {
         }
     }
 
-    fn solve_field(&mut self, s: &Span, t0: &Type, t1: &Type, x: &Name) -> Result<(), Error> {
-        match t1 {
+    fn solve_place_elem(
+        &mut self,
+        _s0: &Span,
+        t_struct: &Type,
+        p0: &PlaceElem,
+    ) -> Result<(), Error> {
+        match p0 {
+            PlaceElem::Field(s1, t_result, x1) => self.solve_field(s1, t_result, t_struct, x1),
+            PlaceElem::Index(..) => todo!(),
+            PlaceElem::Deref(..) => todo!(),
+        }
+    }
+
+    fn solve_field(
+        &mut self,
+        s: &Span,
+        t_result: &Type,
+        t_struct: &Type,
+        x: &Name,
+    ) -> Result<(), Error> {
+        match t_struct {
             Type::Struct(x0, ts) => {
-                if let Some(stmt) = self.decls.structs.get(&x0) {
-                    let stmt = stmt.clone().instantiate(ts);
-                    let t2 = stmt
-                        .fields
-                        .iter()
-                        .find_map(|(x1, t)| (x1 == x).then_some(t));
-                    if let Some(t2) = t2 {
-                        if self.rollback {
-                            self.try_unify(t0, t2).ok();
-                        } else {
-                            self.unify(*s, *s, t0, t2);
-                        }
-                        Ok(())
+                let stmt = self.decls.structs.get(&x0).unwrap().instantiate(ts);
+                let t2 = stmt
+                    .fields
+                    .iter()
+                    .find_map(|(x1, t)| (x1 == x).then_some(t));
+                if let Some(t2) = t2 {
+                    if self.rollback {
+                        self.try_unify(t_result, t2).ok();
                     } else {
-                        Err(FatalError::FieldNotFound(*x, t1.clone()).into())
+                        self.unify(*s, *s, t_result, t2);
                     }
+                    Ok(())
                 } else {
-                    Err(FatalError::NotAStruct(t1.clone()).into())
+                    Err(FatalError::FieldNotFound(*x, t_struct.clone()).into())
                 }
             }
             Type::Record(xts) => {
                 let t2 = xts.iter().find_map(|(x1, t)| (x1 == x).then_some(t));
                 if let Some(t2) = t2 {
                     if self.rollback {
-                        self.try_unify(t0, t2).ok();
+                        self.try_unify(t_result, t2).ok();
                     } else {
-                        self.unify(*s, *s, t0, t2);
+                        self.unify(*s, *s, t_result, t2);
                     }
                     Ok(())
                 } else {
-                    Err(FatalError::FieldNotFound(*x, t1.clone()).into())
+                    Err(FatalError::FieldNotFound(*x, t_struct.clone()).into())
                 }
             }
             Type::Var(_) => Err(RetryError::StructNotFound.into()),
-            _ => Err(FatalError::NotAStruct(t1.clone()).into()),
+            _ => Err(FatalError::NotAStruct(t_struct.clone()).into()),
         }
     }
 
@@ -273,7 +281,7 @@ impl Context {
         for i in premises {
             let impl_trait0 = i.as_trait().unwrap();
             let stmt_trait = self.decls.traits.get(&impl_trait0.x).unwrap().clone();
-            let Some(def_stmt) = stmt_trait.get_def(def_name) else {
+            let Some(def_stmt) = stmt_trait.find_def(def_name) else {
                 continue;
             };
             if def_stmt.generics.len() != def_type_args.len() {
@@ -283,11 +291,11 @@ impl Context {
                 let ts = this.fresh_tvs(stmt_trait.generics.len());
                 let stmt_trait = stmt_trait.instantiate(&ts).annotate(this);
                 let def_stmt = stmt_trait
-                    .get_def(def_name)
+                    .find_def(def_name)
                     .unwrap()
                     .instantiate(&def_type_args);
 
-                let satisfied = this.try_unify(def_type, &def_stmt.type_of()).is_ok()
+                let satisfied = this.try_unify(def_type, &def_stmt.ty()).is_ok()
                     && this.solve_where_clauses(&def_stmt.where_clause, premises)?
                     && this.solve_where_clauses(&stmt_trait.where_clause, premises)?;
 
@@ -314,7 +322,7 @@ impl Context {
                     .unwrap()
                     .instantiate(&def_type_args);
 
-                let satisfied = this.try_unify(def_type, &def_stmt.type_of()).is_ok()
+                let satisfied = this.try_unify(def_type, &def_stmt.ty()).is_ok()
                     && this.solve_where_clauses(&def_stmt.where_clause, premises)?
                     && this.solve_where_clauses(&impl_stmt.where_clause, premises)?;
 
@@ -333,7 +341,7 @@ impl Context {
         }
 
         for (trait_name, trait_stmt) in self.decls.traits.clone() {
-            let Some(def_stmt) = trait_stmt.get_def(def_name) else {
+            let Some(def_stmt) = trait_stmt.find_def(def_name) else {
                 continue;
             };
             if def_stmt.generics.len() != def_type_args.len() {
@@ -356,7 +364,7 @@ impl Context {
                         .unwrap()
                         .instantiate(&def_type_args);
 
-                    let satisfied = this.try_unify(def_type, &def_stmt.type_of()).is_ok()
+                    let satisfied = this.try_unify(def_type, &def_stmt.ty()).is_ok()
                         && this.solve_where_clauses(&def_stmt.where_clause, premises)?
                         && this.solve_where_clauses(&impl_stmt.where_clause, premises)?;
 
@@ -397,7 +405,7 @@ impl Context {
                     .unwrap()
                     .instantiate(&def_type_args);
                 let impl_type1 = impl_stmt.head.as_type().unwrap();
-                let def_type1 = def_stmt.type_of().apply(this);
+                let def_type1 = def_stmt.ty().apply(this);
 
                 let satisfied = this.try_unify(impl_type0, impl_type1).is_ok()
                     && this.try_unify(def_type0, &def_type1).is_ok()
@@ -479,7 +487,7 @@ impl Context {
                 let impl_trait1 = impl_stmt.head.as_trait().unwrap();
 
                 let satisfied = this.traits_match(impl_trait0, impl_trait1)
-                    && this.try_unify(def_type, &def_stmt.type_of()).is_ok()
+                    && this.try_unify(def_type, &def_stmt.ty()).is_ok()
                     && this.solve_where_clauses(&def_stmt.where_clause, premises)?
                     && this.solve_where_clauses(&impl_stmt.where_clause, premises)?;
 
@@ -586,18 +594,18 @@ impl Context {
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<bool, Error>,
     ) -> Result<(), Error> {
-        let type_snapshot = self.type_scope().type_table.snapshot();
+        let type_snapshot = self.type_ctx().type_union_find.snapshot();
         match f(self) {
             Ok(satisfied) => {
                 if satisfied && !self.rollback {
-                    self.type_scope().type_table.commit(type_snapshot);
+                    self.type_ctx().type_union_find.commit(type_snapshot);
                 } else {
-                    self.type_scope().type_table.rollback_to(type_snapshot);
+                    self.type_ctx().type_union_find.rollback_to(type_snapshot);
                 }
                 Ok(())
             }
             Err(e) => {
-                self.type_scope().type_table.rollback_to(type_snapshot);
+                self.type_ctx().type_union_find.rollback_to(type_snapshot);
                 Err(e)
             }
         }

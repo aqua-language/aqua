@@ -7,6 +7,7 @@ use runtime::prelude::Set;
 use runtime::prelude::Window;
 
 use crate::ast::Aggr;
+use crate::ast::Ast;
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
@@ -18,7 +19,7 @@ use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::PathPatField;
 use crate::ast::Place;
-use crate::ast::Ast;
+use crate::ast::PlaceElem;
 use crate::ast::QueryOp;
 use crate::ast::Segment;
 use crate::ast::Stmt;
@@ -30,7 +31,7 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::StmtVar;
+use crate::ast::StmtLocal;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
@@ -70,7 +71,7 @@ pub(crate) trait Visitor {
     #[inline(always)]
     fn _visit_stmt(&mut self, s: &Stmt) {
         match s {
-            Stmt::Var(s) => self.visit_stmt_var(s),
+            Stmt::Local(s) => self.visit_stmt_var(s),
             Stmt::Def(s) => self.visit_stmt_def(s),
             Stmt::Trait(s) => self.visit_stmt_trait(s),
             Stmt::Impl(s) => self.visit_stmt_impl(s),
@@ -88,14 +89,13 @@ pub(crate) trait Visitor {
     #[inline(always)]
     fn _visit_span(&mut self, _: &Span) {}
 
-    fn visit_stmt_var(&mut self, s: &StmtVar) {
+    fn visit_stmt_var(&mut self, s: &StmtLocal) {
         self._visit_stmt_var(s);
     }
     #[inline(always)]
-    fn _visit_stmt_var(&mut self, s: &StmtVar) {
+    fn _visit_stmt_var(&mut self, s: &StmtLocal) {
         self.visit_span(&s.span);
-        self.visit_name(&s.name);
-        self.visit_type(&s.ty);
+        self.visit_local(&s.local);
         self.visit_expr(&s.expr);
     }
 
@@ -107,7 +107,7 @@ pub(crate) trait Visitor {
         self.visit_span(&s.span);
         self.visit_name(&s.name);
         self.visit_generics(&s.generics);
-        self.visit_params(&s.params);
+        self.visit_locals(&s.params);
         self.visit_type(&s.ty);
         self.visit_impls(&s.where_clause);
         self.visit_stmt_def_body(&s.body);
@@ -123,21 +123,12 @@ pub(crate) trait Visitor {
     }
 
     #[inline(always)]
-    fn visit_params(&mut self, ps: &[(Name, Type)]) {
+    fn visit_locals(&mut self, ps: &[Local]) {
         self._visit_params(ps);
     }
     #[inline(always)]
-    fn _visit_params(&mut self, ps: &[(Name, Type)]) {
-        self.visit_iter(ps, Self::visit_param);
-    }
-
-    fn visit_param(&mut self, p: &(Name, Type)) {
-        self._visit_param(p);
-    }
-    #[inline(always)]
-    fn _visit_param(&mut self, p: &(Name, Type)) {
-        self.visit_name(&p.0);
-        self.visit_type(&p.1);
+    fn _visit_params(&mut self, ps: &[Local]) {
+        self.visit_iter(ps, Self::visit_local);
     }
 
     #[inline(always)]
@@ -234,27 +225,9 @@ pub(crate) trait Visitor {
         self.visit_span(&d.span);
         self.visit_name(&d.name);
         self.visit_generics(&d.generics);
-        self.visit_trait_def_params(&d.params);
+        self.visit_locals(&d.params);
         self.visit_type(&d.ty);
         self.visit_iter(&d.where_clause, Self::visit_impl);
-    }
-
-    #[inline(always)]
-    fn visit_trait_def_params(&mut self, ps: &[(Name, Type)]) {
-        self._visit_trait_def_params(ps);
-    }
-    #[inline(always)]
-    fn _visit_trait_def_params(&mut self, ps: &[(Name, Type)]) {
-        self.visit_iter(ps, Self::visit_trait_def_param);
-    }
-
-    fn visit_trait_def_param(&mut self, p: &(Name, Type)) {
-        self._visit_trait_def_param(p);
-    }
-    #[inline(always)]
-    fn _visit_trait_def_param(&mut self, p: &(Name, Type)) {
-        self.visit_name(&p.0);
-        self.visit_type(&p.1);
     }
 
     fn visit_trait_type(&mut self, t: &StmtTraitType) {
@@ -433,7 +406,7 @@ pub(crate) trait Visitor {
             Expr::Index(_, _, e, _i) => {
                 self.visit_expr(e);
             }
-            Expr::Var(_, _, x) => {
+            Expr::Local(_, _, x, _) => {
                 self.visit_name(x);
             }
             Expr::Def(_, _, x, ts) => {
@@ -483,19 +456,19 @@ pub(crate) trait Visitor {
             }
             Expr::Continue(_, _) => {}
             Expr::Break(_, _) => {}
-            Expr::While(_, _, e0, e1) => {
-                self.visit_expr(e0);
-                self.visit_expr(e1);
+            Expr::While(_, _, e, b) => {
+                self.visit_expr(e);
+                self.visit_block(b);
             }
             Expr::Lambda(_, _, xts, t, e) => {
-                self.visit_params(xts);
+                self.visit_locals(xts);
                 self.visit_type(t);
                 self.visit_expr(e);
             }
-            Expr::For(_, _, x, e0, e1) => {
+            Expr::For(_, _, x, e, b) => {
                 self.visit_name(x);
-                self.visit_expr(e0);
-                self.visit_expr(e1);
+                self.visit_expr(e);
+                self.visit_block(b);
             }
             Expr::Err(_, _) => {}
             Expr::InfixBinaryOp(_, _, _op, e0, e1) => {
@@ -520,35 +493,21 @@ pub(crate) trait Visitor {
                 self.visit_types(ts);
                 self.visit_exprs(es);
             }
-            Expr::IfElse(_, _, e0, e1, e2) => {
-                self.visit_expr(e0);
-                self.visit_expr(e1);
-                self.visit_expr(e2);
+            Expr::IfElse(_, _, e, b0, b1) => {
+                self.visit_expr(e);
+                self.visit_block(b0);
+                self.visit_block(b1);
             }
             Expr::IntSuffix(_, _, _v, _x) => {}
             Expr::FloatSuffix(_, _, _v, _x) => {}
-            Expr::LetIn(_, _, x, t1, e0, e1) => {
-                self.visit_name(x);
-                self.visit_type(t1);
-                self.visit_expr(e0);
-                self.visit_expr(e1);
-            }
-            Expr::Update(_, _, e0, x, e1) => {
-                self.visit_expr(e0);
-                self.visit_name(x);
-                self.visit_expr(e1);
-            }
             Expr::Anonymous(_, _) => {}
-            Expr::Closure(_, _, xts0, xts1, t, e) => {
-                self.visit_params(xts0);
-                self.visit_params(xts1);
+            Expr::Closure(_, _, _, ls, ps, t, e) => {
+                self.visit_locals(ls);
+                ps.iter().for_each(|p| self.visit_place(p));
                 self.visit_type(t);
                 self.visit_expr(e);
             }
-            Expr::Ref(_, _, e) => {
-                self.visit_expr(e);
-            }
-            Expr::RefMut(_, _, e) => {
+            Expr::Ref(_, _, e, _) => {
                 self.visit_expr(e);
             }
             Expr::Place(_, _, p) => {
@@ -556,6 +515,9 @@ pub(crate) trait Visitor {
             }
             Expr::Deref(_, _, e) => {
                 self.visit_expr(e);
+            }
+            Expr::Loop(_, _, b) => {
+                self.visit_block(b);
             }
             Expr::Unit(_, _) => {}
         }
@@ -782,11 +744,7 @@ pub(crate) trait Visitor {
                 self.visit_name(x);
                 self.visit_types(ts);
             }
-            Type::Ref(loans, t) => {
-                self.visit_loans(loans);
-                self.visit_type(t);
-            }
-            Type::RefMut(loans, t) => {
+            Type::Ref(loans, t, _mutable) => {
                 self.visit_loans(loans);
                 self.visit_type(t);
             }
@@ -1112,7 +1070,7 @@ pub(crate) trait Visitor {
     }
 
     fn _visit_value_fun(&mut self, f: &Function) {
-        f.params.values().for_each(|t| self.visit_type(t));
+        f.params.iter().for_each(|t| self.visit_local(t));
         self.visit_stmt_def_body(&f.body);
     }
 
@@ -1141,46 +1099,31 @@ pub(crate) trait Visitor {
                 self.visit_span(s);
                 self.visit_impl(i);
             }
-            Constraint::Field(s, t0, t1, x) => {
+            Constraint::PlaceElem(s, t0, elem) => {
                 self.visit_span(s);
                 self.visit_type(t0);
-                self.visit_type(t1);
-                self.visit_name(x);
+                self.visit_place_elem(elem);
             }
         }
     }
-}
 
-pub(crate) trait Visitable {
-    fn visit(&self, visitor: &mut impl Visitor);
-}
-
-impl Visitable for Ast {
-    fn visit(&self, mut visitor: &mut impl Visitor) {
-        visitor.visit_program(self);
+    fn visit_place_elem(&mut self, elem: &PlaceElem) {
+        self._visit_place_elem(elem);
     }
-}
 
-impl Visitable for Stmt {
-    fn visit(&self, mut visitor: &mut impl Visitor) {
-        visitor.visit_stmt(self);
-    }
-}
-
-impl Visitable for Expr {
-    fn visit(&self, mut visitor: &mut impl Visitor) {
-        visitor.visit_expr(self);
-    }
-}
-
-impl Visitable for Type {
-    fn visit(&self, mut visitor: &mut impl Visitor) {
-        visitor.visit_type(self);
-    }
-}
-
-impl Visitable for Constraint {
-    fn visit(&self, mut visitor: &mut impl Visitor) {
-        visitor.visit_constraint(self);
+    #[inline(always)]
+    fn _visit_place_elem(&mut self, elem: &PlaceElem) {
+        match elem {
+            PlaceElem::Field(s, t, x) => {
+                self.visit_span(s);
+                self.visit_name(x);
+            }
+            PlaceElem::Index(s, t, _i) => {
+                self.visit_span(s);
+            }
+            PlaceElem::Deref(s, t) => {
+                self.visit_span(s);
+            }
+        }
     }
 }

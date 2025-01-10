@@ -13,13 +13,13 @@ use super::StmtImpl;
 use super::StmtStruct;
 use super::StmtTrait;
 use super::StmtType;
-use super::StmtVar;
+use super::StmtLocal;
 use super::Type;
 use super::TypeBody;
 
-impl From<StmtVar> for Stmt {
-    fn from(v: StmtVar) -> Stmt {
-        Stmt::Var(Rc::new(v))
+impl From<StmtLocal> for Stmt {
+    fn from(v: StmtLocal) -> Stmt {
+        Stmt::Local(Rc::new(v))
     }
 }
 

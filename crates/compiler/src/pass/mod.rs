@@ -4,11 +4,13 @@ use crate::diag::Report;
 pub mod desugar;
 pub mod expand;
 pub mod infer;
-#[allow(unused)]
 pub mod lift;
+pub mod flatten;
 pub mod monomorphise;
 pub mod query_desugar;
 pub mod resolve;
+pub mod capture;
+pub mod ast_to_mir;
 
 pub trait Pass: std::fmt::Debug {
     fn run(&mut self, program: &Ast) -> Ast;

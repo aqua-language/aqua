@@ -3,9 +3,7 @@ use runtime::prelude::Send;
 use runtime::prelude::Sync;
 
 use crate::ast::ExprBody;
-use crate::ast::Map;
-use crate::ast::Name;
-use crate::ast::Type;
+use crate::ast::Local;
 use crate::builtins::value::Value;
 
 use crate::builtins::Context;
@@ -16,7 +14,7 @@ fn declare(_ctx: &mut Context) {}
 
 #[derive(Debug, Clone, Eq, PartialEq, Send, Sync)]
 pub struct Function {
-    pub params: Map<Name, Type>,
+    pub params: Vec<Local>,
     pub body: ExprBody,
 }
 
@@ -24,10 +22,10 @@ impl std::fmt::Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "(")?;
         let mut iter = self.params.iter();
-        if let Some((k, v)) = iter.next() {
-            write!(f, "{}: {}", k, v)?;
-            for (k, v) in iter {
-                write!(f, ", {}: {}", k, v)?;
+        if let Some(l) = iter.next() {
+            write!(f, "{l}")?;
+            for l in iter {
+                write!(f, ", {l}")?;
             }
         }
         write!(f, ") => {}", self.body)
@@ -35,15 +33,15 @@ impl std::fmt::Display for Function {
 }
 
 impl Function {
-    pub fn new(xs: Map<Name, Type>, body: ExprBody) -> Self {
-        Self { params: xs, body }
+    pub fn new(ls: Vec<Local>, body: ExprBody) -> Self {
+        Self { params: ls, body }
     }
 
     pub fn call(&self, ctx: &mut crate::interpret::Context, args: &[Value]) -> Value {
         match &self.body {
             ExprBody::UserDefined(e) => ctx.scoped(|ctx| {
-                for (x, v) in self.params.keys().zip(args) {
-                    ctx.stack.bind(*x, v.clone())
+                for (l, v) in self.params.iter().zip(args) {
+                    ctx.stack.bind(l.name, v.clone())
                 }
                 ctx.eval_expr(&e)
             }),

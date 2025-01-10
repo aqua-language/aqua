@@ -5,10 +5,11 @@ use super::BuiltinType;
 use super::Expr;
 use super::ExprBody;
 use super::Impl;
-use super::Map;
+use super::Local;
 use super::Name;
 use super::Pat;
 use super::Path;
+use super::Place;
 use super::Stmt;
 use super::StmtDef;
 use super::StmtEnum;
@@ -16,14 +17,14 @@ use super::StmtImpl;
 use super::StmtStruct;
 use super::StmtTrait;
 use super::StmtType;
-use super::StmtVar;
+use super::StmtLocal;
 use super::Trait;
 use super::Type;
 use super::TypeBody;
 
 impl Stmt {
-    pub fn as_var(&self) -> Option<&StmtVar> {
-        if let Stmt::Var(v) = self {
+    pub fn as_var(&self) -> Option<&StmtLocal> {
+        if let Stmt::Local(v) = self {
             Some(v)
         } else {
             None
@@ -131,41 +132,42 @@ impl Path {
 }
 
 impl Expr {
-    fn as_param(&self) -> Option<(Name, Type)> {
+    fn as_local(&self) -> Option<Local> {
         match self {
             Expr::Path(_, _, p) => {
                 let Some(x) = p.as_name() else { return None };
-                Some((*x, Type::Unknown))
+                Some(Local::new(x.span, *x, Type::Unknown, false))
             }
             Expr::Annotate(_, t, e) => {
                 let Expr::Path(_, _, p) = e.as_ref() else {
                     return None;
                 };
-                Some((*p.as_name()?, t.clone()))
+                let x = *p.as_name()?;
+                Some(Local::new(x.span, x, t.clone(), false))
             }
             _ => None,
         }
     }
 
-    pub fn as_params(&self) -> Option<Map<Name, Type>> {
+    pub fn as_locals(&self) -> Option<Vec<Local>> {
         match self {
-            Expr::Tuple(_, _, es) => {
-                let mut map = Map::new();
-                for e in es {
-                    let (x, t) = e.as_param()?;
-                    map.insert(x, t);
-                }
-                Some(map)
-            }
+            Expr::Tuple(_, _, es) => es.iter().map(|e| e.as_local()).collect(),
             Expr::Paren(_, _, e) => {
-                let xt = e.as_param()?;
-                Some(Map::from(vec![xt]))
+                let xt = e.as_local()?;
+                Some(vec![xt])
             }
-            Expr::Unit(_, _) => Some(Map::new()),
+            Expr::Unit(_, _) => Some(vec![]),
             _ => {
-                let xt = self.as_param()?;
-                Some(Map::from(vec![xt]))
+                let xt = self.as_local()?;
+                Some(vec![xt])
             }
+        }
+    }
+
+    pub fn as_place(&self) -> Option<&Place> {
+        match self {
+            Expr::Place(_, _, p) => Some(p),
+            _ => None,
         }
     }
 }
@@ -180,10 +182,10 @@ impl Type {
     }
 
     pub fn as_params(&self) -> Vec<Type> {
-        if let Type::Tuple(ts) = self {
-            ts.clone()
-        } else {
-            vec![self.clone()]
+        match self {
+            Type::Tuple(ts) => ts.clone(),
+            Type::Unit => vec![],
+            _ => vec![self.clone()],
         }
     }
 
@@ -255,7 +257,7 @@ impl Constraint {
             Constraint::WhereClause(_, i) => Some(i),
             Constraint::AssocDef(_, _, i, ..) => Some(i),
             Constraint::AssocType(_, _, i, ..) => Some(i),
-            Constraint::Field(..) => None,
+            Constraint::PlaceElem(..) => None,
         }
     }
 }

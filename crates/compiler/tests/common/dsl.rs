@@ -3,28 +3,29 @@
 use std::rc::Rc;
 
 use compiler::ast::Aggr;
+use compiler::ast::Ast;
 use compiler::ast::Block;
 use compiler::ast::BuiltinDef;
 use compiler::ast::Expr;
 use compiler::ast::ExprBody;
 use compiler::ast::Impl;
 use compiler::ast::Index;
+use compiler::ast::Local;
 use compiler::ast::Map;
 use compiler::ast::Name;
 use compiler::ast::Pat;
 use compiler::ast::Place;
-use compiler::ast::Ast;
 use compiler::ast::QueryOp;
 use compiler::ast::Stmt;
 use compiler::ast::StmtDef;
 use compiler::ast::StmtEnum;
 use compiler::ast::StmtImpl;
+use compiler::ast::StmtLocal;
 use compiler::ast::StmtStruct;
 use compiler::ast::StmtTrait;
 use compiler::ast::StmtTraitDef;
 use compiler::ast::StmtTraitType;
 use compiler::ast::StmtType;
-use compiler::ast::StmtVar;
 use compiler::ast::Trait;
 use compiler::ast::Type;
 use compiler::ast::TypeBody;
@@ -614,11 +615,11 @@ pub fn expr_assign(e0: Expr, e1: Expr) -> Expr {
 }
 
 pub fn expr_ref(e: Expr) -> Expr {
-    Expr::Ref(span(), Type::Unknown, Rc::new(e))
+    Expr::Ref(span(), Type::Unknown, Rc::new(e), false)
 }
 
 pub fn expr_ref_mut(e: Expr) -> Expr {
-    Expr::RefMut(span(), Type::Unknown, Rc::new(e))
+    Expr::Ref(span(), Type::Unknown, Rc::new(e), true)
 }
 
 pub fn expr_deref(e: Expr) -> Expr {
@@ -626,11 +627,11 @@ pub fn expr_deref(e: Expr) -> Expr {
 }
 
 pub fn ty_ref(t: Type) -> Type {
-    Type::Ref(vec![], Rc::new(t))
+    Type::Ref(vec![], Rc::new(t), false)
 }
 
 pub fn ty_ref_mut(t: Type) -> Type {
-    Type::RefMut(vec![], Rc::new(t))
+    Type::Ref(vec![], Rc::new(t), true)
 }
 
 // pub fn stmt_mod<const N: usize>(x: &'static str, ss: [Stmt; N]) -> Stmt {
@@ -642,7 +643,7 @@ pub fn ty_ref_mut(t: Type) -> Type {
 // }
 
 pub fn stmt_var(x: &'static str, t: Type, e: Expr) -> Stmt {
-    StmtVar::new(span(), name(x), t, e).into()
+    StmtLocal::new(span(), local_mut((x, t)), e).into()
 }
 
 pub fn type_body(t: Type) -> TypeBody {
@@ -748,8 +749,16 @@ pub fn stmt_err() -> Stmt {
     Stmt::Err(span())
 }
 
-pub fn params<const N: usize>(xts: [(&'static str, Type); N]) -> Map<Name, Type> {
-    xts.into_iter().map(|(x, t)| (name(x), t)).collect()
+pub fn params<const N: usize>(xts: [(&'static str, Type); N]) -> Vec<Local> {
+    app(xts, local)
+}
+
+pub fn local((x, t): (&'static str, Type)) -> Local {
+    Local::new(span(), name(x), t, false)
+}
+
+pub fn local_mut((x, t): (&'static str, Type)) -> Local {
+    Local::new(span(), name(x), t, true)
 }
 
 pub fn tr_def<const N: usize, const M: usize, const K: usize>(
@@ -799,7 +808,23 @@ pub fn expr_call_direct<const N: usize, const M: usize>(
 }
 
 pub fn expr_var(x: &'static str) -> Expr {
-    Expr::Var(span(), Type::Unknown, name(x))
+    Expr::Local(span(), Type::Unknown, name(x), true)
+}
+
+pub fn expr_val(x: &'static str) -> Expr {
+    Expr::Local(span(), Type::Unknown, name(x), false)
+}
+
+pub fn expr_val_place(x: &'static str) -> Expr {
+    Expr::Place(
+        span(),
+        Type::Unknown,
+        Place::new(
+            span(),
+            Local::new(span(), name(x), Type::Unknown, false),
+            vec![],
+        ),
+    )
 }
 
 pub fn expr_annotate(e: Expr, t: Type) -> Expr {
@@ -873,20 +898,18 @@ pub fn expr_match<const N: usize>(e: Expr, pes: [(Pat, Expr); N]) -> Expr {
     Expr::Match(span(), Type::Unknown, Rc::new(e), arms(pes))
 }
 
-pub fn expr_if(e0: Expr, b0: Block) -> Expr {
+pub fn expr_if(e: Expr, b: Block) -> Expr {
     Expr::IfElse(
         span(),
         Type::Unknown,
-        Rc::new(e0),
-        Rc::new(Expr::Block(span(), Type::Unknown, Rc::new(b0))),
-        Rc::new(Expr::Block(span(), Type::Unknown, Rc::new(block([], None)))),
+        Rc::new(e),
+        Rc::new(b),
+        Rc::new(block([], None)),
     )
 }
 
-pub fn expr_if_else(e0: Expr, b0: Block, b1: Block) -> Expr {
-    let e1 = Expr::Block(span(), Type::Unknown, Rc::new(b0));
-    let e2 = Expr::Block(span(), Type::Unknown, Rc::new(b1));
-    Expr::IfElse(span(), Type::Unknown, Rc::new(e0), Rc::new(e1), Rc::new(e2))
+pub fn expr_if_else(e: Expr, b0: Block, b1: Block) -> Expr {
+    Expr::IfElse(span(), Type::Unknown, Rc::new(e), Rc::new(b0), Rc::new(b1))
 }
 
 pub fn expr_def<const N: usize>(x: &'static str, ts: [Type; N]) -> Expr {
@@ -933,21 +956,35 @@ pub fn expr_lambda<const N: usize>(ps: [&'static str; N], e: Expr) -> Expr {
     Expr::Lambda(
         span(),
         Type::Unknown,
-        app(ps, |s| (name(s), Type::Unknown)).into(),
+        app(ps, |s| local((s, Type::Unknown))).into(),
         Type::Unknown,
         Rc::new(e),
     )
-}
-
-fn param((x, t): (&'static str, Type)) -> (Name, Type) {
-    (name(x), t)
 }
 
 pub fn expr_lambda_typed<const N: usize>(ps: [(&'static str, Type); N], e: Expr) -> Expr {
     Expr::Lambda(
         span(),
         Type::Unknown,
-        app(ps, param).into(),
+        app(ps, local).into(),
+        Type::Unknown,
+        Rc::new(e),
+    )
+}
+
+pub fn expr_closure<const N: usize, const M: usize>(
+    ls: [&'static str; N],
+    ps: [&'static str; M],
+    e: Expr,
+) -> Expr {
+    Expr::Closure(
+        span(),
+        Type::Unknown,
+        0,
+        app(ls, |s| local((s, Type::Unknown))),
+        app(ps, |p| {
+            Place::new(span(), local((p, Type::Unknown)), vec![])
+        }),
         Type::Unknown,
         Rc::new(e),
     )
@@ -1045,8 +1082,7 @@ pub fn aggr_if(x0: &'static str, x1: &'static str, e1: Expr, e2: Expr) -> Aggr {
 }
 
 pub fn expr_while(e: Expr, b: Block) -> Expr {
-    let e1 = Expr::Block(span(), Type::Unknown, Rc::new(b));
-    Expr::While(span(), Type::Unknown, Rc::new(e), Rc::new(e1))
+    Expr::While(span(), Type::Unknown, Rc::new(e), Rc::new(b))
 }
 
 pub fn span() -> Span {

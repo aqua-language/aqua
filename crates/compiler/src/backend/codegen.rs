@@ -1,5 +1,6 @@
 use crate::ast::Block;
 use crate::ast::Expr;
+use crate::ast::Local;
 use crate::ast::Name;
 use crate::ast::Ast;
 use crate::ast::Stmt;
@@ -7,7 +8,7 @@ use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
 use crate::ast::StmtStruct;
 use crate::ast::StmtType;
-use crate::ast::StmtVar;
+use crate::ast::StmtLocal;
 use crate::ast::Type;
 use crate::builtins::value::Function;
 use crate::print::Print;
@@ -15,11 +16,11 @@ use crate::print::Print;
 pub trait Codegen<'a>: Print<'a> {
     fn program(&mut self, p: &Ast) -> std::fmt::Result;
 
-    fn param(&mut self, xt: &(Name, Type)) -> std::fmt::Result;
+    fn local(&mut self, l: &Local) -> std::fmt::Result;
 
     fn stmt(&mut self, s: &Stmt) -> std::fmt::Result;
 
-    fn stmt_var(&mut self, s: &StmtVar) -> std::fmt::Result;
+    fn stmt_var(&mut self, s: &StmtLocal) -> std::fmt::Result;
 
     fn stmt_def(&mut self, s: &StmtDef) -> std::fmt::Result;
 

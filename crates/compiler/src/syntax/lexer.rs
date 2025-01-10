@@ -1,3 +1,4 @@
+use crate::diag::Diagnostic;
 use crate::diag::Report;
 use crate::syntax::source::SourceId;
 use crate::syntax::span::Span;
@@ -34,11 +35,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn unexpected_char(&mut self, c: char) {
-        self.report.err(
+        self.report.add(Diagnostic::err(
             Span::new(self.file, (self.pos - 1) as u32..self.pos as u32),
             "Unexpected character",
             format!("Unexpected character '{c}'"),
-        );
+        ));
     }
 
     #[inline(always)]
@@ -140,6 +141,7 @@ impl<'a> Lexer<'a> {
                             "trait" => Token::Trait,
                             "true" => Token::True,
                             "type" => Token::Type,
+                            "val" => Token::Val,
                             "var" => Token::Var,
                             "where" => Token::Where,
                             "while" => Token::While,

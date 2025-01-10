@@ -13,6 +13,7 @@ use common::dsl::expr_struct;
 use common::dsl::expr_tuple;
 use common::dsl::expr_unit;
 use common::dsl::expr_unresolved;
+use common::dsl::expr_val;
 use common::dsl::expr_var;
 use common::dsl::impl_type;
 use common::dsl::program;
@@ -125,7 +126,7 @@ fn test_resolve_def1() {
         [("x", ty("i32"))],
         ty("i32"),
         [],
-        expr_var("x"),
+        expr_val("x"),
     )]);
     check!(a, b);
 }
@@ -139,7 +140,7 @@ fn test_resolve_def2() {
         [("x", ty("i32"))],
         ty("i32"),
         [],
-        expr_call(expr_def("f", []), [expr_var("x")]),
+        expr_call(expr_def("f", []), [expr_val("x")]),
     )]);
     check!(a, b);
 }
@@ -168,7 +169,7 @@ fn test_resolve_def3() {
                 [],
                 expr_int("1"),
             )],
-            expr_call(expr_def("g", []), [expr_var("x")]),
+            expr_call(expr_def("g", []), [expr_val("x")]),
         ),
     )]);
     check!(a, b);
@@ -200,7 +201,7 @@ fn test_resolve_def_generic() {
         [("x", ty_gen("T"))],
         ty_gen("T"),
         [],
-        expr_var("x"),
+        expr_val("x"),
     )]);
     check!(a, b);
 }
@@ -302,7 +303,7 @@ fn test_resolve_trait_assoc0() {
             [("x", ty_gen("T"))],
             ty_gen("T"),
             [trait_bound("Trait", [ty_gen("T")], [])],
-            expr_call(expr_err(), [expr_var("x")]),
+            expr_call(expr_err(), [expr_val("x")]),
         ),
     ]);
     check!(
@@ -347,7 +348,7 @@ fn test_resolve_trait_impl0() {
                 [("x", ty("i32"))],
                 ty("i32"),
                 [],
-                expr_var("x"),
+                expr_val("x"),
             )],
             [],
         ),
@@ -409,7 +410,7 @@ fn test_resolve_trait_impl2() {
                 [("x", ty("i32"))],
                 ty("i32"),
                 [],
-                expr_var("x"),
+                expr_val("x"),
             )],
             [],
         ),
@@ -764,7 +765,7 @@ fn test_resolve_type_impl2() {
             "push",
             [],
             [("v", ty_builtin("Vec", [ty_gen("T")])), ("x", ty_gen("T"))],
-            Type::Tuple(vec![]),
+            Type::Unit,
             [],
             expr_unit(),
         )],
@@ -824,7 +825,7 @@ fn test_resolve_impl_generic() {
                 [("y", ty_gen("T"))],
                 ty_struct("X", [ty_gen("T")]),
                 [],
-                expr_struct("X", [ty_gen("T")], [("y", expr_var("y"))]),
+                expr_struct("X", [ty_gen("T")], [("y", expr_val("y"))]),
             )],
             [],
         ),
@@ -837,4 +838,26 @@ fn test_resolve_impl_type() {
     let a = resolve(aqua!("Path::new;")).unwrap();
     let b = program([stmt_expr(expr_assoc(impl_type(ty("Path")), "new", []))]);
     check!(a, b);
+}
+
+#[test]
+fn test_resolve_shadow0() {
+    let a = resolve(aqua!("var x = 1; var x = 2;")).unwrap_err();
+    let b = program([
+        stmt_var("x", Type::Unknown, expr_int("1")),
+        stmt_var("x", Type::Unknown, expr_int("2")),
+    ]);
+    check!(
+        a,
+        b,
+        "Error: Name `x` already defined in scope.
+            ╭─[test:1:5]
+            │
+          1 │ var x = 1; var x = 2;
+            │     ┬          ┬
+            │     ╰───────────── First definition
+            │                │
+            │                ╰── Second definition
+         ───╯"
+    );
 }

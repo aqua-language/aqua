@@ -6,8 +6,8 @@ pub mod expand;
 pub mod gather_goals;
 pub mod impl_var;
 pub mod instantiate;
-pub mod intrinstics;
 pub mod local;
+pub mod primitives;
 pub mod solver;
 pub mod type_var;
 pub mod unify;
@@ -19,30 +19,32 @@ use impl_var::ImplVarValue;
 use solver::Constraint;
 
 use crate::analysis::declare;
+use crate::ast::Ast;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Impl;
 use crate::ast::ImplVar;
+use crate::ast::Loan;
+use crate::ast::Local;
 use crate::ast::Name;
-use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtImpl;
-use crate::ast::StmtVar;
+use crate::ast::StmtLocal;
 use crate::ast::Type;
 use crate::ast::TypeVar;
 use crate::collections::map::Map;
 use crate::collections::set::Set;
+use crate::diag::Diagnostic;
 use crate::diag::Report;
 use crate::syntax::span::Span;
-use crate::traversal::mapper::Mappable;
+use crate::traversal::mappable::Mappable;
 use crate::traversal::mapper::Mapper;
-use crate::traversal::visitor::Visitable;
+use crate::traversal::visitable::Visitable;
 use crate::traversal::visitor::Visitor;
-use intrinstics::bool;
-use intrinstics::char;
-use intrinstics::string;
-use intrinstics::unit;
+use primitives::bool;
+use primitives::char;
+use primitives::string;
 
 use self::type_var::TypeVarKind;
 use self::type_var::TypeVarValue;
@@ -51,8 +53,8 @@ use super::Pass;
 
 #[derive(Debug)]
 pub struct Context {
-    expr_stack: Vec<ExprScope>,
-    type_stack: Vec<StmtScope>,
+    stack: Vec<Vec<Local>>,
+    contexts: Vec<TypeContext>,
     pub report: Report,
     pub decls: declare::Context,
     pub depth: usize,
@@ -76,39 +78,30 @@ impl Default for Context {
     }
 }
 
-#[derive(Default, Debug)]
-pub struct ExprScope(Map<Name, (Span, Type)>);
-
 #[derive(Debug)]
-pub struct StmtScope {
-    pub type_table: InPlaceUnificationTable<TypeVar>,
-    pub impl_table: InPlaceUnificationTable<ImplVar>,
+pub struct TypeContext {
+    pub type_union_find: InPlaceUnificationTable<TypeVar>,
+    pub impl_union_find: InPlaceUnificationTable<ImplVar>,
     constraints: Set<Constraint>,
     pub where_clause: Vec<Impl>,
 }
 
-impl StmtScope {
-    pub fn new(where_clause: Vec<Impl>) -> StmtScope {
-        StmtScope {
-            type_table: InPlaceUnificationTable::new(),
-            impl_table: InPlaceUnificationTable::new(),
+impl TypeContext {
+    pub fn new(where_clause: Vec<Impl>) -> TypeContext {
+        TypeContext {
+            type_union_find: InPlaceUnificationTable::new(),
+            impl_union_find: InPlaceUnificationTable::new(),
             constraints: vec![].into(),
             where_clause,
         }
     }
 }
 
-impl ExprScope {
-    pub fn new() -> ExprScope {
-        ExprScope::default()
-    }
-}
-
 impl Context {
     pub fn new() -> Context {
         Context {
-            expr_stack: vec![ExprScope::new()],
-            type_stack: vec![StmtScope::new(vec![])],
+            stack: vec![Vec::new()],
+            contexts: vec![TypeContext::new(vec![])],
             report: Report::new(),
             decls: declare::Context::default(),
             depth: 0,
@@ -117,7 +110,7 @@ impl Context {
     }
 
     pub fn add_constraint(&mut self, constraint: Constraint) {
-        self.type_scope().constraints.insert(constraint);
+        self.type_ctx().constraints.insert(constraint);
     }
 
     pub fn add_constraints(&mut self, constraints: Vec<Constraint>) {
@@ -127,48 +120,48 @@ impl Context {
     }
 
     pub fn take_constraints(&mut self) -> Set<Constraint> {
-        std::mem::take(&mut self.type_scope().constraints)
+        std::mem::take(&mut self.type_ctx().constraints)
     }
 
     pub fn premises(&self) -> Vec<Impl> {
-        self.type_stack
+        self.contexts
             .iter()
             .flat_map(|s| s.where_clause.clone())
             .collect()
     }
 
-    pub fn type_scope(&mut self) -> &mut StmtScope {
-        self.type_stack.last_mut().unwrap()
+    pub fn type_ctx(&mut self) -> &mut TypeContext {
+        self.contexts.last_mut().unwrap()
     }
 
     pub fn get_type_value(&mut self, a: TypeVar) -> TypeVarValue {
-        self.type_scope().type_table.probe_value(a)
+        self.type_ctx().type_union_find.probe_value(a)
     }
 
     pub fn get_impl_value(&mut self, a: ImplVar) -> ImplVarValue {
-        self.type_scope().impl_table.probe_value(a)
+        self.type_ctx().impl_union_find.probe_value(a)
     }
 
     pub fn union_impl_value(&mut self, a: ImplVar, b: Impl) {
-        self.type_scope()
-            .impl_table
+        self.type_ctx()
+            .impl_union_find
             .union_value(a, ImplVarValue::Known(b));
     }
 
     pub fn union_type_value(&mut self, a: TypeVar, b: Type) {
-        self.type_scope()
-            .type_table
+        self.type_ctx()
+            .type_union_find
             .union_value(a, TypeVarValue::Known(b));
     }
 
     pub fn union(&mut self, a: TypeVar, b: TypeVar) {
-        self.type_scope().type_table.union(a, b);
+        self.type_ctx().type_union_find.union(a, b);
     }
 
     pub fn fresh_tv(&mut self, kind: TypeVarKind) -> Type {
         Type::Var(
-            self.type_scope()
-                .type_table
+            self.type_ctx()
+                .type_union_find
                 .new_key(TypeVarValue::Unknown(kind)),
         )
     }
@@ -180,7 +173,11 @@ impl Context {
     }
 
     pub fn fresh_iv(&mut self) -> Impl {
-        Impl::Var(self.type_scope().impl_table.new_key(ImplVarValue::Unknown))
+        Impl::Var(
+            self.type_ctx()
+                .impl_union_find
+                .new_key(ImplVarValue::Unknown),
+        )
     }
 
     pub fn unify(&mut self, s0: Span, s1: Span, t0: &Type, t1: &Type) {
@@ -188,20 +185,20 @@ impl Context {
         t1.gather_constraints(self);
         let t0 = &t0.expand();
         let t1 = &t1.expand();
-        let snapshot = self.type_scope().type_table.snapshot();
+        let snapshot = self.type_ctx().type_union_find.snapshot();
         if self.try_unify(&t0, &t1).is_ok() {
-            self.type_scope().type_table.commit(snapshot)
+            self.type_ctx().type_union_find.commit(snapshot)
         } else {
-            self.type_scope().type_table.rollback_to(snapshot);
+            self.type_ctx().type_union_find.rollback_to(snapshot);
             let t0 = t0.apply(self);
             let t1 = t1.apply(self);
-            self.report.err2(
+            self.report.add(Diagnostic::err2(
                 s0,
                 s1,
                 "Type mismatch",
                 format!("Expected {t0}"),
                 format!("Found {t1}"),
-            );
+            ));
         }
     }
 
@@ -223,7 +220,7 @@ impl Context {
                         Ok(())
                     }
                     (TypeVarValue::Unknown(k0), TypeVarValue::Unknown(k1))
-                        if k0.is_compatible(k1) =>
+                        if k0.merge(k1).is_some() =>
                     {
                         if x0 != x1 {
                             self.union(*x0, *x1);
@@ -300,6 +297,7 @@ impl Context {
                 //     Err(())
                 // }
             }
+            (Type::Unit, Type::Unit) => Ok(()),
             (Type::Err, _) | (_, Type::Err) => Ok(()),
             (Type::Never, _) | (_, Type::Never) => Ok(()),
             (Type::Unknown, Type::Unknown) => Ok(()),
@@ -307,26 +305,26 @@ impl Context {
         }
     }
 
-    pub fn get(&self, x1: &Name) -> &(Span, Type) {
-        self.expr_stack
+    pub fn get(&self, x1: &Name) -> &Local {
+        self.stack
             .iter()
             .rev()
-            .find_map(|s| s.0.iter().rev().find(|(x0, _)| x0 == x1).map(|(_, b)| b))
+            .find_map(|scope| scope.iter().rev().find(|l0| l0.name == *x1))
             .unwrap_or_else(|| panic!("Unknown variable {x1}"))
     }
 
-    pub fn bind(&mut self, x: Name, b: (Span, Type)) {
-        self.expr_stack.last_mut().unwrap().0.insert(x, b);
+    pub fn bind(&mut self, l: Local) {
+        self.stack.last_mut().unwrap().push(l)
     }
 
     #[allow(unused)]
     fn debug(&mut self, label: &str) {
         println!("Debug ({label})");
         println!("* Substitutions:");
-        for i in 0..self.type_scope().type_table.len() as u32 {
+        for i in 0..self.type_ctx().type_union_find.len() as u32 {
             let x = TypeVar(i);
-            let xr = self.type_scope().type_table.find(x);
-            let t = self.type_scope().type_table.probe_value(x);
+            let xr = self.type_ctx().type_union_find.find(x);
+            let t = self.type_ctx().type_union_find.probe_value(x);
             if xr != x {
                 println!("    '{} -> '{}", x, xr);
             } else {
@@ -341,11 +339,11 @@ impl Context {
             }
         }
         println!("* Constraints:");
-        for constraint in self.type_scope().constraints.iter() {
+        for constraint in self.type_ctx().constraints.iter() {
             println!("    {}", constraint);
         }
         println!("* premises:");
-        for assumption in self.type_stack.iter().rev().flat_map(|s| &s.where_clause) {
+        for assumption in self.contexts.iter().rev().flat_map(|s| &s.where_clause) {
             println!("    {}", assumption.verbose());
         }
     }
@@ -353,11 +351,11 @@ impl Context {
 
 impl Mapper for Context {
     fn enter_scope(&mut self) {
-        self.expr_stack.push(ExprScope::new());
+        self.stack.push(Vec::new());
     }
 
     fn exit_scope(&mut self) {
-        self.expr_stack.pop();
+        self.stack.pop();
     }
 
     fn map_program(&mut self, program: &Ast) -> Ast {
@@ -387,7 +385,7 @@ impl Mapper for Context {
     }
 
     fn map_stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
-        self.type_stack.push(StmtScope::new(s.where_clause.clone()));
+        self.contexts.push(TypeContext::new(s.where_clause.clone()));
         let generics = s.generics.clone();
         let head = s.head.clone();
         let defs = s
@@ -397,16 +395,16 @@ impl Mapper for Context {
             .collect::<Vec<_>>();
         let types = s.types.clone();
         let where_clause = s.where_clause.clone();
-        self.type_stack.pop();
+        self.contexts.pop();
         StmtImpl::new(s.span, generics, head, where_clause, defs, types)
     }
 
     fn map_stmt_def(&mut self, s: &StmtDef) -> StmtDef {
         match &s.body {
             ExprBody::UserDefined(e) => {
-                self.type_stack.push(StmtScope::new(s.where_clause.clone()));
-                for (x, t) in &s.params {
-                    self.bind(*x, (x.span, t.clone()));
+                self.contexts.push(TypeContext::new(s.where_clause.clone()));
+                for l in &s.params {
+                    self.bind(l.clone());
                 }
                 let e = e.annotate(self);
                 self.visit_expr(&e);
@@ -423,7 +421,7 @@ impl Mapper for Context {
                 );
                 stmt.defaults(self);
                 let s = stmt.apply(self);
-                self.type_stack.pop();
+                self.contexts.pop();
                 s
             }
             ExprBody::Builtin(b) => StmtDef::new(
@@ -438,32 +436,23 @@ impl Mapper for Context {
         }
     }
 
-    fn map_stmt_var(&mut self, s: &StmtVar) -> StmtVar {
+    fn map_stmt_local(&mut self, s: &StmtLocal) -> StmtLocal {
         self.visit_expr(&s.expr);
-        self.unify(s.span, s.expr.span(), &s.ty, s.expr.ty());
-        self.bind(s.name, (s.span, s.ty.clone()));
-        StmtVar::new(s.expr.span(), s.name, s.ty.clone(), s.expr.clone())
+        self.unify(s.span, s.expr.span(), &s.local.ty, s.expr.ty());
+        self.bind(s.local.clone());
+        StmtLocal::new(s.expr.span(), s.local.clone(), s.expr.clone())
     }
 }
 
 impl Visitor for Context {
     fn visit_expr(&mut self, e: &Expr) {
         match e {
-            Expr::Path(..) => unreachable!(),
-            Expr::Int(_, _, _) => {}
-            Expr::Float(_, _, _) => {}
-            Expr::Bool(s, t0, _) => {
-                let t1 = bool();
-                self.unify(*s, *s, t0, &t1);
-            }
-            Expr::Char(s, t0, _) => {
-                let t1 = char();
-                self.unify(*s, *s, t0, &t1);
-            }
-            Expr::String(s, t0, _) => {
-                let t1 = string();
-                self.unify(*s, *s, t0, &t1);
-            }
+            Expr::Int(..) => {}
+            Expr::Float(..) => {}
+            Expr::Bool(s, t0, _) => self.unify(*s, *s, t0, &bool()),
+            Expr::Char(s, t0, _) => self.unify(*s, *s, t0, &char()),
+            Expr::String(s, t0, _) => self.unify(*s, *s, t0, &string()),
+            Expr::Unit(s, t) => self.unify(*s, *s, t, &Type::Unit),
             Expr::Struct(s, t0, x, ts, xes) => {
                 let stmt = self.decls.structs.get(x).unwrap().clone();
                 let gsub = stmt
@@ -476,7 +465,7 @@ impl Visitor for Context {
                     let t2 = stmt
                         .fields
                         .iter()
-                        .find_map(|(y, t)| (*y == x).then_some(t))
+                        .find_map(|(y, t)| (x == *y).then_some(t))
                         .unwrap()
                         .instantiate(&gsub);
                     self.visit_expr(&e);
@@ -510,10 +499,6 @@ impl Visitor for Context {
                 let t1 = Type::Tuple(ts);
                 self.unify(*s, *s, t0, &t1);
             }
-            Expr::Var(s, t0, x) => {
-                let (s1, t1) = self.get(x).clone();
-                self.unify(*s, s1, t0, &t1);
-            }
             Expr::Def(s, t0, x, ts0) => {
                 let stmt = self.decls.defs.get(x).unwrap().clone();
                 let gsub = stmt
@@ -522,14 +507,14 @@ impl Visitor for Context {
                     .into_iter()
                     .zip(ts0.clone())
                     .collect::<Map<_, _>>();
-                let preds = stmt
+                let constraints = stmt
                     .where_clause
                     .iter()
                     .map(|p| Constraint::WhereClause(*s, p.instantiate(&gsub)))
                     .collect::<Vec<_>>();
-                self.add_constraints(preds);
+                self.add_constraints(constraints);
                 let t2 = Type::Function(
-                    stmt.params.values().cloned().collect::<Vec<_>>(),
+                    stmt.params.iter().map(|l| l.ty.clone()).collect(),
                     Rc::new(stmt.ty.clone()),
                 )
                 .instantiate(&gsub);
@@ -546,31 +531,6 @@ impl Visitor for Context {
                 self.visit_block(b);
                 self.unify(*s, e.span(), t0, b.ty());
             }
-            Expr::Field(s, t0, e, x) => {
-                self.visit_expr(e);
-                self.add_constraint(Constraint::Field(*s, t0.clone(), e.ty().clone(), *x));
-            }
-            Expr::Index(s, t0, e, i) => {
-                self.visit_expr(e);
-                let t = e.ty().apply(self);
-                let Type::Tuple(ts) = &t else {
-                    self.report.err(
-                        *s,
-                        "Unknown type",
-                        format!("Type {t} must be known at this point."),
-                    );
-                    return;
-                };
-                let Some(t1) = ts.get(i.data) else {
-                    self.report.err(
-                        *s,
-                        format!("Index {i} out of bounds ({i} >= {})", ts.len()),
-                        format!("Index {i} out of bounds."),
-                    );
-                    return;
-                };
-                self.unify(*s, e.span(), t0, t1);
-            }
             Expr::Array(s, t0, es) => {
                 self.visit_exprs(es);
                 let t1 = es
@@ -583,22 +543,21 @@ impl Visitor for Context {
                 let t2 = Type::Builtin(Name::from("Array"), vec![t1]);
                 self.unify(*s, *s, t0, &t2);
             }
-            Expr::Err(_, _) => {}
             Expr::Assign(s, t0, e0, e1) => {
                 self.visit_expr(e0);
                 self.visit_expr(e1);
                 self.unify(*s, e0.span(), e0.ty(), e1.ty());
-                self.unify(*s, *s, t0, &unit());
+                self.unify(*s, *s, t0, &Type::Unit);
             }
             Expr::Return(_, _, _) => todo!(),
             Expr::Continue(_, _) => todo!(),
             Expr::Break(_, _) => todo!(),
-            Expr::Lambda(s, t0, xts0, t1, e0) => {
+            Expr::Lambda(s, t0, ls, t1, e0) => {
                 self.enter_scope();
-                for (x, t) in xts0 {
-                    self.bind(*x, (x.span, t.clone()));
+                for l in ls {
+                    self.bind(l.clone());
                 }
-                let ts0 = xts0.iter().map(|(_, t)| t.clone()).collect::<Vec<_>>();
+                let ts0 = ls.iter().map(|l| l.ty.clone()).collect::<Vec<_>>();
                 let t2 = Type::Function(ts0, Rc::new(t1.clone()));
                 self.unify(*s, *s, t0, &t2);
                 self.visit_expr(e0);
@@ -606,12 +565,12 @@ impl Visitor for Context {
                 self.exit_scope();
             }
             Expr::Match(_, _, _, _) => todo!(),
-            Expr::While(s, t0, e0, e1) => {
-                self.visit_expr(e0);
-                self.visit_expr(e1);
-                self.unify(*s, e0.span(), e0.ty(), &bool());
-                self.unify(*s, *s, t0, &unit());
-                self.unify(*s, e1.span(), t0, e1.ty());
+            Expr::While(s, t0, e, b) => {
+                self.visit_expr(e);
+                self.visit_block(b);
+                self.unify(*s, e.span(), e.ty(), &bool());
+                self.unify(*s, *s, t0, &Type::Unit);
+                self.unify(*s, b.span, t0, b.ty());
             }
             Expr::Record(s, t0, xes) => {
                 xes.iter().for_each(|(_, e)| self.visit_expr(e));
@@ -622,14 +581,14 @@ impl Visitor for Context {
                 let t1 = Type::Record(xts);
                 self.unify(*s, *s, t0, &t1);
             }
-            Expr::For(s, t0, _, e0, e1) => {
-                self.visit_expr(e0);
-                self.visit_expr(e1);
-                self.unify(*s, *s, t0, &unit());
-                self.unify(*s, *s, t0, &e1.ty());
+            Expr::For(s, t0, _, e, b) => {
+                self.visit_expr(e);
+                self.visit_block(b);
+                self.unify(*s, *s, t0, &Type::Unit);
+                self.unify(*s, *s, t0, &b.ty());
             }
             Expr::Assoc(s, t, i, x1, ts1) => {
-                self.type_scope().constraints.insert(Constraint::AssocDef(
+                self.type_ctx().constraints.insert(Constraint::AssocDef(
                     *s,
                     t.clone(),
                     i.clone(),
@@ -637,8 +596,39 @@ impl Visitor for Context {
                     ts1.clone(),
                 ));
             }
-            Expr::Update(_, _, _, _, _) => todo!(),
+            Expr::IfElse(s, t, e, b0, b1) => {
+                self.visit_expr(e);
+                self.visit_block(b0);
+                self.visit_block(b1);
+                self.unify(*s, *s, e.ty(), &bool());
+                self.unify(*s, b0.span, t, b0.ty());
+                self.unify(*s, b1.span, t, b1.ty());
+            }
+            Expr::Ref(s, t, e1, m) => {
+                let Expr::Place(s1, t1, p1) = e1.as_ref() else {
+                    unreachable!()
+                };
+                let loan = Loan::new(p1.clone(), *m);
+                let t2 = Type::Ref(vec![loan], Rc::new(t1.clone()), *m);
+                self.unify(*s, *s1, t, &t2);
+            }
+            Expr::Place(s, t0, p) => {
+                let mut ty = self.get(&p.local.name).ty.clone();
+                self.unify(p.local.span, p.local.span, &p.local.ty, &ty);
+                for elem in &p.elems {
+                    self.add_constraint(Constraint::PlaceElem(*s, ty.clone(), elem.clone()));
+                    ty = elem.ty().clone();
+                }
+                self.unify(*s, p.span, t0, &ty);
+            }
+            Expr::Err(s, t) => {
+                self.unify(*s, *s, t, &Type::Never);
+            }
             // TODO: Desugar all in previous pass.
+            Expr::Path(..) => unreachable!(),
+            Expr::Field(..) => unreachable!(),
+            Expr::Index(..) => unreachable!(),
+            Expr::Local(..) => unreachable!(),
             Expr::Query(..) => unreachable!(),
             Expr::QueryInto(..) => unreachable!(),
             Expr::InfixBinaryOp(..) => unreachable!(),
@@ -647,26 +637,14 @@ impl Visitor for Context {
             Expr::Annotate(..) => unreachable!(),
             Expr::Paren(..) => unreachable!(),
             Expr::Dot(..) => unreachable!(),
-            Expr::IfElse(s, t, e0, e1, e2) => {
-                self.visit_expr(e0);
-                self.visit_expr(e1);
-                self.visit_expr(e2);
-                self.unify(*s, *s, e0.ty(), &bool());
-                self.unify(*s, e1.span(), t, e1.ty());
-                self.unify(*s, e2.span(), t, e2.ty());
-            }
             Expr::IntSuffix(..) => unreachable!(),
             Expr::FloatSuffix(..) => unreachable!(),
-            Expr::LetIn(..) => unreachable!(),
             Expr::Anonymous(..) => unreachable!(),
-            Expr::Closure(_, _, _xts0, _xts1, _t, _e) => {
+            Expr::Closure(_, _, _, _xts0, _xts1, _t, _e) => {
                 todo!()
             }
-            Expr::Ref(..) => todo!(),
-            Expr::RefMut(..) => todo!(),
-            Expr::Place(..) => todo!(),
-            Expr::Deref(..) => todo!(),
-            Expr::Unit(s, t) => self.unify(*s, *s, t, &Type::Unit),
+            Expr::Loop(_, _, _) => todo!(),
+            Expr::Deref(..) => unreachable!(),
         }
     }
 }

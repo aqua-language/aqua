@@ -3,16 +3,25 @@ use crate::ast::Name;
 use crate::ast::Place;
 use crate::ast::Type;
 use crate::collections::set::Set;
+use crate::syntax::symbol::Symbol;
 
 pub type BlockId = usize;
 
 #[derive(Debug, Clone)]
+pub struct Mir {
+    pub locals: Vec<Local>,
+    pub blocks: Vec<BasicBlock>,
+    pub functions: Vec<Function>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Function {
-    pub id: Name,
+    pub name: Name,
     pub params: Vec<Local>,
     pub locals: Vec<Local>,
     pub ty: Type,
     pub blocks: Vec<BasicBlock>,
+    // Analysis data
     pub domtree: Vec<Vec<BlockId>>,
     pub successors: Vec<Vec<BlockId>>,
     pub predecessors: Vec<Vec<BlockId>>,
@@ -84,13 +93,15 @@ pub enum Operand {
     Constant(Constant),
     Copy(Place),
     Move(Place),
-    Function(String),
+    Function(Name, Vec<Type>),
 }
 
 #[derive(Debug, Clone)]
 pub enum Constant {
-    Int(i32),
+    Int(Symbol),
     Bool(bool),
-    String(String),
+    String(Symbol),
+    Float(Symbol),
+    Char(char),
     Unit,
 }

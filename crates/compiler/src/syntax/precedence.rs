@@ -16,7 +16,7 @@ impl Token {
 
     pub fn expr_prefix_bp(self) -> Option<((), u8)> {
         let bp = match self {
-            Token::Not | Token::Minus => ((), 8),
+            Token::Not | Token::Minus | Token::Star | Token::Ampersand => ((), 8),
             _ => return None,
         };
         Some(bp)

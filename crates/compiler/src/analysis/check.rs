@@ -1,6 +1,7 @@
-use crate::ast::Expr;
 use crate::ast::Ast;
+use crate::ast::Expr;
 use crate::ast::Type;
+use crate::diag::Diagnostic;
 use crate::diag::Report;
 use crate::traversal::visitor::Visitor;
 
@@ -26,7 +27,9 @@ impl Visitor for Context {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Int(s, t, v) => {
-                let Type::Builtin(x, _) = t else { unreachable!() };
+                let Type::Builtin(x, _) = t else {
+                    unreachable!()
+                };
                 let r = match x.data.as_str() {
                     "i8" => v.as_str().parse::<i8>().err().map(|e| e.to_string()),
                     "i16" => v.as_str().parse::<i16>().err().map(|e| e.to_string()),
@@ -39,18 +42,22 @@ impl Visitor for Context {
                     _ => unreachable!(),
                 };
                 if let Some(e) = r {
-                    self.report.err(*s, "Integer parsing error", e);
+                    self.report
+                        .add(Diagnostic::err(*s, "Integer parsing error", e));
                 }
             }
             Expr::Float(s, t, v) => {
-                let Type::Builtin(x, _) = t else { unreachable!() };
+                let Type::Builtin(x, _) = t else {
+                    unreachable!()
+                };
                 let r = match x.data.as_str() {
                     "f32" => v.as_str().parse::<f32>().err().map(|e| e.to_string()),
                     "f64" => v.as_str().parse::<f64>().err().map(|e| e.to_string()),
                     _ => unreachable!(),
                 };
                 if let Some(e) = r {
-                    self.report.err(*s, "Float parsing error", e);
+                    self.report
+                        .add(Diagnostic::err(*s, "Float parsing error", e));
                 }
             }
             _ => self._visit_expr(expr),

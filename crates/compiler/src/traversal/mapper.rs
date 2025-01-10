@@ -2,37 +2,35 @@
 
 use std::rc::Rc;
 
+use crate::ast::Ast;
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Impl;
+use crate::ast::Local;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::PathPatField;
 use crate::ast::Place;
-use crate::ast::Ast;
+use crate::ast::PlaceElem;
 use crate::ast::QueryOp;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
+use crate::ast::StmtLocal;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
 use crate::pass::infer::solver::Constraint;
 use crate::syntax::span::Span;
-
-fn x(mut x: Rc<String>) {
-    let y = Rc::make_mut(&mut x);
-}
 
 pub(crate) trait Mapper {
     #[inline(always)]
@@ -74,7 +72,7 @@ pub(crate) trait Mapper {
     #[inline(always)]
     fn _map_stmt(&mut self, s: &Stmt) -> Stmt {
         match s {
-            Stmt::Var(s) => Stmt::Var(Rc::new(self.map_stmt_var(s))),
+            Stmt::Local(s) => Stmt::Local(Rc::new(self.map_stmt_local(s))),
             Stmt::Def(s) => Stmt::Def(Rc::new(self.map_stmt_def(s))),
             Stmt::Trait(s) => Stmt::Trait(Rc::new(self.map_stmt_trait(s))),
             Stmt::Impl(s) => Stmt::Impl(Rc::new(self.map_stmt_impl(s))),
@@ -94,16 +92,15 @@ pub(crate) trait Mapper {
         *s
     }
 
-    fn map_stmt_var(&mut self, stmt: &StmtVar) -> StmtVar {
-        self._map_stmt_var(stmt)
+    fn map_stmt_local(&mut self, stmt: &StmtLocal) -> StmtLocal {
+        self._map_stmt_local(stmt)
     }
     #[inline(always)]
-    fn _map_stmt_var(&mut self, s: &StmtVar) -> StmtVar {
+    fn _map_stmt_local(&mut self, s: &StmtLocal) -> StmtLocal {
         let span = self.map_span(&s.span);
-        let name = self.map_name(&s.name);
-        let ty = self.map_type(&s.ty);
+        let local = self.map_local(&s.local);
         let expr = self.map_expr(&s.expr);
-        StmtVar::new(span, name, ty, expr)
+        StmtLocal::new(span, local, expr)
     }
 
     fn map_stmt_def(&mut self, stmt: &StmtDef) -> StmtDef {
@@ -115,7 +112,7 @@ pub(crate) trait Mapper {
         let span = self.map_span(&s.span);
         let name = self.map_name(&s.name);
         let generics = self.map_generics(&s.generics);
-        let params = self.map_params(&s.params).into();
+        let params = self.map_locals(&s.params).into();
         let ty = self.map_type(&s.ty);
         let where_clause = self.map_impls(&s.where_clause);
         let body = self.map_stmt_def_body(&s.body);
@@ -124,22 +121,24 @@ pub(crate) trait Mapper {
     }
 
     #[inline(always)]
-    fn map_params(&mut self, ps: &[(Name, Type)]) -> Vec<(Name, Type)> {
-        self._map_params(ps)
+    fn map_locals(&mut self, ps: &[Local]) -> Vec<Local> {
+        self._map_locals(ps)
     }
     #[inline(always)]
-    fn _map_params(&mut self, ps: &[(Name, Type)]) -> Vec<(Name, Type)> {
-        self.map_iter(ps, Self::map_param)
+    fn _map_locals(&mut self, ps: &[Local]) -> Vec<Local> {
+        self.map_iter(ps, Self::map_local)
     }
 
-    fn map_param(&mut self, xt: &(Name, Type)) -> (Name, Type) {
-        self._map_param(xt)
+    fn map_local(&mut self, xt: &Local) -> Local {
+        self._map_local(xt)
     }
     #[inline(always)]
-    fn _map_param(&mut self, (x, t): &(Name, Type)) -> (Name, Type) {
-        let x = self.map_name(x);
-        let t = self.map_type(t);
-        (x, t)
+    fn _map_local(&mut self, l: &Local) -> Local {
+        let span = self.map_span(&l.span);
+        let name = self.map_name(&l.name);
+        let ty = self.map_type(&l.ty);
+        let mutable = l.mutable;
+        Local::new(span, name, ty, mutable)
     }
 
     #[inline(always)]
@@ -265,14 +264,16 @@ pub(crate) trait Mapper {
         StmtTraitDef::new(span, name, generics, params, ty, where_clause)
     }
 
-    fn map_trait_def_param(&mut self, xt: &(Name, Type)) -> (Name, Type) {
-        self._map_trait_def_param(xt)
+    fn map_trait_def_param(&mut self, l: &Local) -> Local {
+        self._map_trait_def_param(l)
     }
     #[inline(always)]
-    fn _map_trait_def_param(&mut self, (x, t): &(Name, Type)) -> (Name, Type) {
-        let x = self.map_name(x);
-        let t = self.map_type(t);
-        (x, t)
+    fn _map_trait_def_param(&mut self, l: &Local) -> Local {
+        let s = self.map_span(&l.span);
+        let x = self.map_name(&l.name);
+        let t = self.map_type(&l.ty);
+        let m = l.mutable;
+        Local::new(s, x, t, m)
     }
 
     fn map_trait_types(&mut self, ts: &[Rc<StmtTraitType>]) -> Vec<Rc<StmtTraitType>> {
@@ -451,9 +452,10 @@ pub(crate) trait Mapper {
                 let i = *i;
                 Expr::Index(s, t, Rc::new(e), i)
             }
-            Expr::Var(_, _, x) => {
+            Expr::Local(_, _, x, m) => {
                 let x = self.map_name(x);
-                Expr::Var(s, t, x)
+                let m = *m;
+                Expr::Local(s, t, x, m)
             }
             Expr::Def(_, _, x, ts) => {
                 let x = self.map_name(x);
@@ -497,12 +499,12 @@ pub(crate) trait Mapper {
             Expr::Break(_, _) => Expr::Break(s, t),
             Expr::While(_, _, e0, e1) => {
                 let e = self.map_expr(e0);
-                let b = self.map_expr(e1);
+                let b = self.map_block(e1);
                 Expr::While(s, t, Rc::new(e), Rc::new(b))
             }
             Expr::Lambda(_, _, ps, t1, e) => {
                 self.enter_scope();
-                let ps = self.map_params(ps).into();
+                let ps = self.map_locals(ps).into();
                 let t1 = self.map_type(t1);
                 let e = self.map_expr(e);
                 self.exit_scope();
@@ -511,10 +513,10 @@ pub(crate) trait Mapper {
             Expr::For(_, _, x, e, b) => {
                 self.enter_scope();
                 let x = self.map_name(x);
-                let e0 = self.map_expr(e);
-                let e1 = self.map_expr(b);
+                let e = self.map_expr(e);
+                let b = self.map_block(b);
                 self.exit_scope();
-                Expr::For(s, t, x, Rc::new(e0), Rc::new(e1))
+                Expr::For(s, t, x, Rc::new(e), Rc::new(b))
             }
             Expr::Err(_, _) => Expr::Err(s, t),
             Expr::Query(_, _, x0, t0, e, qs) => {
@@ -562,42 +564,25 @@ pub(crate) trait Mapper {
                 let es = self.map_exprs(es);
                 Expr::Dot(s, t, Rc::new(e), x, ts, es)
             }
-            Expr::IfElse(_, _, e0, e1, e2) => {
-                let e = self.map_expr(e0);
-                let b0 = self.map_expr(e1);
-                let b1 = self.map_expr(e2);
+            Expr::IfElse(_, _, e, b0, b1) => {
+                let e = self.map_expr(e);
+                let b0 = self.map_block(b0);
+                let b1 = self.map_block(b1);
                 Expr::IfElse(s, t, Rc::new(e), Rc::new(b0), Rc::new(b1))
             }
             Expr::IntSuffix(_, _, v, x) => Expr::IntSuffix(s, t, *v, *x),
             Expr::FloatSuffix(_, _, v, x) => Expr::FloatSuffix(s, t, *v, *x),
-            Expr::LetIn(_, _, x, t1, e0, e1) => {
-                let x = self.map_name(x);
-                let t1 = self.map_type(t1);
-                let e0 = self.map_expr(e0);
-                let e1 = self.map_expr(e1);
-                Expr::LetIn(s, t, x, t1, Rc::new(e0), Rc::new(e1))
-            }
-            Expr::Update(_, _, e0, x, e1) => {
-                let e0 = self.map_expr(e0);
-                let x = self.map_name(x);
-                let e1 = self.map_expr(e1);
-                Expr::Update(s, t, Rc::new(e0), x, Rc::new(e1))
-            }
             Expr::Anonymous(_, _) => Expr::Anonymous(s, t),
-            Expr::Closure(_, _, xts0, xts1, t1, e) => {
-                let xts0 = self.map_params(xts0).into();
-                let xts1 = self.map_params(xts1).into();
+            Expr::Closure(_, _, uid, ls, ps, t1, e) => {
+                let ls = self.map_locals(ls);
+                let ps = ps.iter().map(|p| self.map_place(p)).collect();
                 let t1 = self.map_type(t1);
                 let e = self.map_expr(e);
-                Expr::Closure(s, t, xts0, xts1, t1, Rc::new(e))
+                Expr::Closure(s, t, *uid, ls, ps, t1, Rc::new(e))
             }
-            Expr::Ref(_, _, e) => {
+            Expr::Ref(_, _, e, m) => {
                 let e = self.map_expr(e);
-                Expr::Ref(s, t, Rc::new(e))
-            }
-            Expr::RefMut(_, _, e) => {
-                let e = self.map_expr(e);
-                Expr::RefMut(s, t, Rc::new(e))
+                Expr::Ref(s, t, Rc::new(e), *m)
             }
             Expr::Place(_, _, p) => {
                 let p = self.map_place(p);
@@ -607,12 +592,24 @@ pub(crate) trait Mapper {
                 let e = self.map_expr(e);
                 Expr::Deref(s, t, Rc::new(e))
             }
+            Expr::Loop(_, _, b) => {
+                let b = self.map_block(b);
+                Expr::Loop(s, t, Rc::new(b))
+            }
             Expr::Unit(_, _) => Expr::Unit(s, t),
         }
     }
 
     fn map_place(&mut self, p: &Place) -> Place {
-        todo!()
+        self._map_place(p)
+    }
+
+    #[inline(always)]
+    fn _map_place(&mut self, p: &Place) -> Place {
+        let s = self.map_span(&p.span);
+        let l = self.map_local(&p.local);
+        let elems = p.elems.iter().map(|e| self.map_place_elem(e)).collect();
+        Place::new(s, l, elems)
     }
 
     fn map_query_stmts(&mut self, qs: &[QueryOp]) -> Vec<QueryOp> {
@@ -867,8 +864,7 @@ pub(crate) trait Mapper {
                 let ts = self.map_types(ts);
                 Type::Alias(x, ts)
             }
-            Type::Ref(_, _) => todo!(),
-            Type::RefMut(_, _) => todo!(),
+            Type::Ref(_, _, _) => todo!(),
             Type::Unit => Type::Unit,
         }
     }
@@ -1019,101 +1015,39 @@ pub(crate) trait Mapper {
                 let i = self.map_impl(i);
                 Constraint::WhereClause(s, i)
             }
-            Constraint::Field(s, t0, t1, x) => {
+            Constraint::PlaceElem(s, t0, p) => {
                 let s = self.map_span(s);
                 let t0 = self.map_type(t0);
-                let t1 = self.map_type(t1);
-                let x = self.map_name(x);
-                Constraint::Field(s, t0, t1, x)
+                let p = self.map_place_elem(p);
+                Constraint::PlaceElem(s, t0, p)
             }
         }
     }
-}
 
-pub(crate) trait Mappable {
-    fn map(&self, mapper: &mut impl Mapper) -> Self;
-}
-
-impl Mappable for Ast {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_program(self)
+    fn map_place_elem(&mut self, p: &PlaceElem) -> PlaceElem {
+        self._map_place_elem(p)
     }
-}
 
-impl Mappable for Stmt {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_stmt(self)
-    }
-}
-
-impl Mappable for Expr {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_expr(self)
-    }
-}
-
-impl Mappable for Path {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_path(self)
-    }
-}
-
-impl Mappable for Segment {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_segment(self)
-    }
-}
-
-impl Mappable for Name {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_name(self)
-    }
-}
-
-impl Mappable for Type {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_type(self)
-    }
-}
-
-impl Mappable for Pat {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_pattern(self)
-    }
-}
-
-impl Mappable for QueryOp {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_query_stmt(self)
-    }
-}
-
-impl Mappable for StmtDef {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_stmt_def(self)
-    }
-}
-
-impl Mappable for ExprBody {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_stmt_def_body(self)
-    }
-}
-
-impl Mappable for Impl {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_impl(self)
-    }
-}
-
-impl Mappable for Vec<Stmt> {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_stmts(self)
-    }
-}
-
-impl Mappable for Constraint {
-    fn map(&self, mut mapper: &mut impl Mapper) -> Self {
-        mapper.map_constraint(self)
+    #[inline(always)]
+    fn _map_place_elem(&mut self, p: &PlaceElem) -> PlaceElem {
+        match p {
+            PlaceElem::Field(s, t, x) => {
+                let s = self.map_span(s);
+                let t = self.map_type(t);
+                let x = self.map_name(x);
+                PlaceElem::Field(s, t, x)
+            }
+            PlaceElem::Index(s, t, i) => {
+                let s = self.map_span(s);
+                let t = self.map_type(t);
+                let i = *i;
+                PlaceElem::Index(s, t, i)
+            }
+            PlaceElem::Deref(s, t) => {
+                let s = self.map_span(s);
+                let t = self.map_type(t);
+                PlaceElem::Deref(s, t)
+            }
+        }
     }
 }

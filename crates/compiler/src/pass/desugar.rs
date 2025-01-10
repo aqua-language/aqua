@@ -2,17 +2,18 @@ use std::rc::Rc;
 
 use smol_str::format_smolstr;
 
+use crate::ast::Ast;
 use crate::ast::Expr;
 use crate::ast::Impl;
+use crate::ast::Local;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
-use crate::ast::Ast;
 use crate::ast::Type;
 use crate::pass::Pass;
+use crate::syntax::span::Span;
 use crate::syntax::splice::Splice;
 use crate::syntax::splice::SpliceIterator;
-use crate::syntax::span::Span;
 use crate::syntax::token::Token;
 use crate::traversal::mapper::Mapper;
 
@@ -59,7 +60,10 @@ impl Context {
             if xs.is_empty() {
                 e
             } else {
-                let xts = xs.into_iter().map(|x| (x, Type::Unknown)).collect();
+                let xts = xs
+                    .into_iter()
+                    .map(|x| Local::new(x.span, x, Type::Unknown, false))
+                    .collect();
                 Expr::Lambda(e.span(), Type::Unknown, xts, Type::Unknown, Rc::new(e))
             }
         }
@@ -224,8 +228,8 @@ impl Context {
                 // let lexer = crate::lexer::Lexer::new_from(file, source, start as usize);
                 let lexer = crate::syntax::lexer::Lexer::new_from(file, s, start as usize);
                 let mut parser = crate::syntax::parser::Parser::new(s, lexer);
-                if let Some(e) = parser.parse(|p, follow| p.expr(follow)) {
-                    let e = self.map_expr(&e);
+                if let Ok(e) = parser.parse(|p, follow| p.expr(follow)) {
+                    let e = self.map_expr(&e.v);
                     unop(span, Type::Unknown, "Display", "toString", e)
                 } else {
                     // TODO: Report error

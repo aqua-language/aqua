@@ -261,7 +261,7 @@ fn querycomp(bencher: Bencher, arg: Input) {
         .with_inputs(|| {
             let mut compiler = Compiler::default();
             let program = compiler.parse(arg.name, arg.code);
-            let program = compiler.query_desugar(&program);
+            let program = compiler.run_query_desugar(&program);
             let ctx = pass::query_desugar::Context::new();
             (ctx, program)
         })
@@ -274,7 +274,7 @@ fn resolve(bencher: Bencher, arg: Input) {
             let mut compiler = Compiler::default();
             compiler.init();
             let program = compiler.parse(arg.name, arg.code);
-            let program = compiler.resolve(&program);
+            let program = compiler.run_resolve(&program);
             let ctx = pass::query_desugar::Context::new();
             (ctx, program)
         })
@@ -287,7 +287,7 @@ fn infer(bencher: Bencher, arg: Input) {
             let mut compiler = Compiler::default();
             compiler.init();
             let program = compiler.parse(arg.name, arg.code);
-            let program = compiler.infer(&program);
+            let program = compiler.run_infer(&program);
             let ctx = pass::query_desugar::Context::new();
             (ctx, program)
         })

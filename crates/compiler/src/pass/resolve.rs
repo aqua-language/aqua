@@ -1,12 +1,13 @@
 use std::rc::Rc;
 
+use crate::ast::Ast;
 use crate::ast::Expr;
 use crate::ast::Impl;
+use crate::ast::Local;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::PathPatField;
-use crate::ast::Ast;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
@@ -17,23 +18,22 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
 use crate::collections::map::Map;
+use crate::diag::Diagnostic;
 use crate::diag::Report;
+use crate::pass::Pass;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
-
-use super::Pass;
 
 #[derive(Debug)]
 pub struct Stack(Vec<Scope>);
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Scope {
-    bindings: Map<Name, Binding>,
+    bindings: Vec<(Name, Binding)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,17 +43,37 @@ enum Binding {
     Type(Rc<StmtType>),
     Trait(Rc<StmtTrait>),
     Def(Rc<StmtDef>),
-    Var,
+    Local(bool),
     Generic,
 }
 
-impl Stack {
+impl Context {
     fn bind(&mut self, name: Name, binding: Binding) {
-        self.0.last_mut().unwrap().bindings.insert(name, binding);
+        let last = self.stack.0.last_mut().unwrap();
+
+        for (name2, _) in last.bindings.iter() {
+            if name2 == &name {
+                self.report.add(Diagnostic::err2(
+                    name2.span,
+                    name.span,
+                    format!("Name `{}` already defined in scope.", name),
+                    "First definition",
+                    "Second definition",
+                ));
+                return;
+            }
+        }
+
+        last.bindings.push((name, binding));
     }
 
     fn get(&self, x: &Name) -> Option<Binding> {
-        self.0.iter().rev().find_map(|s| s.bindings.get(x)).cloned()
+        self.stack
+            .0
+            .iter()
+            .rev()
+            .find_map(|scope| scope.bindings.iter().find(|(n, _)| n == x))
+            .map(|(_, b)| b.clone())
     }
 }
 
@@ -83,13 +103,13 @@ impl Default for Context {
 impl Visitor for Context {
     fn visit_stmt(&mut self, s: &Stmt) {
         match s {
-            Stmt::Var(_) => {}
-            Stmt::Def(s) => self.stack.bind(s.name, Binding::Def(s.clone())),
-            Stmt::Trait(s) => self.stack.bind(s.name, Binding::Trait(s.clone())),
+            Stmt::Local(_) => {}
+            Stmt::Def(s) => self.bind(s.name, Binding::Def(s.clone())),
+            Stmt::Trait(s) => self.bind(s.name, Binding::Trait(s.clone())),
             Stmt::Impl(_) => {}
-            Stmt::Struct(s) => self.stack.bind(s.name, Binding::Struct(s.clone())),
-            Stmt::Enum(s) => self.stack.bind(s.name, Binding::Enum(s.clone())),
-            Stmt::Type(s) => self.stack.bind(s.name, Binding::Type(s.clone())),
+            Stmt::Struct(s) => self.bind(s.name, Binding::Struct(s.clone())),
+            Stmt::Enum(s) => self.bind(s.name, Binding::Enum(s.clone())),
+            Stmt::Type(s) => self.bind(s.name, Binding::Type(s.clone())),
             Stmt::Expr(_) => {}
             Stmt::Err(_) => {}
         }
@@ -105,18 +125,13 @@ impl Mapper for Context {
     }
 
     fn map_generic(&mut self, g: &Name) -> Name {
-        self.stack.bind(*g, Binding::Generic);
+        self.bind(*g, Binding::Generic);
         self._map_generic(g)
     }
 
-    fn map_stmt_var(&mut self, s: &StmtVar) -> StmtVar {
-        self.stack.bind(s.name, Binding::Var);
-        self._map_stmt_var(s)
-    }
-
-    fn map_param(&mut self, xt: &(Name, Type)) -> (Name, Type) {
-        self.stack.bind(xt.0, Binding::Var);
-        self._map_param(xt)
+    fn map_local(&mut self, l: &Local) -> Local {
+        self.bind(l.name, Binding::Local(l.mutable));
+        self._map_local(l)
     }
 
     fn map_stmt_trait(&mut self, s: &StmtTrait) -> StmtTrait {
@@ -150,8 +165,8 @@ impl Mapper for Context {
                 let path = self.map_path(path);
                 let mut iter = path.segments.into_iter();
                 let seg0 = iter.next().unwrap();
-                match self.stack.get(&seg0.x) {
-                    Some(Binding::Var) => {
+                match self.get(&seg0.x) {
+                    Some(Binding::Local(m)) => {
                         if !seg0.ts.is_empty() {
                             self.wrong_arity(&seg0.x, seg0.ts.len(), 0);
                             return Expr::Err(*s, t.clone());
@@ -160,7 +175,7 @@ impl Mapper for Context {
                             self.unexpected_assoc("Variable", "item", &seg0.x, &seg1.x);
                             return Expr::Err(*s, t.clone());
                         }
-                        Expr::Var(*s, t, seg0.x)
+                        Expr::Local(*s, t, seg0.x, m)
                     }
                     Some(Binding::Def(stmt)) => {
                         if seg0.ts.len() != stmt.generics.len() && !seg0.ts.is_empty() {
@@ -250,7 +265,7 @@ impl Mapper for Context {
                     let path = self.map_path(&path);
                     let mut iter = path.segments.into_iter();
                     let seg0 = iter.next().unwrap();
-                    match self.stack.get(&seg0.x) {
+                    match self.get(&seg0.x) {
                         Some(Binding::Struct(stmt)) => {
                             let Some(ts0) = seg0.try_create_unnamed_holes(stmt.generics.len())
                             else {
@@ -322,11 +337,11 @@ impl Mapper for Context {
                 let e0 = if e0.is_place() {
                     e0
                 } else {
-                    self.report.err(
+                    self.report.add(Diagnostic::err(
                         e.span(),
                         "Invalid left-hand side of assignment",
                         "Expected a variable, index, or field expression.",
-                    );
+                    ));
                     Expr::Err(e.span(), e.ty().clone())
                 };
                 let e1 = self.map_expr(e1);
@@ -352,7 +367,7 @@ impl Mapper for Context {
                 let p = self.map_path(p);
                 let mut iter = p.segments.into_iter();
                 let seg0 = iter.next().unwrap();
-                match self.stack.get(&seg0.x) {
+                match self.get(&seg0.x) {
                     Some(Binding::Generic) => {
                         if seg0.has_args() {
                             self.wrong_arity(&seg0.x, seg0.ts.len(), 0);
@@ -443,7 +458,7 @@ impl Mapper for Context {
                 let path = self.map_path(path);
                 let mut iter = path.segments.into_iter();
                 let seg0 = iter.next().unwrap();
-                match self.stack.get(&seg0.x) {
+                match self.get(&seg0.x) {
                     Some(Binding::Enum(stmt)) => {
                         if !seg0.has_optional_arity(stmt.generics.len()) {
                             self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
@@ -543,19 +558,19 @@ impl Context {
     }
 
     fn not_found(&mut self, name: &Name, expected: &'static str) {
-        self.report.err(
+        self.report.add(Diagnostic::err(
             name.span,
             format!("Name `{}` not found.", name),
             format!("Expected {}.", expected),
-        );
+        ));
     }
 
     fn unexpected(&mut self, name: &Name, found: &'static str, expected: &'static str) {
-        self.report.err(
+        self.report.add(Diagnostic::err(
             name.span,
             format!("Unexpected {found} `{name}`."),
             format!("Expected {expected}."),
-        );
+        ));
     }
 
     #[track_caller]
@@ -564,35 +579,35 @@ impl Context {
         let file = "";
         #[cfg(feature = "explicit")]
         let file = format!("{}: ", std::panic::Location::caller());
-        self.report.err(
+        self.report.add(Diagnostic::err(
             name.span,
             format!("{file}Wrong number of type arguments. Found {found}, expected {expected}",),
             format!("Expected {} arguments.", expected),
-        );
+        ));
     }
 
     fn expected_assoc(&mut self, kind: &'static str, x: &Name) {
-        self.report.err(
+        self.report.add(Diagnostic::err(
             x.span,
             format!("Expected an associated {kind} `{x}::<{kind}>`.",),
             format!("Expected an associated {kind}."),
-        );
+        ));
     }
 
     fn unexpected_assoc(&mut self, kind0: &'static str, kind1: &'static str, x0: &Name, x1: &Name) {
-        self.report.err(
+        self.report.add(Diagnostic::err(
             x1.span,
             format!("Found unexpected associated {kind1} `{x0}::{x1}`.",),
             format!("{kind0} `{x0}` has no associated {kind1} `{x1}`.",),
-        );
+        ));
     }
 
     fn unexpected_named_type_args(&mut self, x: &Name) {
-        self.report.err(
+        self.report.add(Diagnostic::err(
             x.span,
             format!("Unexpected named type arguments for `{x}`.",),
             "Named type arguments can only occur in trait bounds.",
-        );
+        ));
     }
 
     fn wrong_fields<A, B>(
@@ -604,19 +619,19 @@ impl Context {
         let expected = comma_sep(expected.keys());
         if let Some(found) = found {
             let found = comma_sep(found.keys());
-            self.report.err(
+            self.report.add(Diagnostic::err(
                 name.span,
                 format!(
                     "Wrong fields provided. Found {name}({found}), expected {name}({expected})",
                 ),
                 format!("Expected {name}({expected}) fields."),
-            );
+            ));
         } else {
-            self.report.err(
+            self.report.add(Diagnostic::err(
                 name.span,
                 format!("Wrong fields provided. Found {name}, expected {name}({expected})",),
                 format!("Expected {name}({expected}) fields."),
-            );
+            ));
         }
     }
 
@@ -629,30 +644,30 @@ impl Context {
     ) {
         let found = comma_sep(found);
         let expected = comma_sep(expected);
-        self.report.err(
+        self.report.add(Diagnostic::err(
             name.span,
             format!("Wrong {kind}s implemented for {name}. Found {{ {found} }}, expected {{ {expected} }}",),
             format!("Expected {{ {expected} }}."),
-        );
+        ));
     }
 
     #[allow(dead_code)]
     fn wrong_variant<T>(&mut self, name: &Name, found: &(Name, T), expected: &[Name]) {
         let found = &found.0;
         let expected = comma_sep(expected.iter());
-        self.report.err(
+        self.report.add(Diagnostic::err(
             name.span,
             format!("Wrong variant provided. Found {found}, expected {expected}",),
             format!("Expected one of {{ {expected} }} variants."),
-        );
+        ));
     }
 
     fn expected_name(&mut self, e: &Expr) {
-        self.report.err(
+        self.report.add(Diagnostic::err(
             e.span(),
             "Expected a field label.",
             "Only `<name> = <expr>` is allowed.",
-        );
+        ));
     }
 
     fn create_type_arg_holes(args: Vec<Type>, expected: usize) -> Vec<Type> {
@@ -691,8 +706,8 @@ impl Context {
             Expr::Path(_, _, path) => {
                 let mut iter = path.segments.iter();
                 let seg0 = iter.next().unwrap();
-                match self.stack.get(&seg0.x) {
-                    Some(Binding::Var) => {
+                match self.get(&seg0.x) {
+                    Some(Binding::Local(m)) => {
                         if !seg0.ts.is_empty() {
                             self.wrong_arity(&seg0.x, seg0.ts.len(), 0);
                             return None;
@@ -701,7 +716,7 @@ impl Context {
                             self.unexpected_assoc("Variable", "item", &seg0.x, &seg1.x);
                             return None;
                         }
-                        Some((seg0.x, Expr::Var(s, t, seg0.x)))
+                        Some((seg0.x, Expr::Local(s, t, seg0.x, m)))
                     }
                     Some(b) => {
                         self.unexpected(&seg0.x, b.name(), "variable");
@@ -714,11 +729,11 @@ impl Context {
                 }
             }
             _ => {
-                self.report.err(
+                self.report.add(Diagnostic::err(
                     e.span(),
                     "Not a field.",
                     "Expected `<name> = <expr>`, `<name>` or `<expr>.<name>`.",
-                );
+                ));
                 None
             }
         }
@@ -737,11 +752,11 @@ impl Context {
         for arg in args {
             match arg {
                 PathPatField::Named(x, p) => {
-                    self.report.err(
+                    self.report.add(Diagnostic::err(
                         x.span,
                         format!("Expected `<pat>`, found `{x} = {p}`.",),
                         "Expected unnamed pattern `<pat>`.",
-                    );
+                    ));
                     return None;
                 }
                 PathPatField::Unnamed(p) => ps.push(p.clone()),
@@ -758,13 +773,15 @@ impl Context {
         let mut xps = Map::new();
         for arg in args {
             match arg {
-                PathPatField::Named(x, p) => xps.insert(*x, p.clone()),
+                PathPatField::Named(x, p) => {
+                    xps.insert(*x, p.clone());
+                }
                 PathPatField::Unnamed(p) => {
-                    self.report.err(
+                    self.report.add(Diagnostic::err(
                         p.span(),
                         format!("Expected `{p} = <pat>`.",),
                         format!("Expected named pattern `{p} = <pat>`."),
-                    );
+                    ));
                     return None;
                 }
             }
@@ -794,7 +811,7 @@ impl Context {
         let path = self.map_path(path);
         let mut iter = path.segments.into_iter();
         let seg0 = iter.next().unwrap();
-        match self.stack.get(&seg0.x) {
+        match self.get(&seg0.x) {
             Some(Binding::Trait(stmt)) => {
                 if !seg0.has_optional_arity(stmt.generics.len()) {
                     self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
@@ -884,7 +901,7 @@ impl Context {
         let path = self.map_path(path);
         let mut iter = path.segments.into_iter();
         let seg0 = iter.next().unwrap();
-        match self.stack.get(&seg0.x) {
+        match self.get(&seg0.x) {
             Some(Binding::Trait(stmt)) => {
                 let Some(ts0) = seg0.try_create_unnamed_holes(stmt.generics.len()) else {
                     self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
@@ -916,7 +933,7 @@ impl Binding {
             Binding::Generic => "generic",
             Binding::Type(..) => "type",
             Binding::Trait(..) => "trait",
-            Binding::Var => "variable",
+            Binding::Local(..) => "variable",
             Binding::Def(..) => "definition",
         }
     }

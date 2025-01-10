@@ -6,11 +6,11 @@ use std::rc::Rc;
 use ena::unify::InPlaceUnificationTable;
 
 use crate::analysis::declare;
+use crate::ast::Ast;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Impl;
 use crate::ast::Name;
-use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
@@ -23,9 +23,9 @@ use crate::diag::Report;
 use crate::pass::infer::type_var::TypeVarKind;
 use crate::pass::infer::type_var::TypeVarValue;
 use crate::syntax::span::Span;
-use crate::traversal::mapper::Mappable;
+use crate::traversal::mappable::Mappable;
 use crate::traversal::mapper::Mapper;
-use crate::traversal::visitor::Visitable;
+use crate::traversal::visitable::Visitable;
 use mangle::Mangler;
 
 use super::Pass;
@@ -77,7 +77,7 @@ impl Context {
 
     fn expr_stmt(&mut self, s: &Stmt) -> Option<Stmt> {
         match s {
-            Stmt::Var(s) => Some(Stmt::Var(Rc::new(self.map_stmt_var(s)))),
+            Stmt::Local(s) => Some(Stmt::Local(Rc::new(self.map_stmt_local(s)))),
             Stmt::Expr(e) => Some(Stmt::Expr(Rc::new(self.map_expr(e)))),
             _ => None,
         }
@@ -91,10 +91,10 @@ impl Context {
             self.unique.insert(x);
         }
         let stmt = stmt.instantiate(ts);
-        let ps = stmt.params.mapv(|t| self.map_type(t));
+        let params = self.map_locals(&stmt.params);
         let t = stmt.ty.map(self);
         let b = ExprBody::UserDefined(Rc::new(stmt.body.as_udf().unwrap().map(self)));
-        let stmt = StmtDef::new(stmt.span, x, vec![], ps, t, vec![], b);
+        let stmt = StmtDef::new(stmt.span, x, vec![], params, t, vec![], b);
         self.stmts.push(Stmt::Def(Rc::new(stmt)));
         x
     }
@@ -147,7 +147,7 @@ impl Context {
         }
         let stmt_def = stmt.get_def(def_name0).unwrap();
         let stmt = stmt_def.instantiate(&def_type_args);
-        let ps = self.map_params(&stmt_def.params).into();
+        let ps = self.map_locals(&stmt_def.params).into();
         let t = self.map_type(&stmt_def.ty);
         let b = self.map_stmt_def_body(&stmt_def.body);
         let stmt = StmtDef::new(stmt.span, def_name1, vec![], ps, t, vec![], b);
@@ -170,7 +170,7 @@ impl Context {
         }
         let stmt_def = stmt.get_def(def_name0).unwrap();
         let stmt = stmt_def.instantiate(&def_type_args);
-        let ps = self.map_params(&stmt_def.params).into();
+        let ps = self.map_locals(&stmt_def.params).into();
         let t = self.map_type(&stmt_def.ty);
         let b = self.map_stmt_def_body(&stmt_def.body);
         let stmt = StmtDef::new(stmt.span, def_name1, vec![], ps, t, vec![], b);
@@ -200,7 +200,7 @@ impl Context {
                 .unwrap()
                 .instantiate(&def_type_args);
             let impl_type1 = self.map_type(impl_stmt.head.as_type().unwrap());
-            let def_type1 = self.map_type(&def_stmt.type_of());
+            let def_type1 = self.map_type(&def_stmt.ty());
             if self.try_unify(impl_type0, &impl_type1).is_ok()
                 && self.solve_where_clauses(&impl_stmt.where_clause)
                 && self.try_unify(def_type0, &def_type1).is_ok()
@@ -263,7 +263,7 @@ impl Context {
                     Type::Var(x1) => match self.type_table.probe_value(*x1) {
                         TypeVarValue::Known(t1) => return self.try_unify(t0, &t1),
                         TypeVarValue::Unknown(k1) => {
-                            if k0.is_compatible(k1) {
+                            if k0.merge(k1).is_some() {
                                 self.type_table.union(*x0, *x1);
                                 Ok(())
                             } else {

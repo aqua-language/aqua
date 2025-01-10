@@ -14,6 +14,6 @@ fuzz_target!(|data: &[u8]| {
         let id = cache.add("<fuzz>", s.clone());
         let lexer = Lexer::new(id, &s);
         let mut parser = Parser::new(&s, lexer);
-        parser.parse(Parser::program);
+        parser.parse(Parser::program).unwrap();
     }
 });

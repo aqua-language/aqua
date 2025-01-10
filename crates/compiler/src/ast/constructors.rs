@@ -4,15 +4,16 @@ use crate::syntax::span::Span;
 use crate::syntax::symbol::Symbol;
 
 use super::Aggr;
+use super::Ast;
 use super::Block;
 use super::Expr;
 use super::ExprBody;
 use super::Impl;
 use super::Index;
+use super::Local;
 use super::Map;
 use super::Name;
 use super::Path;
-use super::Ast;
 use super::Segment;
 use super::Stmt;
 use super::StmtDef;
@@ -23,7 +24,7 @@ use super::StmtTrait;
 use super::StmtTraitDef;
 use super::StmtTraitType;
 use super::StmtType;
-use super::StmtVar;
+use super::StmtLocal;
 use super::Trait;
 use super::Type;
 use super::TypeBody;
@@ -105,14 +106,9 @@ impl StmtTraitType {
     }
 }
 
-impl StmtVar {
-    pub fn new(span: Span, name: Name, ty: Type, expr: Expr) -> StmtVar {
-        StmtVar {
-            span,
-            name,
-            ty,
-            expr,
-        }
+impl StmtLocal {
+    pub fn new(span: Span, local: Local, expr: Expr) -> StmtLocal {
+        StmtLocal { span, local, expr }
     }
 }
 
@@ -121,7 +117,7 @@ impl StmtDef {
         span: Span,
         name: Name,
         generics: Vec<Name>,
-        params: Map<Name, Type>,
+        params: Vec<Local>,
         ty: Type,
         where_clause: Vec<Impl>,
         body: ExprBody,
@@ -165,7 +161,7 @@ impl StmtTraitDef {
         span: Span,
         name: Name,
         generics: Vec<Name>,
-        params: Map<Name, Type>,
+        params: Vec<Local>,
         ty: Type,
         where_clause: Vec<Impl>,
     ) -> Self {
@@ -217,7 +213,7 @@ impl Name {
             data: data.into(),
         }
     }
-    pub fn suffix(self, suffix: impl std::fmt::Display) -> Name {
+    pub fn with_suffix(self, suffix: impl std::fmt::Display) -> Name {
         Name::new(self.span, self.data.suffix(suffix))
     }
 }

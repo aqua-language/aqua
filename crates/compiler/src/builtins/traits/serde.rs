@@ -403,8 +403,7 @@ impl<'de> DeserializeSeed<'de> for Seed {
             Type::Path(_) => unreachable!(),
             Type::Paren(_) => unreachable!(),
             Type::Alias(..) => unreachable!(),
-            Type::Ref(_, _) => todo!(),
-            Type::RefMut(_, _) => todo!(),
+            Type::Ref(_, _, _) => todo!(),
             Type::Unit => todo!(),
         }
     }

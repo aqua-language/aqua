@@ -1,4 +1,5 @@
 use crate::ast::Aggr;
+use crate::ast::Ast;
 use crate::ast::Block;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
@@ -13,19 +14,18 @@ use crate::ast::Path;
 use crate::ast::PathPatField;
 use crate::ast::Place;
 use crate::ast::PlaceElem;
-use crate::ast::Ast;
 use crate::ast::QueryOp;
 use crate::ast::Segment;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::StmtEnum;
 use crate::ast::StmtImpl;
+use crate::ast::StmtLocal;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
 use crate::ast::StmtTraitDef;
 use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
-use crate::ast::StmtVar;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
@@ -63,11 +63,19 @@ impl<'a, 'b> Printer<'a, 'b> {
         self
     }
 
-    fn param(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
-        self.name(x)?;
+    fn local(&mut self, l: &Local) -> std::fmt::Result {
+        self.name(&l.name)
+    }
+
+    fn param(&mut self, l: &Local) -> std::fmt::Result {
+        if l.mutable {
+            self.kw("mut")?;
+            self.space()?;
+        }
+        self.name(&l.name)?;
         self.punct(":")?;
         self.space()?;
-        self.ty(t)
+        self.ty(&l.ty)
     }
 
     fn program(&mut self, p: &Ast) -> std::fmt::Result {
@@ -80,7 +88,7 @@ impl<'a, 'b> Printer<'a, 'b> {
 
     fn stmt(&mut self, s: &Stmt) -> std::fmt::Result {
         match s {
-            Stmt::Var(s) => self.stmt_var(s),
+            Stmt::Local(s) => self.stmt_var(s),
             Stmt::Def(s) => self.stmt_def(s),
             Stmt::Impl(s) => self.stmt_impl(s),
             Stmt::Expr(s) => self.stmt_expr(s),
@@ -101,11 +109,15 @@ impl<'a, 'b> Printer<'a, 'b> {
         Ok(())
     }
 
-    fn stmt_var(&mut self, s: &StmtVar) -> std::fmt::Result {
-        self.kw("var")?;
+    fn stmt_var(&mut self, s: &StmtLocal) -> std::fmt::Result {
+        if s.local.mutable {
+            self.kw("var")?;
+        } else {
+            self.kw("val")?;
+        }
         self.space()?;
-        self.name(&s.name)?;
-        self.type_annotation(&s.ty)?;
+        self.name(&s.local.name)?;
+        self.type_annotation(&s.local.ty)?;
         self.space()?;
         self.punct("=")?;
         self.space()?;
@@ -337,7 +349,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.name(x)?;
                 self.paren(|this| this.expr(e))?;
             }
-            Expr::Var(_, _, x) => {
+            Expr::Local(_, _, x, _) => {
                 self.name(x)?;
             }
             Expr::Def(_, _, name, ts) => {
@@ -422,15 +434,15 @@ impl<'a, 'b> Printer<'a, 'b> {
             Expr::Break(_, _) => {
                 self.kw("break")?;
             }
-            Expr::Lambda(_, _, ps, _, e) => {
-                if ps.len() == 1 {
-                    if ps[0].1 == Type::Unknown {
-                        self.name(&ps[0].0)?;
+            Expr::Lambda(_, _, ls, _, e) => {
+                if ls.len() == 1 {
+                    if ls[0].ty == Type::Unknown {
+                        self.name(&ls[0].name)?;
                     } else {
-                        self.paren(|this| this.param(&ps[0]))?;
+                        self.paren(|this| this.param(&ls[0]))?;
                     }
                 } else {
-                    self.paren(|this| this.comma_sep(ps, Self::param))?;
+                    self.paren(|this| this.comma_sep(ls, Self::param))?;
                 }
                 self.space()?;
                 self.punct("=>")?;
@@ -444,27 +456,27 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.comma_scope(arms, Self::arm)?;
             }
-            Expr::While(_, _, e0, e1) => {
+            Expr::While(_, _, e, b) => {
                 self.kw("while")?;
                 self.space()?;
-                self.expr(e0)?;
+                self.expr(e)?;
                 self.space()?;
-                self.expr(e1)?;
+                self.block(b)?;
             }
             Expr::Record(_, _, xts) => {
                 self.kw("record")?;
                 self.fields(xts.as_ref(), Self::expr_field)?;
             }
-            Expr::For(_, _, x, e0, e1) => {
+            Expr::For(_, _, x, e, b) => {
                 self.kw("for")?;
                 self.space()?;
                 self.name(x)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
-                self.expr(e0)?;
+                self.expr(e)?;
                 self.space()?;
-                self.expr(e1)?;
+                self.block(b)?;
             }
             Expr::Char(_, _, c) => {
                 self.char(*c)?;
@@ -500,16 +512,16 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.type_args(ts)?;
                 self.paren(|this| this.comma_sep(es, Self::expr))?;
             }
-            Expr::IfElse(_, _, e0, e1, e2) => {
+            Expr::IfElse(_, _, e, b0, b1) => {
                 self.kw("if")?;
                 self.space()?;
-                self.expr(e0)?;
+                self.expr(e)?;
                 self.space()?;
-                self.expr(e1)?;
+                self.block(b0)?;
                 self.space()?;
                 self.kw("else")?;
                 self.space()?;
-                self.expr(e2)?;
+                self.block(b1)?;
             }
             Expr::IntSuffix(_, _, v, x) => {
                 self.lit(v)?;
@@ -519,43 +531,16 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.lit(v)?;
                 self.lit(x)?;
             }
-            Expr::LetIn(_, _, x, t1, e0, e1) => {
-                self.kw("let")?;
-                self.space()?;
-                self.name(x)?;
-                self.space()?;
-                self.punct(":")?;
-                self.ty(t1)?;
-                self.space()?;
-                self.punct("=")?;
-                self.space()?;
-                self.expr(e0)?;
-                self.space()?;
-                self.kw("in")?;
-                self.space()?;
-                self.expr(e1)?;
-            }
-            Expr::Update(_, _, e0, x, e1) => {
-                self.expr(e0)?;
-                self.space()?;
-                self.kw("with")?;
-                self.space()?;
-                self.name(x)?;
-                self.space()?;
-                self.punct("=")?;
-                self.space()?;
-                self.expr(e1)?;
-            }
             Expr::Anonymous(_, _) => {
                 self.punct("_")?;
             }
-            Expr::Closure(_, _, xts0, xts1, t, e) => {
+            Expr::Closure(_, _, _, xts0, xts1, t, e) => {
                 self.paren(|this| {
                     this.comma_sep(xts0, Self::param)?;
                     if !xts1.is_empty() {
                         this.punct("|")?;
                         this.space()?;
-                        this.comma_sep(xts1, Self::param)?;
+                        this.comma_sep(xts1, Self::place)?;
                     }
                     Ok(())
                 })?;
@@ -568,10 +553,25 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.expr(e)?;
             }
-            Expr::Ref(_, _, _) => todo!(),
-            Expr::RefMut(_, _, _) => todo!(),
-            Expr::Place(_, _, _) => todo!(),
-            Expr::Deref(_, _, _) => todo!(),
+            Expr::Ref(_, _, e, m) => {
+                if *m {
+                    self.kw("mut")?;
+                    self.space()?;
+                }
+                self.expr(e)?;
+            }
+            Expr::Place(_, _, p) => {
+                self.place(p)?;
+            }
+            Expr::Deref(_, _, e) => {
+                self.punct("*")?;
+                self.expr(e)?;
+            }
+            Expr::Loop(_, _, b) => {
+                self.kw("loop")?;
+                self.space()?;
+                self.block(b)?;
+            }
             Expr::Unit(_, _) => {
                 self.lit("()")?;
             }
@@ -857,12 +857,14 @@ impl<'a, 'b> Printer<'a, 'b> {
             Type::Paren(t) => {
                 self.paren(|this| this.ty(t))?;
             }
-            Type::Ref(loans, t) => {
+            Type::Ref(loans, t, mutable) => {
                 self.punct("&")?;
+                if *mutable {
+                    self.punct("mut")?;
+                }
                 self.comma_sep(loans, Self::loan)?;
                 self.ty(t)?;
             }
-            Type::RefMut(_, _) => todo!(),
             Type::Unit => {
                 self.lit("()")?;
             }
@@ -880,27 +882,18 @@ impl<'a, 'b> Printer<'a, 'b> {
     fn place(&mut self, place: &Place) -> std::fmt::Result {
         self.local(&place.local)?;
         for elem in &place.elems {
-            match elem {
-                PlaceElem::Index(i) => {
-                    self.punct(".")?;
-                    self.lit(i)?;
-                }
-                PlaceElem::Deref => {
-                    self.punct(".")?;
-                    self.lit("*")?;
-                }
-            }
+            self.place_elem(elem)?;
         }
         Ok(())
     }
 
-    fn local(&mut self, local: &Local) -> std::fmt::Result {
-        if local.mutable {
-            self.kw("mut")?;
+    fn place_elem(&mut self, elem: &PlaceElem) -> std::fmt::Result {
+        self.punct(".")?;
+        match elem {
+            PlaceElem::Field(_, _, x) => self.name(x),
+            PlaceElem::Index(_, _, i) => self.lit(i),
+            PlaceElem::Deref(_, _) => self.lit("*"),
         }
-        self.name(&local.name)?;
-        self.punct(":")?;
-        self.ty(&local.ty)
     }
 
     fn pat(&mut self, p: &Pat) -> std::fmt::Result {
@@ -1065,14 +1058,12 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.imp(i)?;
             }
-            Constraint::Field(_, t0, t1, x) => {
-                self.ty(t0)?;
-                self.punct(".")?;
-                self.name(x)?;
-                self.space()?;
+            Constraint::PlaceElem(_, t, p) => {
+                self.lit("place")?;
                 self.punct(":")?;
                 self.space()?;
-                self.ty(t1)?;
+                self.ty(t)?;
+                self.place_elem(p)?;
             }
         }
         Ok(())
@@ -1181,7 +1172,7 @@ impl std::fmt::Display for StmtDef {
     }
 }
 
-impl std::fmt::Display for StmtVar {
+impl std::fmt::Display for StmtLocal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Printer::new(f).stmt_var(self)
     }
@@ -1226,6 +1217,12 @@ impl std::fmt::Display for Constraint {
 impl std::fmt::Display for Trait {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Printer::new(f).tr(self)
+    }
+}
+
+impl std::fmt::Display for Local {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Printer::new(f).local(self)
     }
 }
 

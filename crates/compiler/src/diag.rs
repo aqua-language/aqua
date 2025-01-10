@@ -43,6 +43,29 @@ impl Diagnostic {
     }
 }
 
+impl Diagnostic {
+    pub fn err(span: Span, label: impl AsRef<str>, msg: impl AsRef<str>) -> Self {
+        let label = Message::new(span, label.as_ref().to_string());
+        let messages = vec![Message::new(span, msg.as_ref().to_string())];
+        Self { label, messages }
+    }
+
+    pub fn err2(
+        span0: Span,
+        span1: Span,
+        label: impl AsRef<str>,
+        msg0: impl AsRef<str>,
+        msg1: impl AsRef<str>,
+    ) -> Self {
+        let label = Message::new(span0, label.as_ref().to_string());
+        let messages = vec![
+            Message::new(span0, msg0.as_ref().to_string()),
+            Message::new(span1, msg1.as_ref().to_string()),
+        ];
+        Self { label, messages }
+    }
+}
+
 impl Report {
     pub fn new() -> Self {
         Self { diags: Vec::new() }
@@ -60,30 +83,8 @@ impl Report {
         self.diags.len()
     }
 
-    pub fn err(&mut self, span: Span, label: impl AsRef<str>, msg: impl AsRef<str>) {
-        let diagnostic = Diagnostic {
-            label: Message::new(span, label.as_ref().to_string()),
-            messages: vec![Message::new(span, msg.as_ref().to_string())],
-        };
-        self.diags.push(diagnostic);
-    }
-
-    pub fn err2(
-        &mut self,
-        span0: Span,
-        span1: Span,
-        label: impl AsRef<str>,
-        msg0: impl AsRef<str>,
-        msg1: impl AsRef<str>,
-    ) {
-        let diagnostic = Diagnostic {
-            label: Message::new(span0, label.as_ref().to_string()),
-            messages: vec![
-                Message::new(span0, msg0.as_ref().to_string()),
-                Message::new(span1, msg1.as_ref().to_string()),
-            ],
-        };
-        self.diags.push(diagnostic);
+    pub fn add(&mut self, diag: Diagnostic) {
+        self.diags.push(diag);
     }
 
     pub fn print(&mut self, sources: &mut Cache) -> std::io::Result<()> {
@@ -94,7 +95,7 @@ impl Report {
         Ok(())
     }
 
-    pub fn string(&mut self, sources: &mut Cache) -> Result<String, std::string::FromUtf8Error> {
+    pub fn to_string(&mut self, sources: &mut Cache) -> Result<String, std::string::FromUtf8Error> {
         let mut buf = Vec::new();
         for diag in self.diags.drain(..) {
             let report = diag.to_ariadne(false);

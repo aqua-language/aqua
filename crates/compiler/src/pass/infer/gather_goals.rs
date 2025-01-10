@@ -3,7 +3,7 @@ use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::Type;
 use crate::syntax::span::Span;
-use crate::traversal::visitor::Visitable;
+use crate::traversal::visitable::Visitable;
 use crate::traversal::visitor::Visitor;
 
 use super::Constraint;
@@ -51,7 +51,7 @@ impl Visitor for GatherConstraints<'_> {
     fn visit_stmt(&mut self, s: &Stmt) {
         self.span = s.span();
         match s {
-            Stmt::Var(s) => self.visit_stmt_var(s),
+            Stmt::Local(s) => self.visit_stmt_var(s),
             Stmt::Expr(s) => self.visit_expr(s),
             _ => {}
         }

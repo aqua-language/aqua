@@ -30,6 +30,19 @@ where
             }
         }
     }
+
+    pub fn and_modify<F>(self, f: F) -> Self
+    where
+        F: FnOnce(&mut V),
+    {
+        match self {
+            Entry::Occupied(mut v) => {
+                f(&mut v);
+                Entry::Occupied(v)
+            }
+            Entry::Vacant(map, k) => Entry::Vacant(map, k),
+        }
+    }
 }
 
 impl<K, V> Map<K, V> {
@@ -41,10 +54,10 @@ impl<K, V> Map<K, V> {
     where
         K: PartialEq,
     {
-        let idx = self.0.iter().position(|(k1, _)| k1 == &k);
-        match idx {
-            Some(idx) => Entry::Occupied(&mut self.0[idx].1),
-            None => Entry::Vacant(self, k),
+        if let Some(idx) = self.0.iter().position(|(k1, _)| k1 == &k) {
+            Entry::Occupied(&mut self.0[idx].1)
+        } else {
+            Entry::Vacant(self, k)
         }
     }
 
@@ -52,8 +65,16 @@ impl<K, V> Map<K, V> {
         Self(vec![(k, v)])
     }
 
-    pub fn insert(&mut self, k: K, v: V) {
-        self.0.push((k, v))
+    pub fn insert(&mut self, k: K, v: V) -> Option<V>
+    where
+        K: PartialEq,
+    {
+        if let Some(idx) = self.0.iter().position(|(k1, _)| k1 == &k) {
+            Some(std::mem::replace(&mut self.0[idx].1, v))
+        } else {
+            self.0.push((k, v));
+            None
+        }
     }
 
     pub fn get(&self, k: &K) -> Option<&V>
@@ -147,7 +168,7 @@ impl<K, V> Map<K, V> {
 
     pub fn union(&self, other: &Self) -> Self
     where
-        K: Clone,
+        K: Clone + PartialEq,
         V: Clone,
     {
         self.iter()
