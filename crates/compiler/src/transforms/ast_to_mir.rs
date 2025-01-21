@@ -26,7 +26,7 @@ pub struct Context {
     func: mir::Function,
     temp_counter: usize,
     stack: Vec<Scope>,
-    loops: Vec<(BlockId, BlockId)>,
+    loops: Vec<(Option<Name>, (BlockId, BlockId))>,
 }
 
 #[derive(Debug)]
@@ -93,12 +93,20 @@ impl Context {
         });
     }
 
-    fn push_loop(&mut self, b_continue: BlockId, b_break: BlockId) {
-        self.loops.push((b_continue, b_break))
+    fn push_loop(&mut self, l: Option<Name>, b_continue: BlockId, b_break: BlockId) {
+        self.loops.push((l, (b_continue, b_break)))
     }
 
-    fn get_loop(&mut self) -> (BlockId, BlockId) {
-        *self.loops.last().unwrap()
+    fn get_loop(&mut self, l0: Option<Name>) -> (BlockId, BlockId) {
+        if let Some(l0) = l0 {
+            self.loops
+                .iter()
+                .rev()
+                .find_map(|(l1, v)| if *l1 == Some(l0) { Some(*v) } else { None })
+                .unwrap()
+        } else {
+            self.loops.last().unwrap().1
+        }
     }
 
     fn get_return_local(&mut self) -> &Local {
@@ -141,14 +149,18 @@ impl Context {
     pub fn lower_block(&mut self, b: &ast::Block, b0: mir::BlockId) -> (BlockId, Operand) {
         let b1 = b.stmts.iter().fold(b0, |b1, s| match s {
             ast::Stmt::Local(s) => {
-                let (b1, o1) = self.lower_expr(&s.expr, b1);
-                let l1 = self.new_storage_local(s.span, s.local.ty.clone(), b1);
-                self.rename(s.local.clone(), l1.clone());
-                self.func.blocks[b1].stmts.push(Stmt::new(Operation::Assign(
-                    Place::from(l1.clone()),
-                    Rvalue::Use(o1),
-                )));
-                b1
+                if let Some(e) = &s.expr {
+                    let (b1, o1) = self.lower_expr(&e, b1);
+                    let l1 = self.new_storage_local(s.span, s.local.ty.clone(), b1);
+                    self.rename(s.local.clone(), l1.clone());
+                    self.func.blocks[b1].stmts.push(Stmt::new(Operation::Assign(
+                        Place::from(l1.clone()),
+                        Rvalue::Use(o1),
+                    )));
+                    b1
+                } else {
+                    todo!()
+                }
             }
             ast::Stmt::Expr(e) => {
                 let (b1, _) = self.lower_expr(e, b1);
@@ -210,12 +222,12 @@ impl Context {
 
                 (b3, Operand::from(l3))
             }
-            Expr::While(_, _, e, b) => {
+            Expr::While(_, _, l, e, b) => {
                 let b_header = self.new_block();
                 let b_body = self.new_block();
                 let b_after = self.new_block();
 
-                self.push_loop(b_header, b_after);
+                self.push_loop(*l, b_header, b_after);
 
                 self.func.blocks[b0]
                     .terminator
@@ -239,11 +251,11 @@ impl Context {
 
                 (b_after, Operand::Constant(Constant::Unit))
             }
-            Expr::Loop(_, _, e1) => {
+            Expr::Loop(_, _, l, e1) => {
                 let b_body = self.new_block();
                 let b_after = self.new_block();
 
-                self.push_loop(b_body, b_after);
+                self.push_loop(*l, b_body, b_after);
 
                 self.func.blocks[b0]
                     .terminator
@@ -336,15 +348,15 @@ impl Context {
                     .get_or_insert(Terminator::Return);
                 (b0, Operand::Constant(Constant::Unit))
             }
-            Expr::Continue(_, _) => {
-                let (b_continue, _) = self.get_loop();
+            Expr::Continue(_, _, l) => {
+                let (b_continue, _) = self.get_loop(*l);
                 self.func.blocks[b0]
                     .terminator
                     .get_or_insert(Terminator::Goto(b_continue));
                 (b0, Operand::Constant(Constant::Unit))
             }
-            Expr::Break(_, _) => {
-                let (_, b_break) = self.get_loop();
+            Expr::Break(_, _, l) => {
+                let (_, b_break) = self.get_loop(*l);
                 self.func.blocks[b0]
                     .terminator
                     .get_or_insert(Terminator::Goto(b_break));
@@ -357,13 +369,13 @@ impl Context {
             // ...
             Expr::Struct(s, t, _, _, xes) => {
                 let l = self.new_storage_local(*s, t.clone(), b0);
-                let b0 = xes.iter().fold(b0, |b0, (n, e)| {
+                let b0 = xes.iter().fold(b0, |b0, (x, e)| {
                     let (b1, l1) = self.lower_expr(e, b0);
                     self.func.blocks[b1].stmts.push(Stmt::new(Operation::Assign(
                         Place {
                             span: e.span(),
                             local: l.clone(),
-                            elems: vec![PlaceElem::Field(e.span(), e.ty().clone(), n.clone())],
+                            elems: vec![PlaceElem::Field(e.span(), e.ty().clone(), *x)],
                         },
                         Rvalue::Use(l1),
                     )));
@@ -376,13 +388,13 @@ impl Context {
             // let l: record(x: T, ...);
             Expr::Record(s, t, xes) => {
                 let l = self.new_storage_local(*s, t.clone(), b0);
-                let b0 = xes.iter().fold(b0, |b0, (n, e)| {
+                let b0 = xes.iter().fold(b0, |b0, (x, e)| {
                     let (b1, l1) = self.lower_expr(e, b0);
                     self.func.blocks[b1].stmts.push(Stmt::new(Operation::Assign(
                         Place {
                             span: e.span(),
                             local: l.clone(),
-                            elems: vec![PlaceElem::Field(e.span(), e.ty().clone(), n.clone())],
+                            elems: vec![PlaceElem::Field(e.span(), e.ty().clone(), *x)],
                         },
                         Rvalue::Use(l1),
                     )));

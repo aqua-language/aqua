@@ -2,6 +2,7 @@ use smol_str::SmolStr;
 
 use serde::Deserialize;
 use serde::Serialize;
+use smol_str::ToSmolStr;
 
 use crate::collections::concurrent::ConcurrentMap;
 use crate::collections::concurrent::Uid;
@@ -26,20 +27,26 @@ fn intern(key: SmolStr) -> Symbol {
 }
 
 impl<'a> From<&'a str> for Symbol {
-    fn from(name: &'a str) -> Symbol {
-        intern(SmolStr::from(name))
+    fn from(data: &'a str) -> Symbol {
+        intern(SmolStr::from(data))
     }
 }
 
 impl From<SmolStr> for Symbol {
-    fn from(name: SmolStr) -> Symbol {
-        intern(name)
+    fn from(data: SmolStr) -> Symbol {
+        intern(data)
     }
 }
 
 impl From<String> for Symbol {
-    fn from(name: String) -> Symbol {
-        intern(SmolStr::from(name))
+    fn from(data: String) -> Symbol {
+        intern(SmolStr::from(data))
+    }
+}
+
+impl From<usize> for Symbol {
+    fn from(data: usize) -> Symbol {
+        intern(data.to_smolstr())
     }
 }
 

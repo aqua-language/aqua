@@ -105,8 +105,12 @@ impl Context {
     }
 
     fn stmt_var(&mut self, s: &StmtLocal) {
-        let value = self.eval_expr(&s.expr);
-        self.stack.bind(s.local.name, value);
+        if let Some(e) = &s.expr {
+            let value = self.eval_expr(e);
+            self.stack.bind(s.local.name, value);
+        } else {
+            todo!()
+        }
     }
 
     /// Todo: Remove this once we can compile to SSA.
@@ -158,7 +162,10 @@ impl Context {
             Expr::Char(_, _, v) => Value::Char(*v),
             Expr::String(_, _, v) => Value::from(runtime::prelude::String::from(v.as_str())),
             Expr::Struct(_, _, _, _, xes) => {
-                let xvs = xes.iter().map(|(n, e)| (*n, self.eval_expr(e))).collect();
+                let xvs = xes
+                    .iter()
+                    .map(|(x, e)| (*x, self.eval_expr(e)))
+                    .collect::<Map<_, _>>();
                 Value::from(Record::new(xvs))
             }
             Expr::Tuple(_, _, es) => {
@@ -166,7 +173,10 @@ impl Context {
                 Value::from(Tuple::new(vs))
             }
             Expr::Record(_, _, xes) => {
-                let xvs = xes.iter().map(|(n, e)| (*n, self.eval_expr(e))).collect();
+                let xvs = xes
+                    .iter()
+                    .map(|(x, e)| (*x, self.eval_expr(e)))
+                    .collect();
                 Value::from(Record::new(xvs))
             }
             Expr::Enum(_, _, _, _, x1, e) => Variant::new(*x1, self.eval_expr(e)).into(),
@@ -206,9 +216,9 @@ impl Context {
                 _ => unreachable!(),
             },
             Expr::Return(_, _, _) => unreachable!(),
-            Expr::Continue(_, _) => unreachable!(),
-            Expr::Break(_, _) => unreachable!(),
-            Expr::While(_, _, e0, e1) => {
+            Expr::Continue(_, _, _) => unreachable!(),
+            Expr::Break(_, _, _) => unreachable!(),
+            Expr::While(_, _, _l, e0, e1) => {
                 while self.eval_expr(e0).as_bool() {
                     self.eval_block(e1);
                 }
@@ -218,7 +228,7 @@ impl Context {
                 Function::new(xts.clone(), ExprBody::UserDefined(e.clone())).into()
             }
             Expr::Err(_, _) => unreachable!(),
-            Expr::For(_, _, _, _, _) => unreachable!(),
+            Expr::For(_, _, _, _, _, _) => unreachable!(),
             Expr::InfixBinaryOp(_, _, _, _, _) => todo!(),
             Expr::PrefixUnaryOp(_, _, _, _) => todo!(),
             Expr::PostfixUnaryOp(_, _, _, _) => todo!(),
@@ -241,7 +251,7 @@ impl Context {
             Expr::Ref(_, _, _, _) => todo!(),
             Expr::Place(..) => todo!(),
             Expr::Deref(_, _, _) => todo!(),
-            Expr::Loop(_, _, _) => todo!(),
+            Expr::Loop(_, _, _, _) => todo!(),
             Expr::Unit(_, _) => Unit.into(),
         }
     }

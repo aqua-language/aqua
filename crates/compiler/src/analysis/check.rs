@@ -1,8 +1,8 @@
 use crate::ast::Ast;
 use crate::ast::Expr;
 use crate::ast::Type;
-use crate::diag::Diagnostic;
-use crate::diag::Report;
+use crate::report::Diagnostic;
+use crate::report::Report;
 use crate::traversal::visitor::Visitor;
 
 struct Context {

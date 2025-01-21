@@ -1,33 +1,33 @@
 use std::rc::Rc;
 
+use crate::ast::Aggr;
+use crate::ast::Ast;
+use crate::ast::Block;
+use crate::ast::Effect;
+use crate::ast::Expr;
+use crate::ast::ExprBody;
+use crate::ast::Impl;
+use crate::ast::Index;
+use crate::ast::Local;
+use crate::ast::Map;
+use crate::ast::Name;
+use crate::ast::Path;
+use crate::ast::Segment;
+use crate::ast::Stmt;
+use crate::ast::StmtDef;
+use crate::ast::StmtEnum;
+use crate::ast::StmtImpl;
+use crate::ast::StmtLocal;
+use crate::ast::StmtStruct;
+use crate::ast::StmtTrait;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
+use crate::ast::StmtType;
+use crate::ast::Trait;
+use crate::ast::Type;
+use crate::ast::TypeBody;
 use crate::syntax::span::Span;
 use crate::syntax::symbol::Symbol;
-
-use super::Aggr;
-use super::Ast;
-use super::Block;
-use super::Expr;
-use super::ExprBody;
-use super::Impl;
-use super::Index;
-use super::Local;
-use super::Map;
-use super::Name;
-use super::Path;
-use super::Segment;
-use super::Stmt;
-use super::StmtDef;
-use super::StmtEnum;
-use super::StmtImpl;
-use super::StmtStruct;
-use super::StmtTrait;
-use super::StmtTraitDef;
-use super::StmtTraitType;
-use super::StmtType;
-use super::StmtLocal;
-use super::Trait;
-use super::Type;
-use super::TypeBody;
 
 impl Ast {
     pub fn new(span: Span, stmts: Vec<Stmt>) -> Ast {
@@ -107,7 +107,7 @@ impl StmtTraitType {
 }
 
 impl StmtLocal {
-    pub fn new(span: Span, local: Local, expr: Expr) -> StmtLocal {
+    pub fn new(span: Span, local: Local, expr: Option<Expr>) -> StmtLocal {
         StmtLocal { span, local, expr }
     }
 }
@@ -119,6 +119,7 @@ impl StmtDef {
         generics: Vec<Name>,
         params: Vec<Local>,
         ty: Type,
+        effect: Effect,
         where_clause: Vec<Impl>,
         body: ExprBody,
     ) -> StmtDef {
@@ -128,6 +129,7 @@ impl StmtDef {
             generics,
             params,
             ty,
+            effect,
             where_clause,
             body,
         }
@@ -163,6 +165,7 @@ impl StmtTraitDef {
         generics: Vec<Name>,
         params: Vec<Local>,
         ty: Type,
+        effect: Effect,
         where_clause: Vec<Impl>,
     ) -> Self {
         Self {
@@ -171,6 +174,7 @@ impl StmtTraitDef {
             generics,
             params,
             ty,
+            effect,
             where_clause,
         }
     }
@@ -234,12 +238,12 @@ impl Index {
 }
 
 impl Aggr {
-    pub fn new(x0: Name, x1: Name, e1: Expr, e2: Option<Expr>) -> Aggr {
+    pub fn new(local: Local, name: Name, reduce_expr: Expr, filter_expr: Option<Expr>) -> Aggr {
         Aggr {
-            x0,
-            x1,
-            e1: Rc::new(e1),
-            e2: e2.map(Rc::new),
+            local,
+            name,
+            reduce_expr: Rc::new(reduce_expr),
+            filter_expr: filter_expr.map(Rc::new),
         }
     }
 }

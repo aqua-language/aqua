@@ -1,17 +1,17 @@
 use std::rc::Rc;
 
-use super::Expr;
-use super::Name;
-use super::Place;
-use super::PlaceElem;
-use super::Stmt;
-use super::StmtDef;
-use super::StmtImpl;
-use super::StmtTrait;
-use super::StmtTraitDef;
-use super::StmtTraitType;
-use super::StmtType;
-use super::Type;
+use crate::ast::Expr;
+use crate::ast::Name;
+use crate::ast::Place;
+use crate::ast::PlaceElem;
+use crate::ast::Stmt;
+use crate::ast::StmtDef;
+use crate::ast::StmtImpl;
+use crate::ast::StmtTrait;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
+use crate::ast::StmtType;
+use crate::ast::Type;
 
 impl Expr {
     pub fn is_braced(&self) -> bool {
@@ -127,6 +127,7 @@ impl Place {
             }
         }
     }
+
     pub fn is_mutable(&self) -> bool {
         if self.elems.is_empty() && self.local.mutable {
             return true;

@@ -6,6 +6,7 @@ use compiler::ast::Aggr;
 use compiler::ast::Ast;
 use compiler::ast::Block;
 use compiler::ast::BuiltinDef;
+use compiler::ast::Effect;
 use compiler::ast::Expr;
 use compiler::ast::ExprBody;
 use compiler::ast::Impl;
@@ -142,6 +143,10 @@ pub fn name(x: impl Into<Name>) -> Name {
     x.into()
 }
 
+pub fn local_name(x: &'static str) -> Local {
+    Local::new(span(), name(x), Type::Unknown, false)
+}
+
 pub fn ty_builtin<const N: usize>(x: &'static str, types: [Type; N]) -> Type {
     Type::Builtin(name(x), vec(types))
 }
@@ -162,8 +167,18 @@ pub fn ty_tuple<const N: usize>(ts: [Type; N]) -> Type {
     Type::Tuple(vec(ts))
 }
 
-pub fn ty_lambda<const N: usize>(ts: [Type; N], t: Type) -> Type {
-    Type::Function(vec(ts), Rc::new(t))
+pub fn ty_fun<const N: usize>(ts: [Type; N], t: Type) -> Type {
+    Type::Function(vec(ts), Rc::new(t), Effect::Unknown)
+}
+
+pub fn ty_fun_effect<const N: usize>(ts: [Type; N], t: Type, e: Effect) -> Type {
+    Type::Function(vec(ts), Rc::new(t), e)
+}
+
+pub fn effects<const N: usize>(xs: [&'static str; N]) -> Effect {
+    xs.into_iter().fold(Effect::Unknown, |acc, x| {
+        Effect::Cons(name(x), Rc::new(acc))
+    })
 }
 
 pub fn ty_var(id: u32) -> Type {
@@ -643,7 +658,7 @@ pub fn ty_ref_mut(t: Type) -> Type {
 // }
 
 pub fn stmt_var(x: &'static str, t: Type, e: Expr) -> Stmt {
-    StmtLocal::new(span(), local_mut((x, t)), e).into()
+    StmtLocal::new(span(), local_mut((x, t)), Some(e)).into()
 }
 
 pub fn type_body(t: Type) -> TypeBody {
@@ -732,6 +747,7 @@ pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
         app(gs, name),
         params(ps),
         t,
+        Effect::Unknown,
         vec(qs),
         b.into(),
     )
@@ -768,7 +784,15 @@ pub fn tr_def<const N: usize, const M: usize, const K: usize>(
     t: Type,
     qs: [Impl; M],
 ) -> StmtTraitDef {
-    StmtTraitDef::new(span(), name(x), app(gs, name), params(xts), t, vec(qs))
+    StmtTraitDef::new(
+        span(),
+        name(x),
+        app(gs, name),
+        params(xts),
+        t,
+        Effect::Unknown,
+        vec(qs),
+    )
 }
 
 pub fn tr_type<const N: usize>(x: &'static str, gs: [&'static str; N]) -> StmtTraitType {
@@ -836,7 +860,7 @@ pub fn pat_annotate(p: Pat, t: Type) -> Pat {
 }
 
 pub fn pat_var(x: &'static str) -> Pat {
-    Pat::Var(span(), Type::Unknown, name(x))
+    Pat::Local(span(), Type::Unknown, name(x), false)
 }
 
 pub fn pat_int(v: &'static str) -> Pat {
@@ -890,7 +914,7 @@ pub fn pat_annot(t: Type, p: Pat) -> Pat {
     p.with_type(t)
 }
 
-pub fn arms<const N: usize>(arms: [(Pat, Expr); N]) -> Map<Pat, Expr> {
+pub fn arms<const N: usize>(arms: [(Pat, Expr); N]) -> Vec<(Pat, Expr)> {
     arms.into_iter().map(|(p, e)| (p, e)).collect()
 }
 
@@ -994,16 +1018,16 @@ pub fn expr_return(e: Expr) -> Expr {
     Expr::Return(span(), Type::Unknown, Rc::new(e))
 }
 
-pub fn expr_continue() -> Expr {
-    Expr::Continue(span(), Type::Unknown)
+pub fn expr_continue(label: Option<&'static str>) -> Expr {
+    Expr::Continue(span(), Type::Unknown, label.map(name))
 }
 
-pub fn expr_break() -> Expr {
-    Expr::Break(span(), Type::Unknown)
+pub fn expr_break(label: Option<&'static str>) -> Expr {
+    Expr::Break(span(), Type::Unknown, label.map(name))
 }
 
 pub fn expr_query<const N: usize>(x0: &'static str, t0: Type, e: Expr, qs: [QueryOp; N]) -> Expr {
-    Expr::Query(span(), Type::Unknown, name(x0), t0, Rc::new(e), vec(qs))
+    Expr::Query(span(), Type::Unknown, local((x0, t0)), Rc::new(e), vec(qs))
 }
 
 pub fn expr_query_into<const N: usize, const M: usize, const K: usize>(
@@ -1018,8 +1042,7 @@ pub fn expr_query_into<const N: usize, const M: usize, const K: usize>(
     Expr::QueryInto(
         span(),
         Type::Unknown,
-        name(x0),
-        t0,
+        local((x0, t0)),
         Rc::new(e),
         vec(qs),
         name(x1),
@@ -1029,15 +1052,18 @@ pub fn expr_query_into<const N: usize, const M: usize, const K: usize>(
 }
 
 pub fn query_join_on(x: &'static str, e0: Expr, e1: Expr) -> QueryOp {
-    QueryOp::JoinOn(span(), name(x), Type::Unknown, Rc::new(e0), Rc::new(e1))
+    QueryOp::JoinOn(span(), local_name(x), Rc::new(e0), Rc::new(e1))
 }
 
 pub fn query_join_over_on(x: &'static str, e0: Expr, e1: Expr, e2: Expr) -> QueryOp {
-    QueryOp::JoinOverOn(span(), name(x), Rc::new(e0), Rc::new(e1), Rc::new(e2))
+    QueryOp::JoinOverOn(span(), local_name(x), Rc::new(e0), Rc::new(e1), Rc::new(e2))
 }
 
 pub fn query_select<const N: usize>(xes: [(&'static str, Expr); N]) -> QueryOp {
-    QueryOp::Select(span(), name_map(xes))
+    QueryOp::Select(
+        span(),
+        xes.into_iter().map(|(x, e)| (local_name(x), e)).collect(),
+    )
 }
 
 pub fn query_where(e: Expr) -> QueryOp {
@@ -1045,19 +1071,19 @@ pub fn query_where(e: Expr) -> QueryOp {
 }
 
 pub fn query_from(x: &'static str, e: Expr) -> QueryOp {
-    QueryOp::From(span(), name(x), Type::Unknown, Rc::new(e))
+    QueryOp::From(span(), local_name(x), Rc::new(e))
 }
 
 pub fn query_var(x: &'static str, e: Expr) -> QueryOp {
-    QueryOp::Var(span(), name(x), Type::Unknown, Rc::new(e))
+    QueryOp::Local(span(), local_name(x), Rc::new(e))
 }
 
 pub fn query_join(x: &'static str, e0: Expr, e1: Expr) -> QueryOp {
-    QueryOp::JoinOn(span(), name(x), Type::Unknown, Rc::new(e0), Rc::new(e1))
+    QueryOp::JoinOn(span(), local_name(x), Rc::new(e0), Rc::new(e1))
 }
 
 pub fn query_join_over(x: &'static str, e0: Expr, e1: Expr, e2: Expr) -> QueryOp {
-    QueryOp::JoinOverOn(span(), name(x), Rc::new(e0), Rc::new(e1), Rc::new(e2))
+    QueryOp::JoinOverOn(span(), local_name(x), Rc::new(e0), Rc::new(e1), Rc::new(e2))
 }
 
 pub fn query_group_over_compute<const N: usize>(
@@ -1066,7 +1092,7 @@ pub fn query_group_over_compute<const N: usize>(
     e1: Expr,
     aggs: [Aggr; N],
 ) -> QueryOp {
-    QueryOp::GroupOverCompute(span(), name(x), Rc::new(e0), Rc::new(e1), vec(aggs))
+    QueryOp::GroupOverCompute(span(), local_name(x), Rc::new(e0), Rc::new(e1), vec(aggs))
 }
 
 pub fn query_over_compute<const N: usize>(e: Expr, aggs: [Aggr; N]) -> QueryOp {
@@ -1074,15 +1100,36 @@ pub fn query_over_compute<const N: usize>(e: Expr, aggs: [Aggr; N]) -> QueryOp {
 }
 
 pub fn aggr(x0: &'static str, x1: &'static str, e: Expr) -> Aggr {
-    Aggr::new(name(x0), name(x1), e, None)
+    Aggr::new(local_name(x0), name(x1), e, None)
 }
 
 pub fn aggr_if(x0: &'static str, x1: &'static str, e1: Expr, e2: Expr) -> Aggr {
-    Aggr::new(name(x0), name(x1), e1, Some(e2))
+    Aggr::new(local_name(x0), name(x1), e1, Some(e2))
 }
 
-pub fn expr_while(e: Expr, b: Block) -> Expr {
-    Expr::While(span(), Type::Unknown, Rc::new(e), Rc::new(b))
+pub fn expr_while(label: Option<&'static str>, e: Expr, b: Block) -> Expr {
+    Expr::While(
+        span(),
+        Type::Unknown,
+        label.map(name),
+        Rc::new(e),
+        Rc::new(b),
+    )
+}
+
+pub fn expr_for(label: Option<&'static str>, l: Local, e: Expr, b: Block) -> Expr {
+    Expr::For(
+        span(),
+        Type::Unknown,
+        label.map(name),
+        l,
+        Rc::new(e),
+        Rc::new(b),
+    )
+}
+
+pub fn expr_loop(label: Option<&'static str>, b: Block) -> Expr {
+    Expr::Loop(span(), Type::Unknown, label.map(name), Rc::new(b))
 }
 
 pub fn span() -> Span {

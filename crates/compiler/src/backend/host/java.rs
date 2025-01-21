@@ -128,7 +128,9 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
         self.space()?;
         self.punct("=")?;
         self.space()?;
-        self.expr(&s.expr)?;
+        if let Some(e) = &s.expr {
+            self.expr(e)?;
+        }
         self.punct(";")
     }
 
@@ -180,7 +182,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
         self.space()?;
         self.name(&s.name)?;
         self.space()?;
-        self.brace(|this| this.fields(s.fields.as_ref(), Self::type_field))
+        self.brace(|this| this.fields(s.fields.as_ref(), Self::field))
     }
 
     fn stmt_enum(&mut self, s: &StmtEnum) -> std::fmt::Result {
@@ -238,7 +240,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Expr::Struct(_, _, x, _, xes) => {
                 self.name(x)?;
                 self.space()?;
-                self.fields(xes.as_ref(), Self::expr_field)?;
+                self.fields(xes.as_ref(), Self::field_expr)?;
             }
             Expr::Enum(_, _, x, _, x1, e) => {
                 self.name(x)?;
@@ -283,10 +285,10 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.space()?;
                 self.expr(e)?;
             }
-            Expr::Continue(_, _) => {
+            Expr::Continue(_, _, _l) => {
                 self.kw("continue")?;
             }
-            Expr::Break(_, _) => {
+            Expr::Break(_, _, _l) => {
                 self.kw("break")?;
             }
             Expr::Lambda(_, _, ps, t, e) => {
@@ -302,7 +304,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 })?;
             }
             Expr::Match(..) => unreachable!(),
-            Expr::While(_, _, e, b) => {
+            Expr::While(_, _, _l, e, b) => {
                 self.kw("while")?;
                 self.space()?;
                 self.expr(e)?;
@@ -310,9 +312,9 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.block(b)?;
             }
             Expr::Record(_, _, xts) => {
-                self.fields(xts.as_ref(), Self::expr_field)?;
+                self.fields(xts.as_ref(), Self::field_expr)?;
             }
-            Expr::For(_, _, _, _, _) => unreachable!(),
+            Expr::For(_, _, _, _, _, _) => unreachable!(),
             Expr::InfixBinaryOp(_, _, _, _, _) => unreachable!(),
             Expr::PrefixUnaryOp(_, _, _, _) => unreachable!(),
             Expr::PostfixUnaryOp(_, _, _, _) => unreachable!(),
@@ -339,7 +341,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Expr::Ref(_, _, _, _) => todo!(),
             Expr::Place(_, _, _) => todo!(),
             Expr::Deref(_, _, _) => todo!(),
-            Expr::Loop(_, _, _) => todo!(),
+            Expr::Loop(_, _, _, _) => todo!(),
             Expr::Unit(_, _) => todo!(),
         }
         Ok(())
@@ -374,11 +376,11 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
         Ok(())
     }
 
-    fn expr_field(&mut self, (_, e): &(Name, Expr)) -> std::fmt::Result {
+    fn field_expr(&mut self, (_, e): &(Name, Expr)) -> std::fmt::Result {
         self.expr(e)
     }
 
-    fn type_field(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
+    fn field(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
         self.ty(t)?;
         self.space()?;
         self.name(x)
@@ -401,7 +403,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Type::Unknown => unreachable!(),
             Type::Err => unreachable!(),
             Type::Generic(_) => unreachable!(),
-            Type::Function(ts, t) => {
+            Type::Function(ts, t, _es) => {
                 self.kw("Function")?;
                 self.lit(ts.len())?;
                 self.angle(|this| {
@@ -419,7 +421,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.angle(|this| this.comma_sep(ts, Self::ty))?;
             }
             Type::Record(xts) => {
-                self.fields(xts.as_ref(), Self::type_field)?;
+                self.fields(xts.as_ref(), Self::field)?;
             }
             Type::Path(..) => unreachable!(),
             Type::Array(t, n) => {
@@ -442,6 +444,14 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Type::Enum(_, _) => todo!(),
             Type::Ref(_, _, _) => todo!(),
             Type::Unit => todo!(),
+        }
+        Ok(())
+    }
+
+    fn label(&mut self, l: &Option<Name>) -> std::fmt::Result {
+        if let Some(l) = l {
+            self.punct("'")?;
+            self.name(l)?;
         }
         Ok(())
     }

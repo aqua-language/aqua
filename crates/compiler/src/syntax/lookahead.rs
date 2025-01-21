@@ -38,7 +38,8 @@ impl Lookahead for Expr {
         .or(Token::Let)
         .or(Token::Underscore)
         .or(Token::Star)
-        .or(Token::Ampersand);
+        .or(Token::Ampersand)
+        .or(Token::Loop);
     const FOLLOW: Token = Token::Eof
         .or(Token::And)
         .or(Token::DotDot)
@@ -83,7 +84,7 @@ impl Lookahead for Type {
         .or(Token::Underscore)
         .or(Token::Not)
         .or(Token::Ampersand);
-    const FOLLOW: Token = Token::Eof.or(Token::FatArrow);
+    const FOLLOW: Token = Token::Eof.or(Token::FatArrow).or(Token::Tilde);
 }
 
 impl Lookahead for Pat {

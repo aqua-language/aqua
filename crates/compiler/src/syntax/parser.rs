@@ -34,6 +34,7 @@ use crate::ast::Ast;
 use crate::ast::Block;
 use crate::ast::BuiltinDef;
 use crate::ast::BuiltinType;
+use crate::ast::Effect;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Impl;
@@ -58,8 +59,9 @@ use crate::ast::StmtType;
 use crate::ast::Type;
 use crate::ast::TypeBody;
 use crate::collections::map::Map;
-use crate::diag::Diagnostic;
-use crate::diag::Report;
+use crate::mir;
+use crate::report::Diagnostic;
+use crate::report::Report;
 use crate::syntax::lookahead::Lookahead;
 use crate::syntax::span::Span;
 use crate::syntax::spanned::Spanned;
@@ -313,14 +315,23 @@ where
         self.group(Token::LBrack, Token::RBrack, f, follow)
     }
 
+    fn or_default<T: Default>(
+        &mut self,
+        f: impl Fn(&mut Self) -> Result<Spanned<Option<T>>, Span>,
+    ) -> Result<Spanned<T>, Span> {
+        f(self).map(|x| {
+            let v = if let Some(x) = x.v { x } else { T::default() };
+            Spanned::new(x.s, v)
+        })
+    }
+
     fn paren_seq<T>(
         &mut self,
         f: impl Fn(&mut Self, Token) -> Result<Spanned<T>, Span>,
         first: Token,
         follow: Token,
     ) -> Result<Spanned<Vec<T>>, Span> {
-        self.paren(|p, follow| p.seq(&f, Token::Comma, first, follow), follow)
-            .map(|x| x.flatten())
+        self.or_default(|p| p.paren(|p, follow| p.seq(&f, Token::Comma, first, follow), follow))
     }
 
     pub fn parse<T>(
@@ -355,6 +366,14 @@ where
         }
     }
 
+    fn label(&mut self, follow: Token) -> Result<Spanned<Name>, Span> {
+        let t = self.expect(Token::Label, follow | Token::Colon)?;
+        self.expect(Token::Colon, follow)?;
+        let v = self.text(t).to_owned();
+        let x = Name::new(t.s, v);
+        Ok(Spanned::new(t.s, x))
+    }
+
     pub fn program(&mut self, follow: Token) -> Result<Spanned<Ast>, Span> {
         let mut stmts = Vec::new();
         let s0 = self.peek().s;
@@ -381,15 +400,35 @@ where
         let gs = self.generics(follow | Token::LParen)?;
         let xts = self.params(follow, true)?;
         self.expect(Token::Colon, follow)?;
-        let t = self.ty(follow | Token::Where | Token::SemiColon)?;
-        let bs = self.where_clause(follow | Token::SemiColon)?;
+        let t = self.ty(follow | Token::LBrace | Token::Where | Token::SemiColon)?;
+        let effect = self.effect(follow | Token::Where | Token::SemiColon)?;
+        let where_clause = self.where_clause(follow | Token::SemiColon)?;
         self.expect(Token::SemiColon, follow)?;
         let s = t0.s + x.s;
         let body = ExprBody::Builtin(body);
         Ok(Spanned::new(
             s,
-            StmtDef::new(s, x.v, gs, xts.v, t.v, bs, body),
+            StmtDef::new(s, x.v, gs, xts.v, t.v, effect, where_clause, body),
         ))
+    }
+
+    pub fn effect(&mut self, follow: Token) -> Result<Effect, Span> {
+        if self.eat(Token::Tilde, follow | Token::LBrace)? {
+            let list = self.brace(
+                |p, follow| p.seq(Self::name, Token::Comma, Token::Name, follow),
+                follow,
+            )?;
+            if let Some(list) = list.v {
+                let effect = list
+                    .into_iter()
+                    .fold(Effect::Unknown, |acc, x| Effect::Cons(x, Rc::new(acc)));
+                Ok(effect)
+            } else {
+                Ok(Effect::Nil)
+            }
+        } else {
+            Ok(Effect::Unknown)
+        }
     }
 
     pub fn stmt_type_builtin(
@@ -484,8 +523,9 @@ where
         let gs = self.generics(follow | Token::LParen)?;
         let xts = self.params(follow, true)?;
         self.expect(Token::Colon, follow)?;
-        let t = self.ty(follow | Token::Where | Token::Eq)?;
-        let bs = self.where_clause(follow | Token::Eq)?;
+        let t = self.ty(follow | Token::LBrace | Token::Where | Token::Eq)?;
+        let effect = self.effect(follow | Token::Where | Token::Eq)?;
+        let where_clause = self.where_clause(follow | Token::Eq)?;
         self.expect(Token::Eq, follow)?;
         let e = self.stmt_expr(follow)?;
         let s = t0.s + e.s;
@@ -497,7 +537,8 @@ where
                 gs,
                 xts.v,
                 t.v,
-                bs,
+                effect,
+                where_clause,
                 ExprBody::UserDefined(Rc::new(e.v)),
             ),
         ))
@@ -509,7 +550,7 @@ where
         let gs = self.generics(follow | Token::LParen | Token::SemiColon)?;
         let xts = self
             .optional(
-                |p, follow| p.ty_fields(follow | Token::SemiColon),
+                |p, follow| p.fields(follow | Token::SemiColon),
                 Token::LParen,
                 follow | Token::SemiColon,
             )?
@@ -517,16 +558,16 @@ where
             .unwrap_or_default();
         self.expect(Token::SemiColon, follow)?;
         let s = t0.s + x.s;
-        Ok(Spanned::new(s, StmtStruct::new(s, x.v, gs, xts.into())))
+        Ok(Spanned::new(s, StmtStruct::new(s, x.v, gs, xts)))
     }
 
     fn stmt_enum(&mut self, follow: Token) -> Result<Spanned<StmtEnum>, Span> {
         let t0 = self.expect(Token::Enum, follow)?;
         let x = self.name(follow)?;
         let gs = self.generics(follow | Token::LBrace)?;
-        let xts = self.ty_variants(follow)?;
-        let s = t0.s + x.s;
-        Ok(Spanned::new(s, StmtEnum::new(s, x.v, gs, xts)))
+        let xts = self.variants(follow)?;
+        let s = t0.s + xts.s;
+        Ok(Spanned::new(s, StmtEnum::new(s, x.v, gs, xts.v)))
     }
 
     fn stmt_type(&mut self, follow: Token) -> Result<Spanned<StmtType>, Span> {
@@ -550,9 +591,15 @@ where
         let t = self.optional_type_annot(follow | Token::Eq)?;
         let l = Local::new(x.s, x.v, t, m);
         self.expect(Token::Eq, follow)?;
-        let e = self.stmt_expr(follow)?;
-        let s = t0.s + e.s;
-        Ok(Spanned::new(s, StmtLocal::new(s, l, e.v)))
+        let e = self.optional(|p, follow| p.expr(follow), Expr::FIRST, follow)?;
+        let t1 = self.expect(Token::SemiColon, follow)?;
+        if let Some(e) = e {
+            let s = t0.s + t1.s;
+            Ok(Spanned::new(s, StmtLocal::new(s, l, Some(e.v))))
+        } else {
+            let s = t0.s;
+            Ok(Spanned::new(s, StmtLocal::new(s, l, None)))
+        }
     }
 
     pub fn stmt_trait(&mut self, follow: Token) -> Result<Spanned<StmtTrait>, Span> {
@@ -583,16 +630,17 @@ where
         let ls = self.params(follow | Token::Colon, true)?;
         self.expect(Token::Colon, follow)?;
         let t = self.ty(follow | Token::Where | Token::SemiColon)?;
+        let e = self.effect(follow | Token::Where | Token::SemiColon)?;
         let bs = self.where_clause(follow | Token::SemiColon)?;
         let t1 = self.expect(Token::SemiColon, follow)?;
         let s = t0.s + t1.s;
         Ok(Spanned::new(
             s,
-            StmtTraitDef::new(s, x.v, gs, ls.v, t.v, bs),
+            StmtTraitDef::new(s, x.v, gs, ls.v, t.v, e, bs),
         ))
     }
 
-    fn param(
+    fn local(
         &mut self,
         follow: Token,
         type_annotation_required: bool,
@@ -651,15 +699,15 @@ where
         }
     }
 
-    fn ty_variants(&mut self, follow: Token) -> Result<Map<Name, Type>, Span> {
+    fn variants(&mut self, follow: Token) -> Result<Spanned<Map<Name, Type>>, Span> {
         self.brace(
-            |p, follow| p.seq(Self::ty_variant, Token::Comma, Token::Name, follow),
+            |p, follow| p.seq(Self::variant, Token::Comma, Token::Name, follow),
             follow,
         )
-        .map(|x| x.v.unwrap_or_default().into())
+        .map(|x| Spanned::new(x.s, x.v.unwrap_or_default().into()))
     }
 
-    fn ty_variant(&mut self, follow: Token) -> Result<Spanned<(Name, Type)>, Span> {
+    fn variant(&mut self, follow: Token) -> Result<Spanned<(Name, Type)>, Span> {
         let x = self.name(follow)?;
         if self.start(Token::LParen | follow, follow)?.v == Token::LParen {
             self.advance();
@@ -715,7 +763,7 @@ where
         type_annotation_required: bool,
     ) -> Result<Spanned<Vec<Local>>, Span> {
         self.paren_seq(
-            |ctx, follow| ctx.param(follow, type_annotation_required),
+            |ctx, follow| ctx.local(follow, type_annotation_required),
             Token::Name | Token::Mut,
             follow,
         )
@@ -745,12 +793,13 @@ where
         follow: Token,
     ) -> Result<Option<Spanned<(Vec<Type>, Vec<(Name, Type)>)>>, Span> {
         let args = self.optional(
-            |this, follow| {
-                this.brack(
-                    |this, follow| this.seq(Self::trait_arg, Token::Comma, Type::FIRST, follow),
-                    follow,
-                )
-                .map(|x| x.flatten())
+            |p, follow| {
+                p.or_default(|p| {
+                    p.brack(
+                        |this, follow| this.seq(Self::trait_arg, Token::Comma, Type::FIRST, follow),
+                        follow,
+                    )
+                })
             },
             Token::LBrack,
             follow,
@@ -785,11 +834,12 @@ where
     fn optional_ty_args(&mut self, follow: Token) -> Result<Vec<Type>, Span> {
         let ts = self.optional(
             |p, follow| {
-                p.brack(
-                    |p, follow| p.seq(Self::ty, Token::Comma, Type::FIRST, follow),
-                    follow,
-                )
-                .map(|x| x.flatten())
+                p.or_default(|p| {
+                    p.brack(
+                        |p, follow| p.seq(Self::ty, Token::Comma, Type::FIRST, follow),
+                        follow,
+                    )
+                })
             },
             Token::LBrack,
             follow,
@@ -803,19 +853,12 @@ where
         self.seq(Self::expr, Token::Comma, Expr::FIRST, follow)
     }
 
-    fn ty_fields(&mut self, follow: Token) -> Result<Spanned<Vec<(Name, Type)>>, Span> {
+    fn fields(&mut self, follow: Token) -> Result<Spanned<Map<Name, Type>>, Span> {
         self.paren(
-            |p, follow| p.seq(Self::ty_field, Token::Comma, Token::Name, follow),
+            |p, follow| p.seq(Self::field, Token::Comma, Token::Name, follow),
             follow,
         )
-        .map(|x| x.flatten())
-    }
-
-    fn ty_field(&mut self, follow: Token) -> Result<Spanned<(Name, Type)>, Span> {
-        let name = self.name(follow)?;
-        self.expect(Token::Colon, follow)?;
-        let ty = self.ty(follow)?;
-        Ok(Spanned::new(name.s + ty.s, (name.v, ty.v)))
+        .map(|x| Spanned::new(x.s, x.v.unwrap_or_default().into()))
     }
 
     pub fn ty(&mut self, follow: Token) -> Result<Spanned<Type>, Span> {
@@ -841,8 +884,9 @@ where
                     Token::FatArrow => {
                         self.advance();
                         let ts = lhs.v.as_params();
-                        let ty = self.ty(follow)?;
-                        Type::Function(ts, Rc::new(ty.v))
+                        let ty = self.ty(follow | Token::LBrace)?;
+                        let effect = self.effect(follow)?;
+                        Type::Function(ts, Rc::new(ty.v), effect)
                     }
                     _ => unreachable!(),
                 };
@@ -878,8 +922,8 @@ where
             }
             Token::Record => {
                 let t = self.next();
-                let fields = self.ty_fields(follow)?;
-                Spanned::new(t.s + fields.s, Type::Record(fields.v.into()))
+                let fields = self.fields(follow)?;
+                Spanned::new(t.s + fields.s, Type::Record(fields.v))
             }
             Token::LBrack => {
                 let t = self.next();
@@ -983,7 +1027,7 @@ where
                 let t0 = self.next();
                 let xps = self.pat_fields(follow)?;
                 let s = t0.s + xps.s;
-                Spanned::new(s, Pat::Record(s, Type::Unknown, xps.v.into()))
+                Spanned::new(s, Pat::Record(s, Type::Unknown, xps.v))
             }
             Token::Underscore => {
                 let t = self.next();
@@ -1024,27 +1068,30 @@ where
     }
 
     fn ty_tuple(&mut self, follow: Token) -> Result<Spanned<Vec<Type>>, Span> {
-        self.paren(
-            |p, follow| p.seq(Self::ty, Token::Comma, Type::FIRST, follow),
-            follow,
-        )
-        .map(|x| x.flatten())
+        self.or_default(|p| {
+            p.paren(
+                |p, follow| p.seq(Self::ty, Token::Comma, Type::FIRST, follow),
+                follow,
+            )
+        })
     }
 
     fn pat_tuple(&mut self, follow: Token) -> Result<Spanned<Vec<Pat>>, Span> {
-        self.paren(
-            |p, follow| p.seq(Self::pat, Token::Comma, Pat::FIRST, follow),
-            follow,
-        )
-        .map(|x| x.flatten())
+        self.or_default(|p| {
+            p.paren(
+                |p, follow| p.seq(Self::pat, Token::Comma, Pat::FIRST, follow),
+                follow,
+            )
+        })
     }
 
     fn pat_args(&mut self, follow: Token) -> Result<Spanned<Vec<PathPatField>>, Span> {
-        self.paren(
-            |p, follow| p.seq(Self::pat_arg, Token::Comma, Pat::FIRST, follow),
-            follow,
-        )
-        .map(|x| x.flatten())
+        self.or_default(|p| {
+            p.paren(
+                |p, follow| p.seq(Self::pat_arg, Token::Comma, Pat::FIRST, follow),
+                follow,
+            )
+        })
     }
 
     fn pat_arg(&mut self, follow: Token) -> Result<Spanned<PathPatField>, Span> {
@@ -1064,15 +1111,27 @@ where
         Ok(Spanned::new(s, PathPatField::Unnamed(p0.v)))
     }
 
-    fn pat_fields(&mut self, follow: Token) -> Result<Spanned<Vec<(Name, Pat)>>, Span> {
+    fn pat_fields(&mut self, follow: Token) -> Result<Spanned<Map<Name, Pat>>, Span> {
         self.paren(
-            |p, follow| p.seq(Self::pat_field, Token::Comma, Token::Name, follow),
+            |p, follow| p.seq(Self::field_pat, Token::Comma, Token::Name, follow),
             follow,
         )
-        .map(|x| x.flatten())
+        .map(|x| Spanned::new(x.s, x.v.unwrap_or_default().into()))
     }
 
-    fn pat_field(&mut self, follow: Token) -> Result<Spanned<(Name, Pat)>, Span> {
+    fn field(&mut self, follow: Token) -> Result<Spanned<(Name, Type)>, Span> {
+        let x = self.name(follow)?;
+        let t = self.optional(|p, follow| p.ty_annot(follow), Token::Colon, follow)?;
+        if let Some(t) = t {
+            let s = x.s + t.s;
+            Ok(Spanned::new(s, (x.v, t.v)))
+        } else {
+            let s = x.s;
+            Ok(Spanned::new(s, (x.v, Type::Unknown)))
+        }
+    }
+
+    fn field_pat(&mut self, follow: Token) -> Result<Spanned<(Name, Pat)>, Span> {
         let x = self.name(follow)?;
         if self.start(Token::Eq | follow, follow)?.v == Token::Eq {
             self.advance();
@@ -1088,11 +1147,12 @@ where
     }
 
     fn arms(&mut self, follow: Token) -> Result<Spanned<Vec<(Pat, Expr)>>, Span> {
-        self.brace(
-            |p, follow| p.seq(Self::arm, Token::Comma, Pat::FIRST, follow),
-            follow,
-        )
-        .map(|x| x.flatten())
+        self.or_default(|p| {
+            p.brace(
+                |p, follow| p.seq(Self::arm, Token::Comma, Pat::FIRST, follow),
+                follow,
+            )
+        })
     }
 
     fn arm(&mut self, follow: Token) -> Result<Spanned<(Pat, Expr)>, Span> {
@@ -1342,13 +1402,15 @@ where
             }
             Token::Break => {
                 self.advance();
-                let s = t0.s;
-                Spanned::new(s, Expr::Break(s, Type::Unknown))
+                let label = self.optional(Self::label, Token::Label, follow)?;
+                let s = t0.s + label.map(|x| x.s);
+                Spanned::new(s, Expr::Break(s, Type::Unknown, label.map(|x| x.v)))
             }
             Token::Continue => {
                 self.advance();
-                let s = t0.s;
-                Spanned::new(s, Expr::Continue(s, Type::Unknown))
+                let label = self.optional(Self::label, Token::Label, follow)?;
+                let s = t0.s + label.map(|x| x.s);
+                Spanned::new(s, Expr::Continue(s, Type::Unknown, label.map(|x| x.v)))
             }
             Token::Return => {
                 self.advance();
@@ -1364,7 +1426,7 @@ where
                 }
             }
             Token::LBrack => {
-                let es = self.brack(Self::exprs, follow)?.flatten();
+                let es = self.or_default(|p| p.brack(Self::exprs, follow))?;
                 let s = t0.s + es.s;
                 Spanned::new(s, Expr::Array(s, Type::Unknown, es.v))
             }
@@ -1378,7 +1440,13 @@ where
                     let s = t.s + b1.s;
                     Spanned::new(
                         s,
-                        Expr::IfElse(s, Type::Unknown, Rc::new(e0.v), Rc::new(b0.v), Rc::new(b1.v)),
+                        Expr::IfElse(
+                            s,
+                            Type::Unknown,
+                            Rc::new(e0.v),
+                            Rc::new(b0.v),
+                            Rc::new(b1.v),
+                        ),
                     )
                 } else {
                     let s = t.s + b0.s;
@@ -1401,33 +1469,50 @@ where
             }
             Token::While => {
                 let t = self.next();
+                let l = self
+                    .optional(Self::label, Token::Label, follow)?
+                    .map(|x| x.v);
                 let e = self.expr(follow | Token::LBrace)?;
                 let b = self.block(follow)?;
                 let s = t.s + b.s;
-                Spanned::new(s, Expr::While(s, Type::Unknown, Rc::new(e.v), Rc::new(b.v)))
+                Spanned::new(
+                    s,
+                    Expr::While(s, Type::Unknown, l, Rc::new(e.v), Rc::new(b.v)),
+                )
+            }
+            Token::Loop => {
+                let t = self.next();
+                let l = self
+                    .optional(Self::label, Token::Label, follow | Token::LBrace)?
+                    .map(|x| x.v);
+                let b = self.block(follow)?;
+                let s = t.s + b.s;
+                Spanned::new(s, Expr::Loop(s, Type::Unknown, l, Rc::new(b.v)))
             }
             Token::For => {
                 let t = self.next();
-                let x = self.name(follow)?;
+                let lab = self
+                    .optional(Self::label, Token::Label, follow)?
+                    .map(|x| x.v);
+                let l = self.local(follow, false)?;
                 self.expect(Token::In, follow)?;
                 let e = self.expr(follow | Token::LBrace)?;
                 let b = self.block(follow)?;
                 let s = t.s + b.s;
                 Spanned::new(
                     s,
-                    Expr::For(s, Type::Unknown, x.v, Rc::new(e.v), Rc::new(b.v)),
+                    Expr::For(s, Type::Unknown, lab, l.v, Rc::new(e.v), Rc::new(b.v)),
                 )
             }
             Token::Record => {
                 let t = self.next();
                 let es = self.expr_fields(follow | Token::RBrace)?;
                 let s = t.s + es.s;
-                Spanned::new(s, Expr::Record(s, Type::Unknown, es.v.into()))
+                Spanned::new(s, Expr::Record(s, Type::Unknown, es.v))
             }
             Token::From => {
                 let t = self.next();
-                let x0 = self.name(follow | Token::Colon | Token::In)?;
-                let t0 = self.optional_type_annot(follow | Token::In)?;
+                let l = self.local(follow | Token::In, false)?;
                 self.expect(Token::In, follow | Expr::FIRST)?;
                 let e = self.expr(follow | QueryOp::FIRST | Token::Into)?;
                 let qs = self.repeat(Self::query_op, QueryOp::FIRST, follow | QueryOp::FOLLOW)?;
@@ -1445,8 +1530,7 @@ where
                             Expr::QueryInto(
                                 s,
                                 Type::Unknown,
-                                x0.v,
-                                t0,
+                                l.v,
                                 Rc::new(e.v),
                                 qs,
                                 x1.v,
@@ -1461,8 +1545,7 @@ where
                             Expr::QueryInto(
                                 s,
                                 Type::Unknown,
-                                x0.v,
-                                t0,
+                                l.v,
                                 Rc::new(e.v),
                                 qs,
                                 x1.v,
@@ -1477,7 +1560,7 @@ where
                     } else {
                         (vec![], t.s + e.s)
                     };
-                    Spanned::new(s, Expr::Query(s, Type::Unknown, x0.v, t0, Rc::new(e.v), qs))
+                    Spanned::new(s, Expr::Query(s, Type::Unknown, l.v, Rc::new(e.v), qs))
                 }
             }
             Token::LBrace => {
@@ -1518,12 +1601,11 @@ where
         match t.v {
             Token::From => {
                 let t = self.next();
-                let x = self.name(follow | Token::In)?;
-                let t0 = self.optional_type_annot(follow | Token::In)?;
+                let l = self.local(follow | Token::In, false)?;
                 self.expect(Token::In, follow)?;
                 let e = self.expr(follow)?;
                 let s = t.s + e.s;
-                Ok(Spanned::new(s, QueryOp::From(s, x.v, t0, Rc::new(e.v))))
+                Ok(Spanned::new(s, QueryOp::From(s, l.v, Rc::new(e.v))))
             }
             Token::Where => {
                 let t = self.next();
@@ -1539,13 +1621,13 @@ where
             }
             Token::Select => {
                 let t = self.next();
-                let es = self.seq_nonempty(Self::field_expr, Token::Comma, Token::Name, follow)?;
+                let es = self.seq_nonempty(Self::local_expr, Token::Comma, Token::Name, follow)?;
                 let s = t.s + es.s;
-                Ok(Spanned::new(s, QueryOp::Select(s, es.v.into())))
+                Ok(Spanned::new(s, QueryOp::Select(s, es.v)))
             }
             Token::Group => {
                 let t = self.next();
-                let x = self.name(follow | Token::Eq)?;
+                let l = self.local(follow | Token::Eq, false)?;
                 self.expect(Token::Eq, follow | Expr::FIRST)?;
                 let e0 = self.expr(follow | Token::Over)?;
                 self.expect(Token::Over, follow)?;
@@ -1555,7 +1637,7 @@ where
                 let s = t.s + aggs.s;
                 Ok(Spanned::new(
                     s,
-                    QueryOp::GroupOverCompute(s, x.v, Rc::new(e0.v), Rc::new(e1.v), aggs.v),
+                    QueryOp::GroupOverCompute(s, l.v, Rc::new(e0.v), Rc::new(e1.v), aggs.v),
                 ))
             }
             Token::Over => {
@@ -1571,12 +1653,11 @@ where
             }
             Token::Var => {
                 let t = self.next();
-                let x = self.name(follow | Token::Eq)?;
-                let t0 = self.optional_type_annot(follow | Token::Eq)?;
+                let l = self.local(follow | Token::Eq, false)?;
                 self.expect(Token::Eq, follow)?;
                 let e = self.expr(follow | QueryOp::FIRST)?;
                 let s = t.s + e.s;
-                Ok(Spanned::new(s, QueryOp::Var(s, x.v, t0, Rc::new(e.v))))
+                Ok(Spanned::new(s, QueryOp::Local(s, l.v, Rc::new(e.v))))
             }
             Token::Drop => {
                 let t = self.next();
@@ -1586,8 +1667,7 @@ where
             }
             Token::Join => {
                 let t = self.next();
-                let x = self.name(follow | Token::In)?;
-                let t0 = self.optional_type_annot(follow | Token::Eq)?;
+                let l = self.local(follow | Token::In, false)?;
                 self.expect(Token::In, follow | Expr::FIRST)?;
                 let e0 = self.expr(follow | Token::On | Token::Over)?;
                 match self.start(Token::On | Token::Over, follow)?.v {
@@ -1597,7 +1677,7 @@ where
                         let s = t.s + e1.s;
                         Ok(Spanned::new(
                             s,
-                            QueryOp::JoinOn(s, x.v, t0, Rc::new(e0.v), Rc::new(e1.v)),
+                            QueryOp::JoinOn(s, l.v, Rc::new(e0.v), Rc::new(e1.v)),
                         ))
                     }
                     Token::Over => {
@@ -1610,7 +1690,7 @@ where
                             s,
                             QueryOp::JoinOverOn(
                                 s,
-                                x.v,
+                                l.v,
                                 Rc::new(e0.v),
                                 Rc::new(e1.v),
                                 Rc::new(e2.v),
@@ -1625,7 +1705,7 @@ where
     }
 
     fn aggr(&mut self, follow: Token) -> Result<Spanned<Aggr>, Span> {
-        let x = self.name(follow | Token::Eq)?;
+        let l = self.local(follow | Token::Eq, false)?;
         self.expect(Token::Eq, follow)?;
         let e0 = self.name(follow | Token::Of)?;
         self.expect(Token::Of, follow)?;
@@ -1633,16 +1713,16 @@ where
         let (s, e2) = if self.start(Token::If | follow, follow)?.v == Token::If {
             self.advance();
             let e2 = self.expr(follow)?;
-            (x.s + e2.s, Some(e2.v))
+            (l.s + e2.s, Some(e2.v))
         } else {
-            (x.s + e1.s, None)
+            (l.s + e1.s, None)
         };
-        Ok(Spanned::new(s, Aggr::new(x.v, e0.v, e1.v, e2)))
+        Ok(Spanned::new(s, Aggr::new(l.v, e0.v, e1.v, e2)))
     }
 
     fn field_expr(&mut self, follow: Token) -> Result<Spanned<(Name, Expr)>, Span> {
         let e0 = self.expr(follow)?;
-        if let Some((x, e)) = e0.v.as_field() {
+        if let Some((x, e)) = e0.v.as_field_expr() {
             Ok(Spanned::new(e0.s, (*x, e.clone())))
         } else {
             self.report.add(Diagnostic::err(
@@ -1654,11 +1734,34 @@ where
         }
     }
 
-    fn expr_fields(&mut self, follow: Token) -> Result<Spanned<Vec<(Name, Expr)>>, Span> {
+    fn local_expr(&mut self, follow: Token) -> Result<Spanned<(Local, Expr)>, Span> {
+        let m = self.eat(Token::Mut, follow | Token::Name)?;
+        let e0 = self.expr(follow)?;
+        if let Some((x, e)) = e0.v.as_field_expr() {
+            Ok(Spanned::new(
+                e0.s,
+                (Local::new(x.span, *x, Type::Unknown, m), e.clone()),
+            ))
+        } else {
+            self.report.add(Diagnostic::err(
+                e0.s,
+                "expected field expression",
+                "found expression",
+            ));
+            Err(e0.s)
+        }
+    }
+
+    fn expr_fields(&mut self, follow: Token) -> Result<Spanned<Map<Name, Expr>>, Span> {
         self.paren(
             |p, follow| p.seq(Self::field_expr, Token::Comma, Token::Name, follow),
             follow,
         )
-        .map(|x| x.flatten())
+        .map(|x| Spanned::new(x.s, x.v.unwrap_or_default().into()))
+    }
+
+    // MIR parsing
+    fn mir_function(&mut self, follow: Token) -> Result<Spanned<mir::Function>, Span> {
+        
     }
 }

@@ -96,7 +96,9 @@ pub(crate) trait Visitor {
     fn _visit_stmt_var(&mut self, s: &StmtLocal) {
         self.visit_span(&s.span);
         self.visit_local(&s.local);
-        self.visit_expr(&s.expr);
+        if let Some(e) = &s.expr {
+            self.visit_expr(e);
+        }
     }
 
     fn visit_stmt_def(&mut self, s: &StmtDef) {
@@ -420,15 +422,13 @@ pub(crate) trait Visitor {
             Expr::Block(_, _, b) => {
                 self.visit_block(b);
             }
-            Expr::Query(_, _, x0, t0, e, qs) => {
-                self.visit_name(x0);
-                self.visit_type(t0);
+            Expr::Query(_, _, l, e, qs) => {
+                self.visit_local(l);
                 self.visit_expr(e);
                 self.visit_query_stmts(qs);
             }
-            Expr::QueryInto(_, _, x0, t0, e, qs, x1, ts, es) => {
-                self.visit_name(x0);
-                self.visit_type(t0);
+            Expr::QueryInto(_, _, l, e, qs, x1, ts, es) => {
+                self.visit_local(l);
                 self.visit_expr(e);
                 self.visit_query_stmts(qs);
                 self.visit_name(x1);
@@ -454,9 +454,9 @@ pub(crate) trait Visitor {
             Expr::Return(_, _, e) => {
                 self.visit_expr(e);
             }
-            Expr::Continue(_, _) => {}
-            Expr::Break(_, _) => {}
-            Expr::While(_, _, e, b) => {
+            Expr::Continue(_, _, _l) => {}
+            Expr::Break(_, _, _l) => {}
+            Expr::While(_, _, _l, e, b) => {
                 self.visit_expr(e);
                 self.visit_block(b);
             }
@@ -465,8 +465,8 @@ pub(crate) trait Visitor {
                 self.visit_type(t);
                 self.visit_expr(e);
             }
-            Expr::For(_, _, x, e, b) => {
-                self.visit_name(x);
+            Expr::For(_, _, _l, x, e, b) => {
+                self.visit_local(x);
                 self.visit_expr(e);
                 self.visit_block(b);
             }
@@ -516,7 +516,7 @@ pub(crate) trait Visitor {
             Expr::Deref(_, _, e) => {
                 self.visit_expr(e);
             }
-            Expr::Loop(_, _, b) => {
+            Expr::Loop(_, _, _l, b) => {
                 self.visit_block(b);
             }
             Expr::Unit(_, _) => {}
@@ -554,9 +554,8 @@ pub(crate) trait Visitor {
     fn _visit_query_stmt(&mut self, q: &QueryOp) {
         let s = self.visit_span(&q.span());
         match q {
-            QueryOp::From(_, x, t, e) => {
-                self.visit_name(x);
-                self.visit_type(t);
+            QueryOp::From(_, l, e) => {
+                self.visit_local(l);
                 self.visit_expr(e);
             }
             QueryOp::Union(_, e) => {
@@ -565,35 +564,36 @@ pub(crate) trait Visitor {
             QueryOp::Limit(_, e) => {
                 self.visit_expr(e);
             }
-            QueryOp::Var(_, x, t, e) => {
-                self.visit_name(x);
-                self.visit_type(t);
+            QueryOp::Local(_, l, e) => {
+                self.visit_local(l);
                 self.visit_expr(e);
             }
             QueryOp::Where(_, e) => {
                 self.visit_expr(e);
             }
-            QueryOp::Select(_, xes) => {
-                self.visit_expr_fields(xes);
+            QueryOp::Select(_, les) => {
+                les.iter().for_each(|(l, e)| {
+                    self.visit_local(l);
+                    self.visit_expr(e);
+                });
             }
             QueryOp::OverCompute(_, e, aggs) => {
                 self.visit_expr(e);
                 self.visit_aggs(aggs);
             }
-            QueryOp::GroupOverCompute(_, x, e0, e1, aggs) => {
-                self.visit_name(x);
+            QueryOp::GroupOverCompute(_, l, e0, e1, aggs) => {
+                self.visit_local(l);
                 self.visit_expr(e0);
                 self.visit_expr(e1);
                 self.visit_aggs(aggs);
             }
-            QueryOp::JoinOn(_, x, t, e0, e1) => {
-                self.visit_name(x);
-                self.visit_type(t);
+            QueryOp::JoinOn(_, l, e0, e1) => {
+                self.visit_local(l);
                 self.visit_expr(e0);
                 self.visit_expr(e1);
             }
-            QueryOp::JoinOverOn(_, x, e0, e1, e2) => {
-                self.visit_name(x);
+            QueryOp::JoinOverOn(_, l, e0, e1, e2) => {
+                self.visit_local(l);
                 self.visit_expr(e0);
                 self.visit_expr(e1);
                 self.visit_expr(e2);
@@ -617,9 +617,9 @@ pub(crate) trait Visitor {
         self._visit_agg(agg);
     }
     fn _visit_agg(&mut self, agg: &Aggr) {
-        self.visit_name(&agg.x0);
-        self.visit_name(&agg.x1);
-        self.visit_expr(&agg.e1);
+        self.visit_local(&agg.local);
+        self.visit_name(&agg.name);
+        self.visit_expr(&agg.reduce_expr);
     }
 
     #[inline(always)]
@@ -713,7 +713,7 @@ pub(crate) trait Visitor {
             Type::Generic(x) => {
                 self.visit_name(x);
             }
-            Type::Function(ts, t) => {
+            Type::Function(ts, t, _e) => {
                 self.visit_types(ts);
                 self.visit_type(t);
             }
@@ -806,7 +806,7 @@ pub(crate) trait Visitor {
                     self.visit_iter(ppfs, Self::visit_path_pat_field);
                 }
             }
-            Pat::Var(_, _, x) => {
+            Pat::Local(_, _, x, _) => {
                 self.visit_name(x);
             }
             Pat::Tuple(_, _, ts) => {

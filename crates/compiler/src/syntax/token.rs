@@ -33,6 +33,8 @@ pub enum Token {
     Slash,
     Star,
     Underscore,
+    Label,
+    Tilde,
     // Keywords
     And,
     As,
@@ -45,6 +47,7 @@ pub enum Token {
     Enum,
     False,
     For,
+    Loop,
     From,
     Group,
     If,
@@ -187,6 +190,7 @@ impl Token {
             Token::Enum => "enum",
             Token::False => "false",
             Token::For => "for",
+            Token::Loop => "loop",
             Token::From => "from",
             Token::Group => "group",
             Token::If => "if",
@@ -214,6 +218,7 @@ impl Token {
             Token::Union => "union",
             Token::Limit => "limit",
             // Literals
+            Token::Label => "<label>",
             Token::Code => "<code>",
             Token::Name => "<name>",
             Token::Int => "<int>",
@@ -242,13 +247,14 @@ impl std::fmt::Display for Token {
 impl Spanned<Token> {
     pub fn text(self, input: &str) -> &str {
         let span = self.s;
-        let start = span.start().unwrap() as usize;
-        let end = span.end().unwrap() as usize;
+        let start = span.start().expect("Should not be generated") as usize;
+        let end = span.end().expect("Should not be generated") as usize;
         match self.v {
-            Token::Code => &input[(start + 3) as usize..(end - 3) as usize],
-            Token::String => &input[(start + 1) as usize..(end - 1) as usize],
-            Token::Char => &input[(start + 1) as usize..(end - 1) as usize],
-            _ => &input[start as usize..end as usize],
+            Token::Code => &input[start + 3..end - 3],
+            Token::String => &input[start + 1..end - 1],
+            Token::Char => &input[start + 1..end - 1],
+            Token::Label => &input[start + 1..end],
+            _ => &input[start..end],
         }
     }
 }

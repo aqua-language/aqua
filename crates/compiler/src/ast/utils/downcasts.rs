@@ -1,26 +1,26 @@
 use crate::ast::passes::infer::solver::Constraint;
 
-use super::BuiltinDef;
-use super::BuiltinType;
-use super::Expr;
-use super::ExprBody;
-use super::Impl;
-use super::Local;
-use super::Name;
-use super::Pat;
-use super::Path;
-use super::Place;
-use super::Stmt;
-use super::StmtDef;
-use super::StmtEnum;
-use super::StmtImpl;
-use super::StmtLocal;
-use super::StmtStruct;
-use super::StmtTrait;
-use super::StmtType;
-use super::Trait;
-use super::Type;
-use super::TypeBody;
+use crate::ast::BuiltinDef;
+use crate::ast::BuiltinType;
+use crate::ast::Expr;
+use crate::ast::ExprBody;
+use crate::ast::Impl;
+use crate::ast::Local;
+use crate::ast::Name;
+use crate::ast::Pat;
+use crate::ast::Path;
+use crate::ast::Place;
+use crate::ast::Stmt;
+use crate::ast::StmtDef;
+use crate::ast::StmtEnum;
+use crate::ast::StmtImpl;
+use crate::ast::StmtLocal;
+use crate::ast::StmtStruct;
+use crate::ast::StmtTrait;
+use crate::ast::StmtType;
+use crate::ast::Trait;
+use crate::ast::Type;
+use crate::ast::TypeBody;
 
 impl Stmt {
     pub fn as_var(&self) -> Option<&StmtLocal> {
@@ -211,26 +211,20 @@ impl Pat {
 impl Expr {
     pub fn as_name(&self) -> Option<&Name> {
         if let Expr::Path(_, _, p) = self {
-            p.as_name()
+            Some(p.as_name()?)
         } else {
             None
         }
     }
 
-    pub fn as_field(&self) -> Option<(&Name, &Expr)> {
+    pub fn as_field_expr(&self) -> Option<(&Name, &Expr)> {
         match self {
             // x = e
-            Expr::Assign(_, _, e0, e1) => {
-                let x = e0.as_name()?;
-                Some((x, e1))
-            }
+            Expr::Assign(_, _, e0, e1) => Some((e0.as_name()?, e1)),
             // e.x
             Expr::Field(_, _, _, x) => Some((x, self)),
             // x
-            Expr::Path(_, _, p) => {
-                let x = p.as_name()?;
-                Some((x, self))
-            }
+            Expr::Path(_, _, p) => Some((p.as_name()?, self)),
             _ => None,
         }
     }

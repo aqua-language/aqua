@@ -9,7 +9,7 @@ use crate::ast::Local;
 use crate::ast::Name;
 use crate::ast::Place;
 use crate::ast::StmtLocal;
-use crate::diag::Report;
+use crate::report::Report;
 use crate::traversal::mapper::Mapper;
 
 use super::Pass;

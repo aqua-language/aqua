@@ -3,8 +3,8 @@ use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::Type;
 use crate::ast::TypeBody;
-use crate::diag::Diagnostic;
-use crate::diag::Report;
+use crate::report::Diagnostic;
+use crate::report::Report;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 

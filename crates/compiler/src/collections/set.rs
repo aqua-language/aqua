@@ -1,35 +1,46 @@
+use std::ops::Deref;
+
 #[derive(Debug, Clone)]
 pub struct Set<K>(Vec<K>);
 
-impl<K> Default for Set<K> {
+impl<K: PartialEq> Default for Set<K> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K> Set<K> {
+impl<T: PartialEq> Set<T> {
     pub fn new() -> Self {
         Self(Vec::new())
     }
 
-    pub fn insert(&mut self, k: K)
+    pub fn add(&mut self, k: T)
     where
-        K: PartialEq,
+        T: PartialEq,
     {
         if !self.contains(&k) {
             self.0.push(k)
         }
     }
 
-    pub fn contains(&self, k: &K) -> bool
-    where
-        K: PartialEq,
-    {
+    pub fn remove(&mut self, item: T) {
+        if let Some(index) = self.0.iter().position(|x| x == &item) {
+            self.0.remove(index);
+        }
+    }
+
+    pub fn contains(&self, k: &T) -> bool {
         self.0.contains(k)
     }
 
-    pub fn iter(&self) -> std::slice::Iter<K> {
+    pub fn iter(&self) -> std::slice::Iter<T> {
         self.0.iter()
+    }
+
+    pub fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        for item in iter {
+            self.add(item);
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -40,8 +51,25 @@ impl<K> Set<K> {
         self.0.len()
     }
 
-    pub fn take(&mut self) -> Set<K> {
+    pub fn take(&mut self) -> Set<T> {
         std::mem::take(self)
+    }
+
+    pub fn intersection(&self, other: &Self) -> Self
+    where
+        T: Clone,
+    {
+        let data = self
+            .0
+            .iter()
+            .filter(|x| other.contains(x))
+            .cloned()
+            .collect();
+        Set(data)
+    }
+
+    pub fn as_slice(&self) -> &[T] {
+        self.0.as_slice()
     }
 }
 
@@ -52,7 +80,7 @@ where
     fn from(v: Vec<K>) -> Self {
         let mut set = Set::new();
         for k in v {
-            set.insert(k);
+            set.add(k);
         }
         set
     }
@@ -65,7 +93,7 @@ where
     fn from_iter<I: IntoIterator<Item = K>>(iter: I) -> Self {
         let mut set = Set::new();
         for k in iter {
-            set.insert(k);
+            set.add(k);
         }
         set
     }
@@ -105,5 +133,13 @@ where
         let mut v = self.0.clone();
         v.sort();
         v.hash(state);
+    }
+}
+
+impl<K> Deref for Set<K> {
+    type Target = [K];
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_slice()
     }
 }

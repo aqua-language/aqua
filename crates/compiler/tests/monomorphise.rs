@@ -11,7 +11,7 @@ use crate::common::dsl::program;
 use crate::common::dsl::stmt_def;
 use crate::common::dsl::stmt_expr;
 use crate::common::dsl::ty;
-use crate::common::dsl::ty_lambda;
+use crate::common::dsl::ty_fun;
 use crate::common::passes::infer;
 use crate::common::passes::monomorphise;
 
@@ -114,7 +114,7 @@ fn test_monomorphise4() {
 
 fn op(x: &'static str, t: Type, a: Expr, b: Expr) -> Expr {
     expr_call(
-        expr_def(x, []).with_type(ty_lambda([t.clone(), t.clone()], t.clone())),
+        expr_def(x, []).with_type(ty_fun([t.clone(), t.clone()], t.clone())),
         [a.with_type(t.clone()), b.with_type(t.clone())],
     )
     .with_type(t.clone())

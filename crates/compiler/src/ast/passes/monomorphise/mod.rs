@@ -6,6 +6,8 @@ use std::rc::Rc;
 use ena::unify::InPlaceUnificationTable;
 
 use crate::analysis::declare;
+use crate::ast::passes::infer::type_var::TypeVarKind;
+use crate::ast::passes::infer::type_var::TypeVarValue;
 use crate::ast::Ast;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
@@ -19,9 +21,7 @@ use crate::ast::StmtStruct;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeVar;
-use crate::diag::Report;
-use crate::ast::passes::infer::type_var::TypeVarKind;
-use crate::ast::passes::infer::type_var::TypeVarValue;
+use crate::report::Report;
 use crate::syntax::span::Span;
 use crate::traversal::mappable::Mappable;
 use crate::traversal::mapper::Mapper;
@@ -93,8 +93,9 @@ impl Context {
         let stmt = stmt.instantiate(ts);
         let params = self.map_locals(&stmt.params);
         let t = stmt.ty.map(self);
+        let e = stmt.effect.clone();
         let b = ExprBody::UserDefined(Rc::new(stmt.body.as_udf().unwrap().map(self)));
-        let stmt = StmtDef::new(stmt.span, x, vec![], params, t, vec![], b);
+        let stmt = StmtDef::new(stmt.span, x, vec![], params, t, e, vec![], b);
         self.stmts.push(Stmt::Def(Rc::new(stmt)));
         x
     }
@@ -149,8 +150,9 @@ impl Context {
         let stmt = stmt_def.instantiate(&def_type_args);
         let ps = self.map_locals(&stmt_def.params).into();
         let t = self.map_type(&stmt_def.ty);
+        let e = stmt_def.effect.clone();
         let b = self.map_stmt_def_body(&stmt_def.body);
-        let stmt = StmtDef::new(stmt.span, def_name1, vec![], ps, t, vec![], b);
+        let stmt = StmtDef::new(stmt.span, def_name1, vec![], ps, t, e, vec![], b);
         self.stmts.push(Stmt::Def(Rc::new(stmt)));
         def_name1
     }
@@ -172,8 +174,9 @@ impl Context {
         let stmt = stmt_def.instantiate(&def_type_args);
         let ps = self.map_locals(&stmt_def.params).into();
         let t = self.map_type(&stmt_def.ty);
+        let e = stmt_def.effect.clone();
         let b = self.map_stmt_def_body(&stmt_def.body);
-        let stmt = StmtDef::new(stmt.span, def_name1, vec![], ps, t, vec![], b);
+        let stmt = StmtDef::new(stmt.span, def_name1, vec![], ps, t, e, vec![], b);
         self.stmts.push(Stmt::Def(Rc::new(stmt)));
         def_name1
     }
@@ -289,11 +292,14 @@ impl Context {
                 .iter()
                 .zip(ts1.iter())
                 .try_for_each(|(t0, t1)| self.try_unify(t0, t1)),
-            (Type::Function(ts0, t0), Type::Function(ts1, t1)) if ts0.len() == ts1.len() => ts0
-                .iter()
-                .chain([t0.as_ref()])
-                .zip(ts1.iter().chain([t1.as_ref()]))
-                .try_for_each(|(t0, t1)| self.try_unify(t0, t1)),
+            (Type::Function(ts0, t0, _e0), Type::Function(ts1, t1, _e1))
+                if ts0.len() == ts1.len() =>
+            {
+                ts0.iter()
+                    .chain([t0.as_ref()])
+                    .zip(ts1.iter().chain([t1.as_ref()]))
+                    .try_for_each(|(t0, t1)| self.try_unify(t0, t1))
+            }
             (Type::Record(xts0), Type::Record(xts1)) if xts0.len() == xts1.len() => {
                 let xts0 = xts0.sort_keys();
                 let xts1 = xts1.sort_keys();

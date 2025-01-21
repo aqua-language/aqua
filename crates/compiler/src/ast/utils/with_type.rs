@@ -1,6 +1,6 @@
-use super::Expr;
-use super::Pat;
-use super::Type;
+use crate::ast::Expr;
+use crate::ast::Pat;
+use crate::ast::Type;
 
 impl Expr {
     pub fn with_type(self, t: Type) -> Expr {
@@ -13,9 +13,9 @@ impl Expr {
             Expr::Def(s, _, x, ts) => Expr::Def(s, t, x, ts),
             Expr::Call(s, _, e, es) => Expr::Call(s, t, e, es),
             Expr::Block(s, _, b) => Expr::Block(s, t, b),
-            Expr::Query(s, _, x0, t0, e, qs) => Expr::Query(s, t, x0, t0, e, qs),
-            Expr::QueryInto(s, _, x0, t0, e, qs, x1, ts, es) => {
-                Expr::QueryInto(s, t, x0, t0, e, qs, x1, ts, es)
+            Expr::Query(s, _, l, e, qs) => Expr::Query(s, t, l, e, qs),
+            Expr::QueryInto(s, _, l, e, qs, x1, ts, es) => {
+                Expr::QueryInto(s, t, l, e, qs, x1, ts, es)
             }
             Expr::Struct(s, _, x, ts, xes) => Expr::Struct(s, t, x, ts, xes),
             Expr::Enum(s, _, x0, ts, x1, e) => Expr::Enum(s, t, x0, ts, x1, e),
@@ -26,18 +26,18 @@ impl Expr {
             Expr::Array(s, _, es) => Expr::Array(s, t, es),
             Expr::Assign(s, _, e0, e1) => Expr::Assign(s, t, e0, e1),
             Expr::Return(s, _, e) => Expr::Return(s, t, e),
-            Expr::Continue(s, _) => Expr::Continue(s, t),
-            Expr::Break(s, _) => Expr::Break(s, t),
+            Expr::Continue(s, _, l) => Expr::Continue(s, t, l),
+            Expr::Break(s, _, l) => Expr::Break(s, t, l),
             Expr::Lambda(s, _, ps, t1, e) => Expr::Lambda(s, t, ps, t1, e),
             Expr::Match(s, _, e, pes) => Expr::Match(s, t, e, pes),
             Expr::Err(s, _) => Expr::Err(s, t),
-            Expr::While(s, _, e, b) => Expr::While(s, t, e, b),
+            Expr::While(s, _, l, e, b) => Expr::While(s, t, l, e, b),
             Expr::Record(s, _, xes) => Expr::Record(s, t, xes),
             Expr::Path(s, _, p) => Expr::Path(s, t, p),
             Expr::Closure(s, _, uid, xts0, xts1, t1, e) => {
                 Expr::Closure(s, t, uid, xts0, xts1, t1, e)
             }
-            Expr::For(s, _, x, e, b) => Expr::For(s, t, x, e, b),
+            Expr::For(s, _, l, x, e, b) => Expr::For(s, t, l, x, e, b),
             Expr::Char(s, _, v) => Expr::Char(s, t, v),
             Expr::InfixBinaryOp(s, _, op, e0, e1) => Expr::InfixBinaryOp(s, t, op, e0, e1),
             Expr::PrefixUnaryOp(s, _, op, e) => Expr::PrefixUnaryOp(s, t, op, e),
@@ -52,7 +52,7 @@ impl Expr {
             Expr::Ref(s, _, e, m) => Expr::Ref(s, t, e, m),
             Expr::Place(s, _, p) => Expr::Place(s, t, p),
             Expr::Deref(s, _, e) => Expr::Deref(s, t, e),
-            Expr::Loop(s, _, b) => Expr::Loop(s, t, b),
+            Expr::Loop(s, _, l, b) => Expr::Loop(s, t, l, b),
             Expr::Unit(s, _) => Expr::Unit(s, t),
         }
     }
@@ -62,7 +62,7 @@ impl Pat {
     pub fn with_type(self, t: Type) -> Pat {
         match self {
             Pat::Path(s, _, p, a) => Pat::Path(s, t, p, a),
-            Pat::Var(s, _, x) => Pat::Var(s, t, x),
+            Pat::Local(s, _, x, m) => Pat::Local(s, t, x, m),
             Pat::Tuple(s, _, ps) => Pat::Tuple(s, t, ps),
             Pat::Struct(s, _, x, ts, xps) => Pat::Struct(s, t, x, ts, xps),
             Pat::Enum(s, _, x0, ts, x1, p) => Pat::Enum(s, t, x0, ts, x1, p),

@@ -1,21 +1,20 @@
 use std::rc::Rc;
 
+use crate::ast::Expr;
+use crate::ast::ExprBody;
+use crate::ast::Name;
+use crate::ast::Stmt;
+use crate::ast::StmtDef;
+use crate::ast::StmtEnum;
+use crate::ast::StmtImpl;
+use crate::ast::StmtLocal;
+use crate::ast::StmtStruct;
+use crate::ast::StmtTrait;
+use crate::ast::StmtType;
+use crate::ast::Type;
+use crate::ast::TypeBody;
 use crate::syntax::span::Span;
 use crate::syntax::symbol::Symbol;
-
-use super::Expr;
-use super::ExprBody;
-use super::Name;
-use super::Stmt;
-use super::StmtDef;
-use super::StmtEnum;
-use super::StmtImpl;
-use super::StmtStruct;
-use super::StmtTrait;
-use super::StmtType;
-use super::StmtLocal;
-use super::Type;
-use super::TypeBody;
 
 impl From<StmtLocal> for Stmt {
     fn from(v: StmtLocal) -> Stmt {
@@ -79,7 +78,16 @@ impl From<Type> for TypeBody {
 impl From<&str> for Name {
     fn from(s: &str) -> Name {
         Name {
-            span: Span::default(),
+            span: Span::Generated,
+            data: Symbol::from(s),
+        }
+    }
+}
+
+impl From<usize> for Name {
+    fn from(s: usize) -> Name {
+        Name {
+            span: Span::Generated,
             data: Symbol::from(s),
         }
     }

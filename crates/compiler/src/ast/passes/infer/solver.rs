@@ -4,7 +4,7 @@ use crate::ast::PlaceElem;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::collections::set::Set;
-use crate::diag::Diagnostic;
+use crate::report::Diagnostic;
 use crate::syntax::span::Span;
 
 use super::Context;
@@ -235,10 +235,7 @@ impl Context {
         match t_struct {
             Type::Struct(x0, ts) => {
                 let stmt = self.decls.structs.get(&x0).unwrap().instantiate(ts);
-                let t2 = stmt
-                    .fields
-                    .iter()
-                    .find_map(|(x1, t)| (x1 == x).then_some(t));
+                let t2 = stmt.fields.iter().find_map(|(y, t)| (y == x).then_some(t));
                 if let Some(t2) = t2 {
                     if self.rollback {
                         self.try_unify(t_result, t2).ok();
@@ -251,7 +248,7 @@ impl Context {
                 }
             }
             Type::Record(xts) => {
-                let t2 = xts.iter().find_map(|(x1, t)| (x1 == x).then_some(t));
+                let t2 = xts.iter().find_map(|(y, t)| (y == x).then_some(t));
                 if let Some(t2) = t2 {
                     if self.rollback {
                         self.try_unify(t_result, t2).ok();

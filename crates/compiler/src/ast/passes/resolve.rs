@@ -23,8 +23,8 @@ use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
 use crate::collections::map::Map;
-use crate::diag::Diagnostic;
-use crate::diag::Report;
+use crate::report::Diagnostic;
+use crate::report::Report;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 
@@ -522,14 +522,14 @@ impl Mapper for Context {
                             self.unexpected_assoc("Struct", "item", &seg0.x, &seg.x);
                             return Pat::Err(*s, t.clone());
                         }
-                        Pat::Var(*s, t, seg0.x)
+                        Pat::Local(*s, t, seg0.x, false)
                     }
                 }
             }
-            Pat::Var(_, _, x) => {
+            Pat::Local(_, _, x, m) => {
                 let t = self.map_type(p.ty());
                 let s = p.span();
-                Pat::Var(s, t, *x)
+                Pat::Local(s, t, *x, *m)
             }
             _ => self._map_pattern(p),
         }

@@ -12,7 +12,7 @@ use crate::ast::PlaceElem;
 use crate::ast::Stmt;
 use crate::ast::StmtLocal;
 use crate::ast::Type;
-use crate::diag::Report;
+use crate::report::Report;
 use crate::syntax::span::Span;
 use crate::traversal::mapper::Mapper;
 
@@ -31,7 +31,7 @@ impl Pass for Context {
         self.map_program(program)
     }
 
-    fn report(&mut self) -> &mut crate::diag::Report {
+    fn report(&mut self) -> &mut Report {
         &mut self.report
     }
 }
@@ -61,7 +61,7 @@ impl Context {
         self.stack
             .last_mut()
             .unwrap()
-            .push(Stmt::Local(Rc::new(StmtLocal::new(s, l.clone(), e))));
+            .push(Stmt::Local(Rc::new(StmtLocal::new(s, l.clone(), Some(e)))));
         l
     }
 }

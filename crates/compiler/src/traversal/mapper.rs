@@ -9,6 +9,7 @@ use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Impl;
 use crate::ast::Local;
+use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
@@ -99,7 +100,7 @@ pub(crate) trait Mapper {
     fn _map_stmt_local(&mut self, s: &StmtLocal) -> StmtLocal {
         let span = self.map_span(&s.span);
         let local = self.map_local(&s.local);
-        let expr = self.map_expr(&s.expr);
+        let expr = s.expr.as_ref().map(|e| self.map_expr(e));
         StmtLocal::new(span, local, expr)
     }
 
@@ -114,10 +115,11 @@ pub(crate) trait Mapper {
         let generics = self.map_generics(&s.generics);
         let params = self.map_locals(&s.params).into();
         let ty = self.map_type(&s.ty);
+        let effect = s.effect.clone();
         let where_clause = self.map_impls(&s.where_clause);
         let body = self.map_stmt_def_body(&s.body);
         self.exit_scope();
-        StmtDef::new(span, name, generics, params, ty, where_clause, body)
+        StmtDef::new(span, name, generics, params, ty, effect, where_clause, body)
     }
 
     #[inline(always)]
@@ -259,9 +261,10 @@ pub(crate) trait Mapper {
         let generics = self.map_generics(&d.generics);
         let params = self.map_iter(&d.params, Self::map_trait_def_param).into();
         let ty = self.map_type(&d.ty);
+        let effect = d.effect.clone();
         let where_clause = self.map_impls(&d.where_clause);
         self.exit_scope();
-        StmtTraitDef::new(span, name, generics, params, ty, where_clause)
+        StmtTraitDef::new(span, name, generics, params, ty, effect, where_clause)
     }
 
     fn map_trait_def_param(&mut self, l: &Local) -> Local {
@@ -328,12 +331,12 @@ pub(crate) trait Mapper {
     }
 
     #[inline(always)]
-    fn map_type_fields(&mut self, fs: &[(Name, Type)]) -> Vec<(Name, Type)> {
+    fn map_type_fields(&mut self, fs: &[(Name, Type)]) -> Map<Name, Type> {
         self._map_type_fields(fs)
     }
     #[inline(always)]
-    fn _map_type_fields(&mut self, fs: &[(Name, Type)]) -> Vec<(Name, Type)> {
-        self.map_iter(fs, Self::map_type_field)
+    fn _map_type_fields(&mut self, fs: &[(Name, Type)]) -> Map<Name, Type> {
+        self.map_iter(fs, Self::map_type_field).into()
     }
 
     fn map_type_field(&mut self, f: &(Name, Type)) -> (Name, Type) {
@@ -360,12 +363,12 @@ pub(crate) trait Mapper {
         StmtEnum::new(span, name, generics, variants)
     }
 
-    fn map_type_variants(&mut self, vs: &[(Name, Type)]) -> Vec<(Name, Type)> {
+    fn map_type_variants(&mut self, vs: &[(Name, Type)]) -> Map<Name, Type> {
         self._map_type_variants(vs)
     }
     #[inline(always)]
-    fn _map_type_variants(&mut self, vs: &[(Name, Type)]) -> Vec<(Name, Type)> {
-        self.map_iter(vs, Self::map_type_variant)
+    fn _map_type_variants(&mut self, vs: &[(Name, Type)]) -> Map<Name, Type> {
+        self.map_iter(vs, Self::map_type_variant).into()
     }
 
     fn map_type_variant(&mut self, v: &(Name, Type)) -> (Name, Type) {
@@ -424,7 +427,7 @@ pub(crate) trait Mapper {
             Expr::Struct(_, _, x, ts, xes) => {
                 let x = self.map_name(x);
                 let ts = self.map_types(ts);
-                let xes = self.map_expr_fields(xes).into();
+                let xes = self.map_expr_fields(xes);
                 Expr::Struct(s, t, x, ts, xes)
             }
             Expr::Tuple(_, _, es) => {
@@ -495,12 +498,12 @@ pub(crate) trait Mapper {
                 let e = self.map_expr(e);
                 Expr::Return(s, t, Rc::new(e))
             }
-            Expr::Continue(_, _) => Expr::Continue(s, t),
-            Expr::Break(_, _) => Expr::Break(s, t),
-            Expr::While(_, _, e0, e1) => {
+            Expr::Continue(_, _, l) => Expr::Continue(s, t, *l),
+            Expr::Break(_, _, l) => Expr::Break(s, t, *l),
+            Expr::While(_, _, l, e0, e1) => {
                 let e = self.map_expr(e0);
                 let b = self.map_block(e1);
-                Expr::While(s, t, Rc::new(e), Rc::new(b))
+                Expr::While(s, t, *l, Rc::new(e), Rc::new(b))
             }
             Expr::Lambda(_, _, ps, t1, e) => {
                 self.enter_scope();
@@ -510,31 +513,29 @@ pub(crate) trait Mapper {
                 self.exit_scope();
                 Expr::Lambda(s, t, ps, t1, Rc::new(e))
             }
-            Expr::For(_, _, x, e, b) => {
+            Expr::For(_, _, l, x, e, b) => {
                 self.enter_scope();
-                let x = self.map_name(x);
+                let x = self.map_local(x);
                 let e = self.map_expr(e);
                 let b = self.map_block(b);
                 self.exit_scope();
-                Expr::For(s, t, x, Rc::new(e), Rc::new(b))
+                Expr::For(s, t, *l, x, Rc::new(e), Rc::new(b))
             }
             Expr::Err(_, _) => Expr::Err(s, t),
-            Expr::Query(_, _, x0, t0, e, qs) => {
-                let x0 = self.map_name(x0);
-                let t0 = self.map_type(t0);
+            Expr::Query(_, _, l, e, qs) => {
+                let l = self.map_local(l);
                 let e = self.map_expr(e);
                 let qs = self.map_query_stmts(qs);
-                Expr::Query(s, t, x0, t0, Rc::new(e), qs)
+                Expr::Query(s, t, l, Rc::new(e), qs)
             }
-            Expr::QueryInto(_, _, x0, t0, e, qs, x1, ts, es) => {
-                let x0 = self.map_name(x0);
-                let t0 = self.map_type(t0);
+            Expr::QueryInto(_, _, l, e, qs, x1, ts, es) => {
+                let l = self.map_local(l);
                 let e = self.map_expr(e);
                 let qs = self.map_query_stmts(qs);
                 let x1 = self.map_name(x1);
                 let ts = self.map_types(ts);
                 let es = self.map_exprs(es);
-                Expr::QueryInto(s, t, x0, t0, Rc::new(e), qs, x1, ts, es)
+                Expr::QueryInto(s, t, l, Rc::new(e), qs, x1, ts, es)
             }
             Expr::InfixBinaryOp(_, _, op, e0, e1) => {
                 let e0 = self.map_expr(e0);
@@ -592,9 +593,9 @@ pub(crate) trait Mapper {
                 let e = self.map_expr(e);
                 Expr::Deref(s, t, Rc::new(e))
             }
-            Expr::Loop(_, _, b) => {
+            Expr::Loop(_, _, l, b) => {
                 let b = self.map_block(b);
-                Expr::Loop(s, t, Rc::new(b))
+                Expr::Loop(s, t, *l, Rc::new(b))
             }
             Expr::Unit(_, _) => Expr::Unit(s, t),
         }
@@ -627,11 +628,10 @@ pub(crate) trait Mapper {
     fn _map_query_stmt(&mut self, q: &QueryOp) -> QueryOp {
         let s = self.map_span(&q.span());
         match q {
-            QueryOp::From(_, x, t, e) => {
-                let x = self.map_name(x);
-                let t = self.map_type(t);
+            QueryOp::From(_, l, e) => {
+                let l = self.map_local(l);
                 let e = self.map_expr(e);
-                QueryOp::From(s, x, t, Rc::new(e))
+                QueryOp::From(s, l, Rc::new(e))
             }
             QueryOp::Union(_, e) => {
                 let e = self.map_expr(e);
@@ -641,43 +641,44 @@ pub(crate) trait Mapper {
                 let e = self.map_expr(e);
                 QueryOp::Limit(s, Rc::new(e))
             }
-            QueryOp::Var(_, x, t, e) => {
-                let x = self.map_name(x);
-                let t = self.map_type(t);
+            QueryOp::Local(_, l, e) => {
+                let l = self.map_local(l);
                 let e = self.map_expr(e);
-                QueryOp::Var(s, x, t, Rc::new(e))
+                QueryOp::Local(s, l, Rc::new(e))
             }
             QueryOp::Where(_, e) => {
                 let e = self.map_expr(e);
                 QueryOp::Where(s, Rc::new(e))
             }
             QueryOp::Select(_, xes) => {
-                let xes = self.map_expr_fields(xes).into();
-                QueryOp::Select(s, xes)
+                let les = xes
+                    .iter()
+                    .map(|(l, e)| (self.map_local(l), self.map_expr(e)))
+                    .collect();
+                QueryOp::Select(s, les)
             }
             QueryOp::OverCompute(_, e, aggs) => {
                 let e = self.map_expr(e);
                 QueryOp::OverCompute(s, Rc::new(e), aggs.clone())
             }
-            QueryOp::GroupOverCompute(_, x, e0, e1, aggs) => {
-                let x = self.map_name(x);
+            QueryOp::GroupOverCompute(_, l, e0, e1, aggs) => {
+                let l = self.map_local(l);
                 let e0 = self.map_expr(e0);
                 let e1 = self.map_expr(e1);
-                QueryOp::GroupOverCompute(s, x, Rc::new(e0), Rc::new(e1), aggs.clone())
+                QueryOp::GroupOverCompute(s, l, Rc::new(e0), Rc::new(e1), aggs.clone())
             }
-            QueryOp::JoinOn(_, x, t, e0, e1) => {
-                let x = self.map_name(x);
-                let t = self.map_type(t);
+            QueryOp::JoinOn(_, l, e0, e1) => {
+                let l = self.map_local(l);
                 let e0 = self.map_expr(e0);
                 let e1 = self.map_expr(e1);
-                QueryOp::JoinOn(s, x, t, Rc::new(e0), Rc::new(e1))
+                QueryOp::JoinOn(s, l, Rc::new(e0), Rc::new(e1))
             }
-            QueryOp::JoinOverOn(_, x, e0, e1, e2) => {
-                let x = self.map_name(x);
+            QueryOp::JoinOverOn(_, l, e0, e1, e2) => {
+                let l = self.map_local(l);
                 let e0 = self.map_expr(e0);
                 let e1 = self.map_expr(e1);
                 let e2 = self.map_expr(e2);
-                QueryOp::JoinOverOn(s, x, Rc::new(e0), Rc::new(e1), Rc::new(e2))
+                QueryOp::JoinOverOn(s, l, Rc::new(e0), Rc::new(e1), Rc::new(e2))
             }
             QueryOp::Err(_) => QueryOp::Err(s),
             QueryOp::Drop(_, x) => {
@@ -697,12 +698,12 @@ pub(crate) trait Mapper {
     }
 
     #[inline(always)]
-    fn map_expr_fields(&mut self, xes: &[(Name, Expr)]) -> Vec<(Name, Expr)> {
+    fn map_expr_fields(&mut self, xes: &[(Name, Expr)]) -> Map<Name, Expr> {
         self._map_expr_fields(xes)
     }
     #[inline(always)]
-    fn _map_expr_fields(&mut self, xes: &[(Name, Expr)]) -> Vec<(Name, Expr)> {
-        self.map_iter(xes, Self::map_expr_field)
+    fn _map_expr_fields(&mut self, xes: &[(Name, Expr)]) -> Map<Name, Expr> {
+        self.map_iter(xes, Self::map_expr_field).into()
     }
 
     #[inline(always)]
@@ -824,10 +825,10 @@ pub(crate) trait Mapper {
                 let x = self.map_name(x);
                 Type::Generic(x)
             }
-            Type::Function(ts, t) => {
+            Type::Function(ts, t, es) => {
                 let ts = self.map_types(ts);
                 let t = self.map_type(t);
-                Type::Function(ts, Rc::new(t))
+                Type::Function(ts, Rc::new(t), es.clone())
             }
             Type::Tuple(ts) => {
                 let ts = self.map_types(ts);
@@ -893,9 +894,9 @@ pub(crate) trait Mapper {
                     .map(|ppfs| self.map_iter(ppfs, Self::map_path_pat_field));
                 Pat::Path(s, t, path, ppfs)
             }
-            Pat::Var(_, _, x) => {
+            Pat::Local(_, _, x, m) => {
                 let x = self.map_name(x);
-                Pat::Var(s, t, x)
+                Pat::Local(s, t, x, *m)
             }
             Pat::Tuple(_, _, ps) => {
                 let ps = self.map_patterns(ps);

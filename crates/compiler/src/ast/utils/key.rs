@@ -1,15 +1,15 @@
 use crate::collections::keyvec::Key;
 
-use super::Local;
-use super::Name;
-use super::StmtDef;
-use super::StmtEnum;
-use super::StmtStruct;
-use super::StmtTrait;
-use super::StmtTraitDef;
-use super::StmtTraitType;
-use super::StmtType;
-use super::StmtLocal;
+use crate::ast::Local;
+use crate::ast::Name;
+use crate::ast::StmtDef;
+use crate::ast::StmtEnum;
+use crate::ast::StmtStruct;
+use crate::ast::StmtTrait;
+use crate::ast::StmtTraitDef;
+use crate::ast::StmtTraitType;
+use crate::ast::StmtType;
+use crate::ast::StmtLocal;
 
 impl Key for StmtDef {
     type K = Name;

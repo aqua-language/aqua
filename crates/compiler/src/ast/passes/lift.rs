@@ -17,7 +17,7 @@ use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtType;
 use crate::ast::Type;
-use crate::diag::Report;
+use crate::report::Report;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 
@@ -120,9 +120,19 @@ impl Mapper for Context {
         let generics = self.map_generics(&s.generics);
         let params = self.map_locals(&s.params).into();
         let ty = self.map_type(&s.ty);
+        let effect = s.effect.clone();
         let where_clause = self.map_impls(&s.where_clause);
         let body = self.map_stmt_def_body(&s.body);
-        StmtDef::new(s.span, name, generics, params, ty, where_clause, body)
+        StmtDef::new(
+            s.span,
+            name,
+            generics,
+            params,
+            ty,
+            effect,
+            where_clause,
+            body,
+        )
     }
 
     fn map_stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {

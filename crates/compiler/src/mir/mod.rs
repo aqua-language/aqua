@@ -5,6 +5,9 @@ use crate::ast::Type;
 use crate::collections::set::Set;
 use crate::syntax::symbol::Symbol;
 
+pub mod passes;
+pub mod utils;
+
 pub type BlockId = usize;
 
 #[derive(Debug, Clone)]
@@ -14,6 +17,7 @@ pub struct Mir {
     pub functions: Vec<Function>,
 }
 
+/// A MIR function. The control-flow in a MIR function is represented by a control-flow graph.
 #[derive(Debug, Clone)]
 pub struct Function {
     pub name: Name,
@@ -22,9 +26,18 @@ pub struct Function {
     pub ty: Type,
     pub blocks: Vec<BasicBlock>,
     // Analysis data
+    /// Tree of dominators.
+    /// * A block `a` dominates a block `b` if all paths to `b` must pass through `a.`
     pub domtree: Vec<Vec<BlockId>>,
+    /// Adjacency list of successors.
+    /// * A block `a` is a successor of `b` if `b` has a terminator that is a goto to `a`.
     pub successors: Vec<Vec<BlockId>>,
+    /// Adjacency list of successors.
+    /// * A block `a` is a predecessor of `b` if `a` has a terminator that is a goto to `b`.
     pub predecessors: Vec<Vec<BlockId>>,
+    /// Post-order numbering.
+    /// * The post-order numbering of a block is the order in which the blocks are visited in a
+    ///  depth-first search of the control-flow graph.
     pub postorder: Vec<BlockId>,
     pub preorder: Vec<BlockId>,
     pub reverse_postorder_number: Vec<BlockId>,
@@ -45,16 +58,6 @@ pub struct Stmt {
     pub op: Operation,
     pub live_in: Set<Place>,
     pub live_out: Set<Place>,
-}
-
-impl Stmt {
-    pub fn new(op: Operation) -> Stmt {
-        Stmt {
-            op,
-            live_in: Set::new(),
-            live_out: Set::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

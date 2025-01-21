@@ -362,6 +362,14 @@ fn test_lexer_unused0() {
 }
 
 #[test]
+fn test_lexer_label0() {
+    let mut l = TestLexer::new("'a");
+    assert_eq!(l.next(), Some((0..2, Token::Label, "a")));
+    assert_eq!(l.next(), Some((2..2, Token::Eof, "")));
+    assert_eq!(l.next(), None);
+}
+
+#[test]
 fn test_lexer_eof0() {
     let mut l = TestLexer::new("");
     assert_eq!(l.next(), Some((0..0, Token::Eof, "")));

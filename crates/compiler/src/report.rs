@@ -1,4 +1,5 @@
 use crate::syntax::source::Cache;
+use crate::syntax::source::SourceId;
 use crate::syntax::span::Span;
 use std::io::Write;
 
@@ -28,6 +29,26 @@ impl Message {
         Self { span, text }
     }
 }
+
+impl ariadne::Span for Span {
+    fn start(&self) -> usize {
+        self.start().unwrap() as usize
+    }
+
+    fn end(&self) -> usize {
+        self.end().unwrap() as usize
+    }
+
+    type SourceId = SourceId;
+
+    fn source(&self) -> &Self::SourceId {
+        match self {
+            Span::Source(id, _, _) => id,
+            Span::Generated => unreachable!("Should not call `source` on a generated span"),
+        }
+    }
+}
+
 
 impl Diagnostic {
     fn to_ariadne(self, color: bool) -> ariadne::Report<'static, Span> {

@@ -78,7 +78,7 @@ impl Mangler {
             Type::Assoc(_, _, _) => unreachable!(),
             Type::Var(_) => unreachable!(),
             Type::Generic(_) => unreachable!(),
-            Type::Function(ts, t) => {
+            Type::Function(ts, t, _e) => {
                 self.write("Fun");
                 ts.into_iter().for_each(|t| self.mangle_type(t));
                 self.mangle_type(t);

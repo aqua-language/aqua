@@ -10,36 +10,4 @@ impl<T> Spanned<T> {
     pub fn new(span: Span, data: T) -> Spanned<T> {
         Spanned { s: span, v: data }
     }
-
-    pub fn map<U, F: FnOnce(T) -> U>(self, f: F) -> Spanned<U> {
-        Spanned {
-            s: self.s,
-            v: f(self.v),
-        }
-    }
-
-    pub fn shift(self, offset: u32) -> Spanned<T> {
-        Spanned {
-            s: self.s.shift(offset),
-            v: self.v,
-        }
-    }
-}
-
-impl<T> Spanned<Option<Vec<T>>> {
-    pub fn flatten(self) -> Spanned<Vec<T>> {
-        self.map(|v| v.unwrap_or_default())
-    }
-}
-
-impl<T> Spanned<Option<T>> {
-    pub fn transpose(self) -> Option<Spanned<T>> {
-        match self.v {
-            Some(value) => Some(Spanned {
-                s: self.s,
-                v: value,
-            }),
-            None => None,
-        }
-    }
 }

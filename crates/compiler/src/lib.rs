@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
+use ast::passes::Pass;
 use ast::Ast;
 use config::CompilerConfig;
-use diag::Report;
-use ast::passes::Pass;
+use report::Report;
 use syntax::lexer::Lexer;
 use syntax::parser::Parser;
 use syntax::span::Span;
@@ -11,18 +11,17 @@ use syntax::span::Span;
 pub mod analysis;
 pub mod ast;
 pub mod backend;
-pub mod diag;
+pub mod report;
 // pub mod ffi;
 pub mod builtins;
 pub mod collections;
 pub mod interpret;
+pub mod mir;
 pub mod print;
 pub mod syntax;
+pub mod transforms;
 pub mod traversal;
 
-pub mod ast_to_mir;
-pub mod mir;
-pub mod mir_to_ast;
 #[cfg(feature = "optimiser")]
 pub mod opt;
 

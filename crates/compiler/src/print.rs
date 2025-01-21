@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::ast::Index;
 use crate::ast::Name;
 use crate::syntax::symbol::Symbol;
@@ -16,7 +18,7 @@ pub trait Print<'b> {
         Ok(())
     }
 
-    fn kw(&mut self, s: &str) -> std::fmt::Result {
+    fn kw(&mut self, s: impl Display) -> std::fmt::Result {
         write!(self.fmt(), "{}", s)
     }
 
@@ -24,7 +26,7 @@ pub trait Print<'b> {
         write!(self.fmt(), " ")
     }
 
-    fn punct(&mut self, s: &str) -> std::fmt::Result {
+    fn punct(&mut self, s: impl Display) -> std::fmt::Result {
         write!(self.fmt(), "{}", s)
     }
 

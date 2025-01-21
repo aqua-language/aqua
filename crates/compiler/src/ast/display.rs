@@ -33,6 +33,8 @@ use crate::ast::TypeBody;
 use crate::ast::TypeVar;
 use crate::print::Print;
 
+use super::Effect;
+
 struct Printer<'a, 'b> {
     f: &'a mut std::fmt::Formatter<'b>,
     indent_level: usize,
@@ -68,10 +70,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn param(&mut self, l: &Local) -> std::fmt::Result {
-        if l.mutable {
-            self.kw("mut")?;
-            self.space()?;
-        }
+        self.optional_mutable(&l.mutable)?;
         self.name(&l.name)?;
         self.punct(":")?;
         self.space()?;
@@ -121,7 +120,9 @@ impl<'a, 'b> Printer<'a, 'b> {
         self.space()?;
         self.punct("=")?;
         self.space()?;
-        self.expr(&s.expr)?;
+        if let Some(e) = &s.expr {
+            self.expr(e)?;
+        }
         self.punct(";")
     }
 
@@ -204,7 +205,7 @@ impl<'a, 'b> Printer<'a, 'b> {
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
-        self.fields(s.fields.as_ref(), Self::annotate)?;
+        self.fields(s.fields.as_ref(), Self::field)?;
         self.punct(";")
     }
 
@@ -226,8 +227,8 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn variant(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
-        self.name(x)?;
-        self.paren(|this| this.ty(t))
+        self.name(&x)?;
+        self.paren(|this| this.ty(&t))
     }
 
     fn stmt_type(&mut self, s: &StmtType) -> std::fmt::Result {
@@ -337,10 +338,10 @@ impl<'a, 'b> Printer<'a, 'b> {
             Expr::Tuple(_, _, es) => {
                 self.paren(|this| this.comma_sep_trailing(es, Self::expr))?;
             }
-            Expr::Struct(_, _, name, ts, xes) => {
+            Expr::Struct(_, _, name, ts, fes) => {
                 self.name(name)?;
                 self.type_args(ts)?;
-                self.fields(xes.as_ref(), Self::expr_field)?;
+                self.fields(fes.as_ref(), Self::field_expr)?;
             }
             Expr::Enum(_, _, name, ts, x, e) => {
                 self.name(name)?;
@@ -363,12 +364,10 @@ impl<'a, 'b> Printer<'a, 'b> {
             Expr::Block(_, _, b) => {
                 self.block(b)?;
             }
-            Expr::Query(_, _, x, t, e, qs) => {
+            Expr::Query(_, _, l, e, qs) => {
                 self.kw("from")?;
                 self.space()?;
-                self.name(x)?;
-                self.punct(":")?;
-                self.ty(t)?;
+                self.local(l)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
@@ -378,12 +377,10 @@ impl<'a, 'b> Printer<'a, 'b> {
                     self.newline_sep(qs, Self::query_clause)?;
                 }
             }
-            Expr::QueryInto(_, _, x0, t0, e, qs, x1, ts, es) => {
+            Expr::QueryInto(_, _, l, e, qs, x1, ts, es) => {
                 self.kw("from")?;
                 self.space()?;
-                self.name(x0)?;
-                self.punct(":")?;
-                self.ty(t0)?;
+                self.local(l)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
@@ -428,11 +425,13 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.expr(e)?;
             }
-            Expr::Continue(_, _) => {
+            Expr::Continue(_, _, l) => {
                 self.kw("continue")?;
+                self.optional_loop_jump_label(l)?;
             }
-            Expr::Break(_, _) => {
+            Expr::Break(_, _, l) => {
                 self.kw("break")?;
+                self.optional_loop_jump_label(l)?;
             }
             Expr::Lambda(_, _, ls, _, e) => {
                 if ls.len() == 1 {
@@ -456,21 +455,23 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.comma_scope(arms, Self::arm)?;
             }
-            Expr::While(_, _, e, b) => {
+            Expr::While(_, _, l, e, b) => {
                 self.kw("while")?;
                 self.space()?;
+                self.optional_loop_header_label(l)?;
                 self.expr(e)?;
                 self.space()?;
                 self.block(b)?;
             }
             Expr::Record(_, _, xts) => {
                 self.kw("record")?;
-                self.fields(xts.as_ref(), Self::expr_field)?;
+                self.fields(xts.as_ref(), Self::field_expr)?;
             }
-            Expr::For(_, _, x, e, b) => {
+            Expr::For(_, _, l, x, e, b) => {
                 self.kw("for")?;
                 self.space()?;
-                self.name(x)?;
+                self.optional_loop_header_label(l)?;
+                self.local(x)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
@@ -554,10 +555,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.expr(e)?;
             }
             Expr::Ref(_, _, e, m) => {
-                if *m {
-                    self.kw("mut")?;
-                    self.space()?;
-                }
+                self.optional_mutable(m)?;
                 self.expr(e)?;
             }
             Expr::Place(_, _, p) => {
@@ -567,14 +565,45 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.punct("*")?;
                 self.expr(e)?;
             }
-            Expr::Loop(_, _, b) => {
+            Expr::Loop(_, _, l, b) => {
                 self.kw("loop")?;
                 self.space()?;
+                self.optional_loop_header_label(l)?;
                 self.block(b)?;
             }
             Expr::Unit(_, _) => {
                 self.lit("()")?;
             }
+        }
+        Ok(())
+    }
+
+    fn optional_loop_header_label(&mut self, l: &Option<Name>) -> std::fmt::Result {
+        if let Some(l) = l {
+            self.label(l)?;
+            self.punct(":")?;
+            self.space()?;
+        }
+        Ok(())
+    }
+
+    fn optional_loop_jump_label(&mut self, l: &Option<Name>) -> std::fmt::Result {
+        if let Some(l) = l {
+            self.label(l)?;
+        }
+        Ok(())
+    }
+
+    fn label(&mut self, l: &Name) -> std::fmt::Result {
+        self.space()?;
+        self.punct("'")?;
+        self.name(l)
+    }
+
+    fn optional_mutable(&mut self, m: &bool) -> std::fmt::Result {
+        if *m {
+            self.kw("mut")?;
+            self.space()?;
         }
         Ok(())
     }
@@ -597,11 +626,11 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn arm(&mut self, (p, e): &(Pat, Expr)) -> std::fmt::Result {
-        self.pat(&p)?;
+        self.pat(p)?;
         self.space()?;
         self.punct("=>")?;
         self.space()?;
-        self.expr(&e)
+        self.expr(e)
     }
 
     fn expr(&mut self, expr: &Expr) -> std::fmt::Result {
@@ -617,31 +646,41 @@ impl<'a, 'b> Printer<'a, 'b> {
         Ok(())
     }
 
-    fn expr_field(&mut self, (x, e): &(Name, Expr)) -> std::fmt::Result {
+    fn field(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
         self.name(x)?;
-        self.punct(" = ")?;
+        self.type_annotation(t)
+    }
+
+    fn field_expr(&mut self, (x, e): &(Name, Expr)) -> std::fmt::Result {
+        self.name(x)?;
+        self.space()?;
+        self.punct("=")?;
+        self.space()?;
         self.expr(e)
     }
 
-    fn pat_field(&mut self, (p, e): &(Name, Pat)) -> std::fmt::Result {
-        self.name(p)?;
+    fn field_pat(&mut self, (x, e): &(Name, Pat)) -> std::fmt::Result {
+        self.name(x)?;
+        self.space()?;
         self.punct("=")?;
+        self.space()?;
         self.pat(e)
     }
 
-    fn annotate(&mut self, (x, t): &(Name, Type)) -> std::fmt::Result {
-        self.name(x)?;
-        self.punct(":")?;
-        self.ty(t)
+    fn local_expr(&mut self, (x, e): &(Local, Expr)) -> std::fmt::Result {
+        self.param(x)?;
+        self.space()?;
+        self.punct("=")?;
+        self.space()?;
+        self.expr(e)
     }
 
     fn query_clause(&mut self, q: &QueryOp) -> std::fmt::Result {
         match q {
-            QueryOp::From(_, x, t, e) => {
+            QueryOp::From(_, l, e) => {
                 self.kw("from")?;
                 self.space()?;
-                self.name(x)?;
-                self.type_annotation(t)?;
+                self.local(l)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
@@ -662,15 +701,15 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.expr(e)?;
             }
-            QueryOp::Select(_, xes) => {
+            QueryOp::Select(_, les) => {
                 self.kw("select")?;
                 self.space()?;
-                self.comma_scope(xes.as_ref(), Self::expr_field)?;
+                self.comma_scope(les.as_ref(), Self::local_expr)?;
             }
-            QueryOp::GroupOverCompute(_, x, e0, e1, aggrs) => {
+            QueryOp::GroupOverCompute(_, l, e0, e1, aggrs) => {
                 self.kw("group")?;
                 self.space()?;
-                self.name(x)?;
+                self.local(l)?;
                 self.space()?;
                 self.punct("=")?;
                 self.space()?;
@@ -695,21 +734,19 @@ impl<'a, 'b> Printer<'a, 'b> {
                     this.newline_comma_sep(aggrs, Self::aggr)
                 })?;
             }
-            QueryOp::Var(_, x, t, e) => {
+            QueryOp::Local(_, l, e) => {
                 self.kw("var")?;
                 self.space()?;
-                self.name(x)?;
-                self.type_annotation(t)?;
+                self.local(l)?;
                 self.space()?;
                 self.punct("=")?;
                 self.space()?;
                 self.expr(e)?;
             }
-            QueryOp::JoinOn(_, x, t, e0, e1) => {
+            QueryOp::JoinOn(_, l, e0, e1) => {
                 self.kw("join")?;
                 self.space()?;
-                self.name(x)?;
-                self.type_annotation(t)?;
+                self.local(l)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
@@ -719,10 +756,10 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.expr(e1)?;
             }
-            QueryOp::JoinOverOn(_, x, e0, e1, e2) => {
+            QueryOp::JoinOverOn(_, l, e0, e1, e2) => {
                 self.kw("join")?;
                 self.space()?;
-                self.name(x)?;
+                self.local(l)?;
                 self.space()?;
                 self.kw("in")?;
                 self.space()?;
@@ -749,14 +786,14 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn aggr(&mut self, a: &Aggr) -> std::fmt::Result {
-        self.name(&a.x0)?;
+        self.local(&a.local)?;
         self.punct("=")?;
-        self.name(&a.x1)?;
+        self.name(&a.name)?;
         self.space()?;
         self.kw("of")?;
         self.space()?;
-        self.expr(&a.e1)?;
-        if let Some(e2) = &a.e2 {
+        self.expr(&a.reduce_expr)?;
+        if let Some(e2) = &a.filter_expr {
             self.space()?;
             self.kw("if")?;
             self.space()?;
@@ -821,7 +858,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             Type::Generic(x) => {
                 self.name(x)?;
             }
-            Type::Function(ts, t) => {
+            Type::Function(ts, t, effect) => {
                 if ts.len() == 1 {
                     self.ty(&ts[0])?;
                 } else {
@@ -831,13 +868,17 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.punct("=>")?;
                 self.space()?;
                 self.ty(t)?;
+                self.space()?;
+                self.punct("~")?;
+                self.space()?;
+                self.effect(effect)?;
             }
             Type::Tuple(ts) => {
                 self.paren(|this| this.comma_sep_trailing(ts, Self::ty))?;
             }
             Type::Record(xts) => {
                 self.kw("record")?;
-                self.fields(xts.as_ref(), Self::annotate)?;
+                self.fields(xts.as_ref(), Self::field)?;
             }
             Type::Path(path) => {
                 self.path(path)?;
@@ -859,9 +900,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             }
             Type::Ref(loans, t, mutable) => {
                 self.punct("&")?;
-                if *mutable {
-                    self.punct("mut")?;
-                }
+                self.optional_mutable(mutable)?;
                 self.comma_sep(loans, Self::loan)?;
                 self.ty(t)?;
             }
@@ -872,10 +911,23 @@ impl<'a, 'b> Printer<'a, 'b> {
         Ok(())
     }
 
-    fn loan(&mut self, loan: &Loan) -> std::fmt::Result {
-        if loan.mutable {
-            self.punct("mut")?;
+    fn effect(&mut self, e: &Effect) -> std::fmt::Result {
+        match e {
+            Effect::Var(v) => self.lit(v.0),
+            Effect::Cons(name, effect) => self.brace(|this| {
+                this.name(name)?;
+                this.punct("|")?;
+                this.space()?;
+                this.effect(effect)
+            }),
+            Effect::Nil => self.kw("nil"),
+            Effect::Err => self.kw("<err>"),
+            Effect::Unknown => self.kw("_"),
         }
+    }
+
+    fn loan(&mut self, loan: &Loan) -> std::fmt::Result {
+        self.optional_mutable(&loan.mutable)?;
         self.place(&loan.place)
     }
 
@@ -925,7 +977,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                     })
                 })?;
             }
-            Pat::Var(_, _, x) => {
+            Pat::Local(_, _, x, _) => {
                 self.name(x)?;
             }
             Pat::Int(_, _, v) => {
@@ -946,7 +998,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             Pat::Struct(_, _, name, ts, xps) => {
                 self.name(name)?;
                 self.type_args(ts)?;
-                self.fields(xps, Self::pat_field)?;
+                self.fields(xps, Self::field_pat)?;
             }
             Pat::Enum(_, _, name, ts, x1, p) => {
                 self.name(name)?;
@@ -960,7 +1012,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             }
             Pat::Record(_, _, xps) => {
                 self.kw("record")?;
-                self.fields(xps, Self::pat_field)?;
+                self.fields(xps, Self::field_pat)?;
             }
             Pat::Or(_, _, p0, p1) => {
                 self.pat(p0)?;

@@ -1,5 +1,5 @@
-use crate::diag::Diagnostic;
-use crate::diag::Report;
+use crate::report::Diagnostic;
+use crate::report::Report;
 use crate::syntax::source::SourceId;
 use crate::syntax::span::Span;
 use crate::syntax::spanned::Spanned;
@@ -119,6 +119,7 @@ impl<'a> Lexer<'a> {
                             "enum" => Token::Enum,
                             "false" => Token::False,
                             "for" => Token::For,
+                            "loop" => Token::Loop,
                             "from" => Token::From,
                             "group" => Token::Group,
                             "if" => Token::If,
@@ -181,15 +182,25 @@ impl<'a> Lexer<'a> {
                     } else {
                         self.pos += c.len_utf8();
                     }
-                    let c = chars.next()?;
-                    if c == '\'' {
-                        self.pos += 1;
-                        Token::Char
-                    } else {
-                        self.pos += c.len_utf8();
-                        self.unexpected_char(c);
-                        continue;
+                    match chars.next() {
+                        Some('\'') => {
+                            self.pos += 1;
+                            Token::Char
+                        }
+                        Some('a'..='z' | 'A'..='Z' | '0'..='9' | '_') => {
+                            self.pos += c.len_utf8();
+                            // Label, e.g., 'a
+                            while let Some('a'..='z' | 'A'..='Z' | '0'..='9' | '_') = chars.next() {
+                                self.pos += c.len_utf8();
+                            }
+                            Token::Label
+                        }
+                        _ => Token::Label,
                     }
+                }
+                '~' => {
+                    self.pos += 1;
+                    Token::Tilde
                 }
                 '(' => {
                     self.pos += 1;

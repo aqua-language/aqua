@@ -36,11 +36,13 @@ pub trait Codegen<'a>: Print<'a> {
 
     fn block(&mut self, b: &Block) -> std::fmt::Result;
 
-    fn expr_field(&mut self, xt: &(Name, Expr)) -> std::fmt::Result;
+    fn field_expr(&mut self, xt: &(Name, Expr)) -> std::fmt::Result;
 
-    fn type_field(&mut self, xt: &(Name, Type)) -> std::fmt::Result;
+    fn field(&mut self, xt: &(Name, Type)) -> std::fmt::Result;
 
     fn ty(&mut self, t: &Type) -> std::fmt::Result;
+
+    fn label(&mut self, l: &Option<Name>) -> std::fmt::Result;
 
     fn fun(&mut self, f: &Function) -> std::fmt::Result;
 

@@ -11,6 +11,7 @@ use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Type;
+use crate::report::Report;
 use crate::syntax::span::Span;
 use crate::syntax::splice::Splice;
 use crate::syntax::splice::SpliceIterator;
@@ -23,7 +24,7 @@ use self::util::unop;
 #[derive(Debug)]
 pub struct Context {
     anons: Stack,
-    pub report: crate::diag::Report,
+    pub report: Report,
 }
 
 impl Pass for Context {
@@ -31,7 +32,7 @@ impl Pass for Context {
         self.map_program(program)
     }
 
-    fn report(&mut self) -> &mut crate::diag::Report {
+    fn report(&mut self) -> &mut Report {
         &mut self.report
     }
 }
@@ -45,7 +46,7 @@ impl Context {
     pub fn new() -> Self {
         Context {
             anons: Stack::default(),
-            report: crate::diag::Report::new(),
+            report: Report::new(),
         }
     }
 
@@ -173,7 +174,7 @@ impl Mapper for Context {
             // "a ${b} c" => "a ".concat(b.toString()).concat(" c")
             Expr::String(s, _, l) => {
                 let mut iter = SpliceIterator::new(l.as_str());
-                let s = s.shrink(1);
+                let s = s.trim(1);
                 if let Some(splice) = iter.next() {
                     let e = self.map_splice(splice, s);
                     iter.fold(e, |e0, splice| {

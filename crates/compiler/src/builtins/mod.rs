@@ -4,7 +4,7 @@ use crate::ast::BuiltinDef;
 use crate::ast::BuiltinType;
 use crate::ast::Codegen;
 use crate::ast::Stmt;
-use crate::diag::Report;
+use crate::report::Report;
 use crate::syntax::lexer::Lexer;
 use crate::syntax::parser::Parser;
 use crate::syntax::source::Cache;

@@ -7,6 +7,7 @@ use util::call_map;
 use util::call_merge;
 use util::call_take;
 use util::call_window;
+use util::relation;
 use util::typed_lambda;
 
 use crate::ast::Aggr;
@@ -18,7 +19,7 @@ use crate::ast::Name;
 use crate::ast::Path;
 use crate::ast::QueryOp;
 use crate::ast::Type;
-use crate::diag::Report;
+use crate::report::Report;
 use crate::syntax::span::Span;
 use crate::traversal::mapper::Mapper;
 
@@ -27,14 +28,14 @@ use self::util::expr_field;
 use self::util::expr_var;
 use self::util::lambda;
 use self::util::record;
-use self::util::relation;
 use self::util::relation_expr;
+use self::util::relation_local;
 
 use super::Pass;
 
 #[derive(Debug)]
 pub struct Context {
-    stack: Vec<Scope>,
+    stack: Vec<Vec<Local>>,
     pub report: Report,
 }
 
@@ -48,9 +49,6 @@ impl Pass for Context {
     }
 }
 
-#[derive(Debug)]
-struct Scope(Vec<Name>);
-
 impl Context {
     pub fn new() -> Self {
         Self {
@@ -59,24 +57,24 @@ impl Context {
         }
     }
 
-    fn bind_relational_var(&mut self, x: Name) {
-        self.stack.last_mut().unwrap().0.push(x);
+    fn bind_relational_var(&mut self, l: Local) {
+        self.stack.last_mut().unwrap().push(l);
     }
 
     fn unbind_relational_vars(&mut self) {
-        self.stack.last_mut().unwrap().0.clear();
+        self.stack.last_mut().unwrap().clear();
     }
 
     fn unbind_relational_var(&mut self, x: Name) {
-        self.stack.last_mut().unwrap().0.retain(|y| x != *y);
+        self.stack.last_mut().unwrap().retain(|f| x != f.name);
     }
 
     fn is_relational_var(&self, x: &Name) -> bool {
-        self.stack.iter().any(|s| s.0.contains(x))
+        self.stack.iter().any(|s| s.iter().any(|f| *x == f.name))
     }
 
-    fn relational_vars(&self) -> impl Iterator<Item = &Name> {
-        self.stack.last().unwrap().0.iter()
+    fn relational_vars(&self) -> impl Iterator<Item = &Local> {
+        self.stack.last().unwrap().iter()
     }
 
     fn query(&mut self, e0: Expr, q: &QueryOp) -> Expr {
@@ -84,13 +82,13 @@ impl Context {
             QueryOp::Where(s, e1) => self.where_clause(e0, *s, e1),
             QueryOp::Union(s, e1) => self.union_clause(e0, *s, e1),
             QueryOp::Limit(s, e1) => self.limit_clause(e0, *s, e1),
-            QueryOp::From(s, x, t, e) => self.from_clause(e0, *s, *x, t, e),
+            QueryOp::From(s, l, e) => self.from_clause(e0, *s, l, e),
             QueryOp::Select(s, xes) => self.select_clause(e0, *s, xes),
-            QueryOp::GroupOverCompute(s, x, e1, e2, aggs) => {
-                self.group_over_compute_clause(e0, *s, *x, e1, e2, aggs)
+            QueryOp::GroupOverCompute(s, l, e1, e2, aggs) => {
+                self.group_over_compute_clause(e0, *s, l, e1, e2, aggs)
             }
-            QueryOp::JoinOn(s, x, t, e1, e2) => self.join_on_clause(e0, *s, *x, t, e1, e2),
-            QueryOp::Var(s, x, t, e) => self.var_clause(e0, *s, *x, t, e),
+            QueryOp::JoinOn(s, l, e1, e2) => self.join_on_clause(e0, *s, l, e1, e2),
+            QueryOp::Local(s, l, e) => self.var_clause(e0, *s, l, e),
             QueryOp::OverCompute(s, e, aggs) => self.over_compute_clause(e0, *s, e, aggs),
             QueryOp::JoinOverOn(_, _, _, _, _) => todo!(),
             QueryOp::Err(s) => Expr::Err(*s, Type::Unknown),
@@ -101,14 +99,14 @@ impl Context {
     /// from x in e
     /// =>
     /// map(e, x => record(x=x))
-    fn first_from_clause(&mut self, s: Span, x: Name, t: Type, e: &Expr) -> Expr {
+    fn first_from_clause(&mut self, s: Span, l: &Local, e: &Expr) -> Expr {
         let e = self.map_expr(e);
-        self.bind_relational_var(x);
-        let estruct = Expr::Record(s, Type::Unknown, vec![(x, expr_var(x))].into());
+        self.bind_relational_var(l.clone());
+        let estruct = record(s, vec![(l.clone(), expr_var(l.clone()))]);
         let elam = Expr::Lambda(
             s,
             Type::Unknown,
-            vec![Local::new(x.span, x, t, false)].into(),
+            vec![l.clone()].into(),
             Type::Unknown,
             Rc::new(estruct),
         );
@@ -120,7 +118,7 @@ impl Context {
     /// filter(e0, r => e1)
     fn where_clause(&mut self, e0: Expr, s: Span, e1: &Expr) -> Expr {
         let e = self.map_expr(e1);
-        let elam = lambda(s, [relation(s)], e);
+        let elam = lambda(s, [relation_local(s)], e);
         call_filter(s, e0, elam)
     }
 
@@ -143,41 +141,40 @@ impl Context {
     /// [e0] from x in e
     /// =>
     /// flatMap(e0, r => e.map(x => record(x=x, x1=r.x1, ..., xn=r.xn)))
-    fn from_clause(&mut self, e0: Expr, s: Span, x: Name, t: &Type, e1: &Expr) -> Expr {
+    fn from_clause(&mut self, e0: Expr, s: Span, l: &Local, e1: &Expr) -> Expr {
         let e = self.map_expr(e1);
         // record(x=x, x1=r.x1, ..., xn=r.xn)
         let r = Rc::new(relation_expr(s));
-        let xt0 = (x, expr_var(x));
+        let xt0 = (l.clone(), expr_var(l.clone()));
         let xts = self
             .relational_vars()
-            .map(|x| (*x, expr_field(r.clone(), *x)));
+            .map(|l| (l.clone(), expr_field(r.clone(), l.name)));
         let xts = xts.collect::<Map<_, _>>();
-        let record = record(
-            s,
-            std::iter::once(xt0).chain(xts).collect::<Vec<_>>().into(),
-        );
-        self.bind_relational_var(x);
+        let record = record(s, std::iter::once(xt0).chain(xts).collect::<Vec<_>>());
+        self.bind_relational_var(l.clone());
         // x => record(x=x, x1=r.x1, ..., xn=r.xn)
-        let elam = typed_lambda(s, [(x, t.clone())], record);
+        let elam = typed_lambda(s, [l.clone()], record);
         // e.map(x => record(x=x, x1=r.x1, ..., xn=r.xn))
         let emap = call(s, Name::new(s, "map"), vec![Type::Unknown], vec![e, elam]);
         // flatMap(e0, r => e.map(x => record(x=x, x1=r.x1, ..., xn=r.xn)))
-        let elam = lambda(s, [relation(s)], emap);
+        let elam = lambda(s, [relation_local(s)], emap);
         call_flatmap(s, e0, elam)
     }
 
     // [e0] select x1=e1,...,xn=en
     // =>
     // map(e0, r => record(x1=r.x1, ..., xn=r.xn))
-    fn select_clause(&mut self, e0: Expr, s: Span, xes: &Map<Name, Expr>) -> Expr {
+    fn select_clause(&mut self, e0: Expr, s: Span, xes: &[(Local, Expr)]) -> Expr {
         let xts = xes
             .iter()
-            .map(|(x, e)| (*x, self.map_expr(e)))
-            .collect::<Map<_, _>>();
+            .map(|(l, e)| (l.clone(), self.map_expr(e)))
+            .collect::<Vec<_>>();
         self.unbind_relational_vars();
-        xts.keys().for_each(|x| self.bind_relational_var(*x));
+        for (l, _) in &xts {
+            self.bind_relational_var(l.clone());
+        }
         let record = record(s, xts);
-        call_map(s, e0, lambda(s, [relation(s)], record))
+        call_map(s, e0, lambda(s, [relation_local(s)], record))
     }
 
     // [e0] drop x
@@ -188,10 +185,10 @@ impl Context {
         let r = Rc::new(relation_expr(s));
         let xts = self
             .relational_vars()
-            .map(|x| (*x, expr_field(r.clone(), *x)))
-            .collect::<Map<_, _>>();
+            .map(|l| (l.clone(), expr_field(r.clone(), l.name)))
+            .collect::<Vec<_>>();
         let record = record(s, xts);
-        call_map(s, e0, lambda(s, [relation(s)], record))
+        call_map(s, e0, lambda(s, [relation_local(s)], record))
     }
 
     // [e0] group xkey = ekey
@@ -212,25 +209,27 @@ impl Context {
         &mut self,
         e0: Expr,
         s: Span,
-        xkey: Name,
+        lkey: &Local,
         ekey: &Expr,
         ewin: &Expr,
         aggs: &[Aggr],
     ) -> Expr {
         // e0.keyBy(r => ekey)
         let ekey = self.map_expr(ekey);
-        let ekeyby = call_keyby(s, e0, lambda(s, [relation(s)], ekey));
+        let ekeyby = call_keyby(s, e0, lambda(s, [relation_local(s)], ekey));
         // (xkey, r) => record(...)
         let erecord = {
             let xts = self.aggs(s, aggs);
-            let xts = std::iter::once((xkey, Expr::Path(s, Type::Unknown, Path::new_name(xkey))))
+            let xts = std::iter::once((lkey.clone(), expr_var(lkey.clone())))
                 .chain(xts)
-                .collect::<Map<_, _>>();
+                .collect::<Vec<_>>();
             self.unbind_relational_vars();
-            xts.keys().for_each(|x| self.bind_relational_var(*x));
+            for (l, _) in xts.iter() {
+                self.bind_relational_var(l.clone());
+            }
             record(s, xts)
         };
-        let efun = lambda(s, [xkey, relation(s)], erecord);
+        let efun = lambda(s, [lkey.clone(), relation_local(s)], erecord);
         // ekeyby.window(ewin, (xkey, rs) => record(...))
         let ewin = self.map_expr(ewin);
         call_window(s, ekeyby, ewin, efun)
@@ -239,24 +238,28 @@ impl Context {
     // x = e1 of e2 [if e3]
     // =>
     // x = e1(r[.filter(r => e3)].map(r => e2))
-    fn aggs(&mut self, s: Span, aggs: &[Aggr]) -> Map<Name, Expr> {
+    fn aggs(&mut self, s: Span, aggs: &[Aggr]) -> Vec<(Local, Expr)> {
         aggs.iter()
             .map(|agg| {
-                let x = relation(s);
-                if let Some(e2) = &agg.e2 {
+                let l = relation_local(s);
+                if let Some(e2) = &agg.filter_expr {
                     let v0 = relation_expr(s);
-                    let v1 = call_filter(s, v0, lambda(s, [x], self.map_expr(e2)));
-                    let v2 = call_map(s, v1, lambda(s, [x], self.map_expr(&agg.e1)));
-                    let v3 = call(s, agg.x1, vec![], vec![v2]);
-                    (agg.x0, v3)
+                    let v1 = call_filter(s, v0, lambda(s, [l.clone()], self.map_expr(e2)));
+                    let v2 = call_map(
+                        s,
+                        v1,
+                        lambda(s, [l.clone()], self.map_expr(&agg.reduce_expr)),
+                    );
+                    let v3 = call(s, agg.name, vec![], vec![v2]);
+                    (agg.local.clone(), v3)
                 } else {
                     let v0 = relation_expr(s);
-                    let v1 = call_map(s, v0, lambda(s, [x], self.map_expr(&agg.e1)));
-                    let v2 = call(s, agg.x1, vec![], vec![v1]);
-                    (agg.x0, v2)
+                    let v1 = call_map(s, v0, lambda(s, [l], self.map_expr(&agg.reduce_expr)));
+                    let v2 = call(s, agg.name, vec![], vec![v1]);
+                    (agg.local.clone(), v2)
                 }
             })
-            .collect::<Map<_, _>>()
+            .collect::<Vec<_>>()
     }
 
     // [e0] over e1 compute x1=efun1 of eattr1,...,xn=efunn of eattrn
@@ -268,11 +271,13 @@ impl Context {
     //             xn=efunn(r.map[_](r => eattrn)))
     fn over_compute_clause(&mut self, e0: Expr, s: Span, e: &Expr, aggs: &[Aggr]) -> Expr {
         let e = self.map_expr(e);
-        let xes = self.aggs(s, aggs);
+        let les = self.aggs(s, aggs);
         self.unbind_relational_vars();
-        xes.keys().for_each(|x| self.bind_relational_var(*x));
-        let record = record(s, xes);
-        let elam = lambda(s, [relation(s)], record);
+        for (l, _) in les.iter() {
+            self.bind_relational_var(l.clone());
+        }
+        let record = record(s, les);
+        let elam = lambda(s, [relation_local(s)], record);
         call_window(s, e0, e, elam)
     }
 
@@ -280,60 +285,51 @@ impl Context {
     // =>
     // e0.flatMap[_](r => e1.filter(x => e2 == e3)
     //                   .map[_](x => record(x=x, x1=r.x1, ..., xn=r.xn)))
-    fn join_on_clause(
-        &mut self,
-        e0: Expr,
-        s: Span,
-        x: Name,
-        t: &Type,
-        e1: &Expr,
-        e2: &Expr,
-    ) -> Expr {
+    fn join_on_clause(&mut self, e0: Expr, s: Span, l: &Local, e1: &Expr, e2: &Expr) -> Expr {
         let e1 = self.map_expr(e1);
         let e2 = self.map_expr(e2);
         let r = Rc::new(relation_expr(s));
-        let xts = self
+        let les = self
             .relational_vars()
-            .map(|x| (*x, expr_field(r.clone(), *x)))
-            .collect::<Map<_, _>>();
-        self.bind_relational_var(x);
+            .map(|l| (l.clone(), expr_field(r.clone(), l.name)))
+            .collect::<Vec<_>>();
+        self.bind_relational_var(l.clone());
         let record = record(
             s,
-            std::iter::once((x, expr_var(x)))
-                .chain(xts)
+            std::iter::once((l.clone(), expr_var(l.clone())))
+                .chain(les)
                 .collect::<Vec<_>>()
                 .into(),
         );
         // e1.filter(x => e2 == e3)
-        let efilter = call_filter(s, e1, lambda(s, [x], e2));
-        let emap = call_map(s, efilter, typed_lambda(s, [(x, t.clone())], record));
-        call_flatmap(s, e0, lambda(s, [relation(s)], emap))
+        let efilter = call_filter(s, e1, lambda(s, [l.clone()], e2));
+        let emap = call_map(s, efilter, typed_lambda(s, [l.clone()], record));
+        call_flatmap(s, e0, lambda(s, [relation_local(s)], emap))
     }
 
     // [e0] var x = e1
     // =>
     // e0.map(r => record(x=e1, x1=r.x1, ..., xn=r.xn))
-    fn var_clause(&mut self, e0: Expr, s: Span, x: Name, t: &Type, e1: &Expr) -> Expr {
+    fn var_clause(&mut self, e0: Expr, s: Span, l: &Local, e1: &Expr) -> Expr {
         let e1 = self.map_expr(e1);
         let r = Rc::new(relation_expr(s));
         let xes = self
             .relational_vars()
-            .map(|x| (*x, expr_field(r.clone(), *x)));
-        let xes = xes.collect::<Map<_, _>>();
+            .map(|l| (l.clone(), expr_field(r.clone(), l.name)));
         let record = record(
             s,
-            std::iter::once((x, e1.with_type(t.clone())))
+            std::iter::once((l.clone(), e1))
                 .chain(xes)
                 .collect::<Vec<_>>()
                 .into(),
         );
-        call_map(s, e0, lambda(s, [relation(s)], record))
+        call_map(s, e0, lambda(s, [relation_local(s)], record))
     }
 }
 
 impl Mapper for Context {
     fn enter_scope(&mut self) {
-        self.stack.push(Scope(vec![]));
+        self.stack.push(vec![]);
     }
 
     fn exit_scope(&mut self) {
@@ -342,16 +338,16 @@ impl Mapper for Context {
 
     fn map_expr(&mut self, e: &Expr) -> Expr {
         match e {
-            Expr::Query(s, _, x, t, e, qs) => {
+            Expr::Query(s, _, l, e, qs) => {
                 self.enter_scope();
-                let e = self.first_from_clause(*s, *x, t.clone(), e);
+                let e = self.first_from_clause(*s, l, e);
                 let e = qs.iter().fold(e, |e, q| self.query(e, q));
                 self.exit_scope();
                 e
             }
-            Expr::QueryInto(s, _, x0, t0, e, qs, x1, ts, es) => {
+            Expr::QueryInto(s, _, l, e, qs, x1, ts, es) => {
                 self.enter_scope();
-                let e = self.first_from_clause(*s, *x0, t0.clone(), e);
+                let e = self.first_from_clause(*s, l, e);
                 let e = qs.iter().fold(e, |e, q| self.query(e, q));
                 let es = self.map_exprs(es);
                 let es = std::iter::once(e).chain(es).collect::<Vec<_>>();
@@ -391,12 +387,16 @@ mod util {
         Name::new(s, "r")
     }
 
-    pub(super) fn relation_expr(s: Span) -> Expr {
-        expr_var(relation(s))
+    pub(super) fn relation_local(s: Span) -> Local {
+        Local::new(s, Name::new(s, "r"), Type::Unknown, false)
     }
 
-    pub(super) fn expr_var(x: Name) -> Expr {
-        Expr::Path(x.span, Type::Unknown, Path::new_name(x))
+    pub(super) fn relation_expr(s: Span) -> Expr {
+        expr_var(relation_local(s))
+    }
+
+    pub(super) fn expr_var(l: Local) -> Expr {
+        Expr::Path(l.span, l.ty, Path::new_name(l.name))
     }
 
     pub(super) fn expr_field(e: Rc<Expr>, x: Name) -> Expr {
@@ -461,32 +461,19 @@ mod util {
         )
     }
 
-    pub(super) fn lambda<const N: usize>(s: Span, xs: [Name; N], e: Expr) -> Expr {
-        Expr::Lambda(
-            s,
-            Type::Unknown,
-            xs.iter()
-                .map(|x| Local::new(x.span, *x, Type::Unknown, false))
-                .collect::<Vec<_>>(),
-            Type::Unknown,
-            Rc::new(e),
-        )
+    pub(super) fn lambda<const N: usize>(s: Span, ls: [Local; N], e: Expr) -> Expr {
+        Expr::Lambda(s, Type::Unknown, ls.to_vec(), Type::Unknown, Rc::new(e))
     }
 
-    pub(super) fn typed_lambda<const N: usize>(s: Span, xt: [(Name, Type); N], e: Expr) -> Expr {
-        Expr::Lambda(
-            s,
-            Type::Unknown,
-            xt.iter()
-                .cloned()
-                .map(|(x, t)| Local::new(x.span, x, t, false))
-                .collect::<Vec<_>>(),
-            Type::Unknown,
-            Rc::new(e),
-        )
+    pub(super) fn typed_lambda<const N: usize>(s: Span, ls: [Local; N], e: Expr) -> Expr {
+        Expr::Lambda(s, Type::Unknown, ls.to_vec(), Type::Unknown, Rc::new(e))
     }
 
-    pub(super) fn record(s: Span, xts: Map<Name, Expr>) -> Expr {
-        Expr::Record(s, Type::Unknown, xts)
+    pub(super) fn record(s: Span, les: Vec<(Local, Expr)>) -> Expr {
+        let fes = les
+            .into_iter()
+            .map(|(l, e)| (l.name, e))
+            .collect::<Map<_, _>>();
+        Expr::Record(s, Type::Unknown, fes)
     }
 }

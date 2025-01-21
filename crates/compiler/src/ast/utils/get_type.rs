@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
-use super::Block;
-use super::Expr;
-use super::Pat;
-use super::Place;
-use super::PlaceElem;
-use super::StmtDef;
-use super::StmtTraitDef;
-use super::Type;
+use crate::ast::Block;
+use crate::ast::Expr;
+use crate::ast::Pat;
+use crate::ast::Place;
+use crate::ast::PlaceElem;
+use crate::ast::StmtDef;
+use crate::ast::StmtTraitDef;
+use crate::ast::Type;
 
 impl Expr {
     pub fn ty(&self) -> &Type {
@@ -31,8 +31,8 @@ impl Expr {
             Expr::Array(_, t, ..) => t,
             Expr::Assign(_, t, ..) => t,
             Expr::Return(_, t, ..) => t,
-            Expr::Continue(_, t) => t,
-            Expr::Break(_, t) => t,
+            Expr::Continue(_, t, ..) => t,
+            Expr::Break(_, t, ..) => t,
             Expr::Lambda(_, t, ..) => t,
             Expr::Match(_, t, ..) => t,
             Expr::While(_, t, ..) => t,
@@ -65,7 +65,7 @@ impl Pat {
     pub fn ty(&self) -> &Type {
         match self {
             Pat::Path(_, t, ..) => t,
-            Pat::Var(_, t, ..) => t,
+            Pat::Local(_, t, ..) => t,
             Pat::Tuple(_, t, ..) => t,
             Pat::Struct(_, t, ..) => t,
             Pat::Enum(_, t, ..) => t,
@@ -73,13 +73,13 @@ impl Pat {
             Pat::Wildcard(_, t, ..) => t,
             Pat::String(_, t, ..) => t,
             Pat::Bool(_, t, ..) => t,
-            Pat::Err(_, t) => t,
             Pat::Record(_, t, ..) => t,
             Pat::Or(_, t, ..) => t,
             Pat::Char(_, t, ..) => t,
             Pat::Annotate(_, t, ..) => t,
             Pat::Paren(_, t, ..) => t,
             Pat::Unit(_, t) => t,
+            Pat::Err(_, t) => t,
         }
     }
 }
@@ -98,7 +98,8 @@ impl StmtTraitDef {
     pub fn ty(&self) -> Type {
         let ts = self.params.iter().map(|l| l.ty.clone()).collect();
         let t = self.ty.clone();
-        Type::Function(ts, Rc::new(t))
+        let e = self.effect.clone();
+        Type::Function(ts, Rc::new(t), e)
     }
 }
 
@@ -106,7 +107,8 @@ impl StmtDef {
     pub fn ty(&self) -> Type {
         let ts = self.params.iter().map(|l| l.ty.clone()).collect();
         let t = self.ty.clone();
-        Type::Function(ts, Rc::new(t))
+        let e = self.effect.clone();
+        Type::Function(ts, Rc::new(t), e)
     }
 }
 

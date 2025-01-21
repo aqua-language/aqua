@@ -20,6 +20,7 @@ use solver::Constraint;
 
 use crate::analysis::declare;
 use crate::ast::Ast;
+use crate::ast::Effect;
 use crate::ast::Expr;
 use crate::ast::ExprBody;
 use crate::ast::Impl;
@@ -35,8 +36,8 @@ use crate::ast::Type;
 use crate::ast::TypeVar;
 use crate::collections::map::Map;
 use crate::collections::set::Set;
-use crate::diag::Diagnostic;
-use crate::diag::Report;
+use crate::report::Diagnostic;
+use crate::report::Report;
 use crate::syntax::span::Span;
 use crate::traversal::mappable::Mappable;
 use crate::traversal::mapper::Mapper;
@@ -110,7 +111,7 @@ impl Context {
     }
 
     pub fn add_constraint(&mut self, constraint: Constraint) {
-        self.type_ctx().constraints.insert(constraint);
+        self.type_ctx().constraints.add(constraint);
     }
 
     pub fn add_constraints(&mut self, constraints: Vec<Constraint>) {
@@ -251,11 +252,14 @@ impl Context {
                 .iter()
                 .zip(ts1.iter())
                 .try_for_each(|(t0, t1)| self.try_unify(t0, t1)),
-            (Type::Function(ts0, t0), Type::Function(ts1, t1)) if ts0.len() == ts1.len() => ts0
-                .iter()
-                .chain([t0.as_ref()])
-                .zip(ts1.iter().chain([t1.as_ref()]))
-                .try_for_each(|(t0, t1)| self.try_unify(t0, t1)),
+            (Type::Function(ts0, t0, _e0), Type::Function(ts1, t1, _e1))
+                if ts0.len() == ts1.len() =>
+            {
+                ts0.iter()
+                    .chain([t0.as_ref()])
+                    .zip(ts1.iter().chain([t1.as_ref()]))
+                    .try_for_each(|(t0, t1)| self.try_unify(t0, t1))
+            }
             (Type::Record(xts0), Type::Record(xts1)) if xts0.len() == xts1.len() => {
                 let xts0 = xts0.sort_keys();
                 let xts1 = xts1.sort_keys();
@@ -416,6 +420,7 @@ impl Mapper for Context {
                     s.generics.clone(),
                     s.params.clone(),
                     s.ty.clone(),
+                    s.effect.clone(),
                     s.where_clause.clone(),
                     ExprBody::UserDefined(Rc::new(e)),
                 );
@@ -430,6 +435,7 @@ impl Mapper for Context {
                 s.generics.clone(),
                 s.params.clone(),
                 s.ty.clone(),
+                s.effect.clone(),
                 s.where_clause.clone(),
                 ExprBody::Builtin(b.clone()),
             ),
@@ -437,10 +443,12 @@ impl Mapper for Context {
     }
 
     fn map_stmt_local(&mut self, s: &StmtLocal) -> StmtLocal {
-        self.visit_expr(&s.expr);
-        self.unify(s.span, s.expr.span(), &s.local.ty, s.expr.ty());
+        if let Some(e) = &s.expr {
+            self.visit_expr(e);
+            self.unify(s.span, e.span(), &s.local.ty, e.ty());
+        }
         self.bind(s.local.clone());
-        StmtLocal::new(s.expr.span(), s.local.clone(), s.expr.clone())
+        StmtLocal::new(s.span, s.local.clone(), s.expr.clone())
     }
 }
 
@@ -516,13 +524,14 @@ impl Visitor for Context {
                 let t2 = Type::Function(
                     stmt.params.iter().map(|l| l.ty.clone()).collect(),
                     Rc::new(stmt.ty.clone()),
+                    stmt.effect.clone(),
                 )
                 .instantiate(&gsub);
                 self.unify(*s, stmt.span, t0, &t2);
             }
             Expr::Call(s, t0, e1, es) => {
                 let ts = es.iter().map(|e| e.ty().clone()).collect::<Vec<_>>();
-                let t2 = Type::Function(ts, Rc::new(t0.clone()));
+                let t2 = Type::Function(ts, Rc::new(t0.clone()), Effect::Unknown);
                 self.unify(*s, e1.span(), e1.ty(), &t2);
                 self.visit_expr(e1);
                 self.visit_exprs(es);
@@ -550,22 +559,22 @@ impl Visitor for Context {
                 self.unify(*s, *s, t0, &Type::Unit);
             }
             Expr::Return(_, _, _) => todo!(),
-            Expr::Continue(_, _) => todo!(),
-            Expr::Break(_, _) => todo!(),
+            Expr::Continue(_, _, _) => todo!(),
+            Expr::Break(_, _, _) => todo!(),
             Expr::Lambda(s, t0, ls, t1, e0) => {
                 self.enter_scope();
                 for l in ls {
                     self.bind(l.clone());
                 }
                 let ts0 = ls.iter().map(|l| l.ty.clone()).collect::<Vec<_>>();
-                let t2 = Type::Function(ts0, Rc::new(t1.clone()));
+                let t2 = Type::Function(ts0, Rc::new(t1.clone()), Effect::Unknown);
                 self.unify(*s, *s, t0, &t2);
                 self.visit_expr(e0);
                 self.unify(*s, e0.span(), &t1, e0.ty());
                 self.exit_scope();
             }
             Expr::Match(_, _, _, _) => todo!(),
-            Expr::While(s, t0, e, b) => {
+            Expr::While(s, t0, _l, e, b) => {
                 self.visit_expr(e);
                 self.visit_block(b);
                 self.unify(*s, e.span(), e.ty(), &bool());
@@ -581,14 +590,15 @@ impl Visitor for Context {
                 let t1 = Type::Record(xts);
                 self.unify(*s, *s, t0, &t1);
             }
-            Expr::For(s, t0, _, e, b) => {
+            Expr::For(s, t0, _l, _, e, b) => {
                 self.visit_expr(e);
                 self.visit_block(b);
                 self.unify(*s, *s, t0, &Type::Unit);
                 self.unify(*s, *s, t0, &b.ty());
             }
+            Expr::Loop(_, _, _, _) => todo!(),
             Expr::Assoc(s, t, i, x1, ts1) => {
-                self.type_ctx().constraints.insert(Constraint::AssocDef(
+                self.type_ctx().constraints.add(Constraint::AssocDef(
                     *s,
                     t.clone(),
                     i.clone(),
@@ -643,7 +653,6 @@ impl Visitor for Context {
             Expr::Closure(_, _, _, _xts0, _xts1, _t, _e) => {
                 todo!()
             }
-            Expr::Loop(_, _, _) => todo!(),
             Expr::Deref(..) => unreachable!(),
         }
     }

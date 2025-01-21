@@ -65,6 +65,28 @@ impl<K, V> Map<K, V> {
         Self(vec![(k, v)])
     }
 
+    pub fn push(&mut self, k: K, v: V) {
+        self.0.push((k, v));
+    }
+
+    // Returns the duplicates, if any
+    pub fn deduplicate(&mut self) -> Vec<(K, V)>
+    where
+        K: PartialEq,
+    {
+        let mut duplicates = Vec::new();
+        let mut i = 0;
+        while i < self.0.len() {
+            let k = &self.0[i].0;
+            if self.0.iter().filter(|(k1, _)| k1 == k).count() > 1 {
+                duplicates.push(self.0.remove(i));
+            } else {
+                i += 1;
+            }
+        }
+        duplicates
+    }
+
     pub fn insert(&mut self, k: K, v: V) -> Option<V>
     where
         K: PartialEq,

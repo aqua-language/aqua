@@ -1,49 +1,44 @@
 #[macro_use]
 mod common;
-use common::dsl::expr_assoc_unknown;
-use common::dsl::expr_deref;
-use common::dsl::expr_ref;
-use common::dsl::expr_ref_mut;
-use common::dsl::pat_unit;
-use common::dsl::query_join_on;
-use common::dsl::sugared::expr_anonymous;
-use common::dsl::ty_ref;
-use common::dsl::ty_ref_mut;
-use common::dsl::ty_unit;
-use common::passes::parse_expr;
-use compiler::aqua;
-use compiler::ast::Type;
-
 use common::dsl::aggr;
 use common::dsl::block;
+use common::dsl::effects;
 use common::dsl::expr_annotate;
 use common::dsl::expr_array;
 use common::dsl::expr_assign;
+use common::dsl::expr_assoc_unknown;
 use common::dsl::expr_block;
 use common::dsl::expr_bool;
 use common::dsl::expr_break;
 use common::dsl::expr_call;
 use common::dsl::expr_char;
 use common::dsl::expr_continue;
+use common::dsl::expr_deref;
 use common::dsl::expr_err;
 use common::dsl::expr_field;
 use common::dsl::expr_float;
+use common::dsl::expr_for;
 use common::dsl::expr_if;
 use common::dsl::expr_if_else;
 use common::dsl::expr_index;
 use common::dsl::expr_int;
 use common::dsl::expr_lambda;
 use common::dsl::expr_lambda_typed;
+use common::dsl::expr_loop;
 use common::dsl::expr_match;
 use common::dsl::expr_query;
 use common::dsl::expr_query_into;
 use common::dsl::expr_record;
+use common::dsl::expr_ref;
+use common::dsl::expr_ref_mut;
 use common::dsl::expr_return;
 use common::dsl::expr_string;
 use common::dsl::expr_tuple;
 use common::dsl::expr_unit;
 use common::dsl::expr_while;
 use common::dsl::index;
+use common::dsl::local;
+use common::dsl::local_name;
 use common::dsl::pat_annotate;
 use common::dsl::pat_bool;
 use common::dsl::pat_char;
@@ -51,10 +46,12 @@ use common::dsl::pat_int;
 use common::dsl::pat_record;
 use common::dsl::pat_string;
 use common::dsl::pat_tuple;
+use common::dsl::pat_unit;
 use common::dsl::pat_wild;
 use common::dsl::program;
 use common::dsl::query_from;
 use common::dsl::query_group_over_compute;
+use common::dsl::query_join_on;
 use common::dsl::query_join_over_on;
 use common::dsl::query_over_compute;
 use common::dsl::query_select;
@@ -71,6 +68,7 @@ use common::dsl::stmt_type;
 use common::dsl::stmt_var;
 use common::dsl::sugared::expr_add;
 use common::dsl::sugared::expr_and;
+use common::dsl::sugared::expr_anonymous;
 use common::dsl::sugared::expr_div;
 use common::dsl::sugared::expr_eq;
 use common::dsl::sugared::expr_ge;
@@ -83,12 +81,17 @@ use common::dsl::sugared::expr_neg;
 use common::dsl::sugared::expr_not;
 use common::dsl::sugared::expr_or;
 use common::dsl::sugared::expr_paren;
+use common::dsl::sugared::expr_range;
 use common::dsl::sugared::expr_sub;
 use common::dsl::tr_def;
 use common::dsl::tr_type;
-use common::dsl::ty_lambda;
+use common::dsl::ty_fun;
+use common::dsl::ty_fun_effect;
 use common::dsl::ty_record;
+use common::dsl::ty_ref;
+use common::dsl::ty_ref_mut;
 use common::dsl::ty_tuple;
+use common::dsl::ty_unit;
 use common::dsl::unresolved::bound;
 use common::dsl::unresolved::expr_assoc;
 use common::dsl::unresolved::expr_call_direct;
@@ -106,12 +109,13 @@ use common::dsl::unresolved::pat_var;
 use common::dsl::unresolved::ty;
 use common::dsl::unresolved::ty_assoc;
 use common::dsl::unresolved::ty_con;
-
-use crate::common::dsl::sugared::expr_range;
-use crate::common::passes::parse;
-use crate::common::passes::parse_pat;
-use crate::common::passes::parse_stmt;
-use crate::common::passes::parse_type;
+use common::passes::parse;
+use common::passes::parse_expr;
+use common::passes::parse_pat;
+use common::passes::parse_stmt;
+use common::passes::parse_type;
+use compiler::aqua;
+use compiler::ast::Type;
 
 #[test]
 fn test_parser_expr_int0() {
@@ -571,7 +575,54 @@ fn test_parser_expr_match2() {
 #[test]
 fn test_parser_expr_while0() {
     let a = parse_expr(aqua!("while true { 1 }")).unwrap();
-    let b = expr_while(expr_bool(true), block([], expr_int("1")));
+    let b = expr_while(None, expr_bool(true), block([], expr_int("1")));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_while1() {
+    let a = parse_expr(aqua!("while 'a: true { 1 }")).unwrap();
+    let b = expr_while(Some("a"), expr_bool(true), block([], expr_int("1")));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_for0() {
+    let a = parse_expr(aqua!("for x in y { }")).unwrap();
+    let b = expr_for(None, local_name("x"), expr_var("y"), block([], None));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_for1() {
+    let a = parse_expr(aqua!("for x:i32 in y { }")).unwrap();
+    let b = expr_for(
+        None,
+        local(("x", ty("i32"))),
+        expr_var("y"),
+        block([], None),
+    );
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_for2() {
+    let a = parse_expr(aqua!("for 'a: x in y { }")).unwrap();
+    let b = expr_for(Some("a"), local_name("x"), expr_var("y"), block([], None));
+    check!(a, b);
+}
+
+#[test]
+fn test_parse_expr_loop0() {
+    let a = parse_expr(aqua!("loop { }")).unwrap();
+    let b = expr_loop(None, block([], None));
+    check!(a, b);
+}
+
+#[test]
+fn test_parse_expr_loop1() {
+    let a = parse_expr(aqua!("loop 'a: { }")).unwrap();
+    let b = expr_loop(Some("a"), block([], None));
     check!(a, b);
 }
 
@@ -1677,14 +1728,14 @@ fn test_parser_expr_lambda2() {
 #[test]
 fn test_parser_type_lambda0() {
     let a = parse_type(aqua!("(i32, i32) => i32")).unwrap();
-    let b = ty_lambda([ty("i32"), ty("i32")], ty("i32"));
+    let b = ty_fun([ty("i32"), ty("i32")], ty("i32"));
     check!(a, b);
 }
 
 #[test]
 fn test_parser_type_lambda1() {
     let a = parse_type(aqua!("i32 => i32 => i32")).unwrap();
-    let b = ty_lambda([ty("i32")], ty_lambda([ty("i32")], ty("i32")));
+    let b = ty_fun([ty("i32")], ty_fun([ty("i32")], ty("i32")));
     check!(a, b);
 }
 
@@ -1800,14 +1851,14 @@ fn test_parser_expr_return1() {
 #[test]
 fn test_parser_expr_continue0() {
     let a = parse_expr(aqua!("continue")).unwrap();
-    let b = expr_continue();
+    let b = expr_continue(None);
     check!(a, b);
 }
 
 #[test]
 fn test_parser_expr_break0() {
     let a = parse_expr(aqua!("break")).unwrap();
-    let b = expr_break();
+    let b = expr_break(None);
     check!(a, b);
 }
 
@@ -1958,6 +2009,34 @@ fn test_parser_recover4() {
             │         ╰─ Expected `;`
          ───╯"
     );
+}
+
+#[test]
+fn test_parse_effect_fun0() {
+    let a = parse_type(aqua!("A => B ~ {}")).unwrap();
+    let b = ty_fun_effect([ty("A")], ty("B"), effects([]));
+    check!(a, b);
+}
+
+#[test]
+fn test_parse_effect_fun1() {
+    let a = parse_type(aqua!("A => B ~ {C}")).unwrap();
+    let b = ty_fun_effect([ty("A")], ty("B"), effects(["C"]));
+    check!(a, b);
+}
+
+#[test]
+fn test_parse_effect_fun2() {
+    let a = parse_type(aqua!("A => B ~ {C, D}")).unwrap();
+    let b = ty_fun_effect([ty("A")], ty("B"), effects(["C", "D"]));
+    check!(a, b);
+}
+
+#[test]
+fn test_parse_effect_fun3() {
+    let a = parse_type(aqua!("fun(A, B) => C ~ {D}")).unwrap();
+    let b = ty_fun_effect([ty("A"), ty("B")], ty("C"), effects(["D"]));
+    check!(a, b);
 }
 
 #[ignore]

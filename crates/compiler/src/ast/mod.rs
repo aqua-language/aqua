@@ -1,13 +1,6 @@
+pub mod display;
 pub mod passes;
-mod constructors;
-mod downcasts;
-mod get_span;
-mod get_type;
-pub mod key;
-mod upcasts;
-mod utils;
-mod with_span;
-mod with_type;
+pub mod utils;
 
 use std::rc::Rc;
 
@@ -25,17 +18,6 @@ use crate::syntax::token::Token;
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Ast {
     pub span: Span,
-    pub stmts: Vec<Stmt>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct IR {
-    pub defs: Map<Name, StmtDef>,
-    pub tys: Map<Name, StmtType>,
-    pub traits: Map<Name, StmtTrait>,
-    pub impls: Map<Name, StmtImpl>,
-    pub structs: Map<Name, StmtStruct>,
-    pub enums: Map<Name, StmtEnum>,
     pub stmts: Vec<Stmt>,
 }
 
@@ -107,7 +89,7 @@ pub enum Type {
     Assoc(Impl, Name, Vec<Type>),
     Var(TypeVar),
     Generic(Name),
-    Function(Vec<Type>, Rc<Type>),
+    Function(Vec<Type>, Rc<Type>, Effect),
     Tuple(Vec<Type>),
     Record(Map<Name, Type>),
     Array(Rc<Type>, Option<usize>),
@@ -118,6 +100,18 @@ pub enum Type {
     Err,
     Unknown, // A placeholder for a type that has not been annotated yet.
 }
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum Effect {
+    Var(EffectVar),
+    Cons(Name, Rc<Effect>),
+    Nil,
+    Err,
+    Unknown, // A placeholder for an effect that has not been annotated yet.
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct EffectVar(pub u32);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Loan {
@@ -161,6 +155,7 @@ pub struct StmtTraitDef {
     pub generics: Vec<Name>,
     pub params: Vec<Local>,
     pub ty: Type,
+    pub effect: Effect,
     pub where_clause: Vec<Impl>,
 }
 
@@ -168,7 +163,7 @@ pub struct StmtTraitDef {
 pub struct StmtLocal {
     pub span: Span,
     pub local: Local,
-    pub expr: Expr,
+    pub expr: Option<Expr>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -178,6 +173,7 @@ pub struct StmtDef {
     pub generics: Vec<Name>,
     pub params: Vec<Local>,
     pub ty: Type,
+    pub effect: Effect,
     pub where_clause: Vec<Impl>,
     pub body: ExprBody,
 }
@@ -341,12 +337,11 @@ pub enum Expr {
     Def(Span, Type, Name, Vec<Type>),
     Call(Span, Type, Rc<Expr>, Vec<Expr>),
     Block(Span, Type, Rc<Block>),
-    Query(Span, Type, Name, Type, Rc<Expr>, Vec<QueryOp>),
+    Query(Span, Type, Local, Rc<Expr>, Vec<QueryOp>),
     QueryInto(
         Span,
         Type,
-        Name,
-        Type,
+        Local,
         Rc<Expr>,
         Vec<QueryOp>,
         Name,
@@ -354,18 +349,18 @@ pub enum Expr {
         Vec<Expr>,
     ),
     Assoc(Span, Type, Impl, Name, Vec<Type>),
-    Match(Span, Type, Rc<Expr>, Map<Pat, Expr>),
+    Match(Span, Type, Rc<Expr>, Vec<(Pat, Expr)>),
     IfElse(Span, Type, Rc<Expr>, Rc<Block>, Rc<Block>),
     Array(Span, Type, Vec<Expr>),
     Assign(Span, Type, Rc<Expr>, Rc<Expr>),
     Return(Span, Type, Rc<Expr>),
-    Continue(Span, Type),
-    Break(Span, Type),
-    While(Span, Type, Rc<Expr>, Rc<Block>),
+    Continue(Span, Type, Option<Name>),
+    Break(Span, Type, Option<Name>),
+    While(Span, Type, Option<Name>, Rc<Expr>, Rc<Block>),
     Lambda(Span, Type, Vec<Local>, Type, Rc<Expr>),
     Closure(Span, Type, usize, Vec<Local>, Vec<Place>, Type, Rc<Expr>),
-    For(Span, Type, Name, Rc<Expr>, Rc<Block>),
-    Loop(Span, Type, Rc<Block>),
+    For(Span, Type, Option<Name>, Local, Rc<Expr>, Rc<Block>),
+    Loop(Span, Type, Option<Name>, Rc<Block>),
     Err(Span, Type),
     InfixBinaryOp(Span, Type, Token, Rc<Expr>, Rc<Expr>),
     PrefixUnaryOp(Span, Type, Token, Rc<Expr>),
@@ -393,7 +388,7 @@ pub enum PathPatField {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Pat {
     Path(Span, Type, Path, Option<Vec<PathPatField>>),
-    Var(Span, Type, Name),
+    Local(Span, Type, Name, bool),
     Tuple(Span, Type, Vec<Pat>),
     Struct(Span, Type, Name, Vec<Type>, Map<Name, Pat>),
     Record(Span, Type, Map<Name, Pat>),
@@ -412,27 +407,27 @@ pub enum Pat {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum QueryOp {
-    From(Span, Name, Type, Rc<Expr>),
-    Var(Span, Name, Type, Rc<Expr>),
+    From(Span, Local, Rc<Expr>),
+    Local(Span, Local, Rc<Expr>),
     Drop(Span, Name),
     Union(Span, Rc<Expr>),
     Where(Span, Rc<Expr>),
-    Select(Span, Map<Name, Expr>),
+    Select(Span, Vec<(Local, Expr)>),
     Limit(Span, Rc<Expr>),
     OverCompute(Span, Rc<Expr>, Vec<Aggr>),
-    GroupOverCompute(Span, Name, Rc<Expr>, Rc<Expr>, Vec<Aggr>),
-    JoinOn(Span, Name, Type, Rc<Expr>, Rc<Expr>),
-    JoinOverOn(Span, Name, Rc<Expr>, Rc<Expr>, Rc<Expr>),
+    GroupOverCompute(Span, Local, Rc<Expr>, Rc<Expr>, Vec<Aggr>),
+    JoinOn(Span, Local, Rc<Expr>, Rc<Expr>),
+    JoinOverOn(Span, Local, Rc<Expr>, Rc<Expr>, Rc<Expr>),
     // Compute(Span, Name, Rc<Expr>, Rc<Expr>),
     Err(Span),
 }
 
 /// An aggregation function.
-/// x0 = x1 of e [if e2]
+/// l = x of e1 [if e2]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Aggr {
-    pub x0: Name,
-    pub x1: Name,
-    pub e1: Rc<Expr>,
-    pub e2: Option<Rc<Expr>>,
+    pub local: Local,
+    pub name: Name,
+    pub reduce_expr: Rc<Expr>,
+    pub filter_expr: Option<Rc<Expr>>,
 }

@@ -297,7 +297,7 @@ impl<'de> DeserializeSeed<'de> for Seed {
         D: Deserializer<'de>,
     {
         match self.0 {
-            Type::Function(_, _) => unreachable!(),
+            Type::Function(_, _, _) => unreachable!(),
             Type::Tuple(ts) if ts.is_empty() => <() as Deserialize>::deserialize(deserializer)
                 .map(|()| Value::from(Tuple::new(vec![]))),
             Type::Tuple(ts) => {

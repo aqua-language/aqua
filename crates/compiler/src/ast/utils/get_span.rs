@@ -1,11 +1,10 @@
 use crate::ast::passes::infer::solver::Constraint;
+use crate::ast::Block;
+use crate::ast::Expr;
+use crate::ast::Pat;
+use crate::ast::QueryOp;
+use crate::ast::Stmt;
 use crate::syntax::span::Span;
-
-use super::Block;
-use super::Expr;
-use super::Pat;
-use super::QueryOp;
-use super::Stmt;
 
 impl Expr {
     pub fn span(&self) -> Span {
@@ -63,7 +62,7 @@ impl Pat {
     pub fn span(&self) -> Span {
         match self {
             Pat::Path(s, ..) => *s,
-            Pat::Var(s, ..) => *s,
+            Pat::Local(s, ..) => *s,
             Pat::Tuple(s, ..) => *s,
             Pat::Struct(s, ..) => *s,
             Pat::Enum(s, ..) => *s,
@@ -77,7 +76,7 @@ impl Pat {
             Pat::Char(s, ..) => *s,
             Pat::Annotate(s, ..) => *s,
             Pat::Paren(s, ..) => *s,
-            Pat::Unit(s, _) => *s
+            Pat::Unit(s, _) => *s,
         }
     }
 }
@@ -92,7 +91,7 @@ impl QueryOp {
             QueryOp::Select(s, ..) => *s,
             QueryOp::JoinOn(s, ..) => *s,
             QueryOp::GroupOverCompute(s, ..) => *s,
-            QueryOp::Var(s, ..) => *s,
+            QueryOp::Local(s, ..) => *s,
             QueryOp::OverCompute(s, ..) => *s,
             QueryOp::JoinOverOn(s, ..) => *s,
             QueryOp::Err(s) => *s,
