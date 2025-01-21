@@ -190,7 +190,7 @@ impl Server {
     fn diagnostic(
         &self,
         compiler: &mut Compiler,
-        diag: &compiler::diag::Diagnostic,
+        diag: &compiler::report::Diagnostic,
     ) -> lsp_types::Diagnostic {
         Diagnostic {
             range: self.span_to_range(compiler, diag.label.span),
