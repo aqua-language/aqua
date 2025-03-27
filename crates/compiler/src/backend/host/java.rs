@@ -75,7 +75,7 @@ impl<'a> std::fmt::Display for Wrapper<&'a Function> {
 }
 
 impl<'a, 'b> Print<'b> for Printer<'a, 'b> {
-    fn fmt(&mut self) -> &mut std::fmt::Formatter<'b> {
+    fn formatter_mut(&mut self) -> &mut std::fmt::Formatter<'b> {
         self.f
     }
 
@@ -144,16 +144,16 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.space()?;
                 self.brace(|this| {
                     this.space()?;
-                    this.kw("return")?;
+                    this.keyword("return")?;
                     this.space()?;
                     this.expr(e)?;
                     this.space()
                 })?;
             }
             ExprBody::Builtin(b) => {
-                self.kw("static")?;
+                self.keyword("static")?;
                 self.space()?;
-                self.kw("final")?;
+                self.keyword("final")?;
                 self.space()?;
                 self.ty(&s.ty())?;
                 self.space()?;
@@ -174,11 +174,11 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
     }
 
     fn stmt_struct(&mut self, s: &StmtStruct) -> std::fmt::Result {
-        self.kw("public")?;
+        self.keyword("public")?;
         self.space()?;
-        self.kw("static")?;
+        self.keyword("static")?;
         self.space()?;
-        self.kw("class")?;
+        self.keyword("class")?;
         self.space()?;
         self.name(&s.name)?;
         self.space()?;
@@ -186,7 +186,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
     }
 
     fn stmt_enum(&mut self, s: &StmtEnum) -> std::fmt::Result {
-        self.kw("enum")?;
+        self.keyword("enum")?;
         self.space()?;
         self.name(&s.name)?;
         self.space()?;
@@ -197,7 +197,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
     }
 
     fn stmt_type(&mut self, s: &StmtType) -> std::fmt::Result {
-        self.kw("type")?;
+        self.keyword("type")?;
         self.space()?;
         self.name(&s.name)?;
         self.space()?;
@@ -223,7 +223,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.char(*v)?;
             }
             Expr::String(_, _, s) => {
-                self.str(s)?;
+                self.string(s)?;
             }
             Expr::Field(_, _, e, x) => {
                 self.expr(e)?;
@@ -231,7 +231,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.name(x)?;
             }
             Expr::Tuple(_, _, es) => {
-                self.kw("new")?;
+                self.keyword("new")?;
                 self.space()?;
                 self.lit("Tuple")?;
                 self.lit(es.len())?;
@@ -281,15 +281,15 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.expr(e1)?;
             }
             Expr::Return(_, _, e) => {
-                self.kw("return")?;
+                self.keyword("return")?;
                 self.space()?;
                 self.expr(e)?;
             }
             Expr::Continue(_, _, _l) => {
-                self.kw("continue")?;
+                self.keyword("continue")?;
             }
             Expr::Break(_, _, _l) => {
-                self.kw("break")?;
+                self.keyword("break")?;
             }
             Expr::Lambda(_, _, ps, t, e) => {
                 self.bars(|this| this.comma_sep(ps, Self::local))?;
@@ -305,7 +305,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             }
             Expr::Match(..) => unreachable!(),
             Expr::While(_, _, _l, e, b) => {
-                self.kw("while")?;
+                self.keyword("while")?;
                 self.space()?;
                 self.expr(e)?;
                 self.space()?;
@@ -324,11 +324,11 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Expr::IfElse(_, _, e, b0, b1) => {
                 self.paren(|this| this.expr(e))?;
                 self.space()?;
-                self.kw("?")?;
+                self.keyword("?")?;
                 self.space()?;
                 self.block(b0)?;
                 self.space()?;
-                self.kw(":")?;
+                self.keyword(":")?;
                 self.space()?;
                 self.block(b1)?;
             }
@@ -362,7 +362,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 this.indented(|this| {
                     this.newline_sep(&b.stmts, Self::stmt)?;
                     this.newline()?;
-                    this.kw("return")?;
+                    this.keyword("return")?;
                     this.space()?;
                     this.expr(&b.expr.as_ref().unwrap())?;
                     this.punct(";")
@@ -404,7 +404,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Type::Err => unreachable!(),
             Type::Generic(_) => unreachable!(),
             Type::Function(ts, t, _es) => {
-                self.kw("Function")?;
+                self.keyword("Function")?;
                 self.lit(ts.len())?;
                 self.angle(|this| {
                     this.comma_sep(ts, Self::ty)?;

@@ -35,27 +35,27 @@ use crate::print::Print;
 
 use super::Effect;
 
-struct Printer<'a, 'b> {
+pub struct Printer<'a, 'b> {
     f: &'a mut std::fmt::Formatter<'b>,
-    indent_level: usize,
+    pub(crate) indent: usize,
     verbose: bool,
 }
 
 impl<'a, 'b> Print<'b> for Printer<'a, 'b> {
-    fn fmt(&mut self) -> &mut std::fmt::Formatter<'b> {
+    fn formatter_mut(&mut self) -> &mut std::fmt::Formatter<'b> {
         self.f
     }
 
     fn indent_mut(&mut self) -> &mut usize {
-        &mut self.indent_level
+        &mut self.indent
     }
 }
 
 impl<'a, 'b> Printer<'a, 'b> {
-    fn new(f: &'a mut std::fmt::Formatter<'b>) -> Printer<'a, 'b> {
+    pub fn new(f: &'a mut std::fmt::Formatter<'b>) -> Printer<'a, 'b> {
         Printer {
             f,
-            indent_level: 0,
+            indent: 0,
             verbose: false,
         }
     }
@@ -65,7 +65,7 @@ impl<'a, 'b> Printer<'a, 'b> {
         self
     }
 
-    fn local(&mut self, l: &Local) -> std::fmt::Result {
+    pub(crate) fn local(&mut self, l: &Local) -> std::fmt::Result {
         self.name(&l.name)
     }
 
@@ -95,7 +95,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             Stmt::Enum(s) => self.stmt_enum(s),
             Stmt::Type(s) => self.stmt_type(s),
             Stmt::Trait(s) => self.stmt_trait(s),
-            Stmt::Err(_) => self.kw("<err>"),
+            Stmt::Err(_) => self.keyword("<err>"),
         }
     }
 
@@ -110,9 +110,9 @@ impl<'a, 'b> Printer<'a, 'b> {
 
     fn stmt_var(&mut self, s: &StmtLocal) -> std::fmt::Result {
         if s.local.mutable {
-            self.kw("var")?;
+            self.keyword("var")?;
         } else {
-            self.kw("val")?;
+            self.keyword("val")?;
         }
         self.space()?;
         self.name(&s.local.name)?;
@@ -127,7 +127,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn stmt_def(&mut self, s: &StmtDef) -> std::fmt::Result {
-        self.kw("def")?;
+        self.keyword("def")?;
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
@@ -160,7 +160,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn stmt_impl(&mut self, s: &StmtImpl) -> std::fmt::Result {
-        self.kw("impl")?;
+        self.keyword("impl")?;
         self.generics(&s.generics)?;
         self.space()?;
         self.imp(&s.head)?;
@@ -189,7 +189,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     fn where_clause(&mut self, ts: &[Impl]) -> std::fmt::Result {
         self.if_nonempty(ts, |this, ts| {
             this.space()?;
-            this.kw("where")?;
+            this.keyword("where")?;
             this.space()?;
             this.comma_sep(ts, Self::imp)
         })
@@ -201,7 +201,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn stmt_struct(&mut self, s: &StmtStruct) -> std::fmt::Result {
-        self.kw("struct")?;
+        self.keyword("struct")?;
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
@@ -210,7 +210,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn stmt_enum(&mut self, s: &StmtEnum) -> std::fmt::Result {
-        self.kw("enum")?;
+        self.keyword("enum")?;
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
@@ -232,7 +232,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn stmt_type(&mut self, s: &StmtType) -> std::fmt::Result {
-        self.kw("type")?;
+        self.keyword("type")?;
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
@@ -251,7 +251,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn stmt_trait(&mut self, s: &StmtTrait) -> std::fmt::Result {
-        self.kw("trait")?;
+        self.keyword("trait")?;
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
@@ -278,7 +278,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn stmt_def_decl(&mut self, s: &StmtTraitDef) -> std::fmt::Result {
-        self.kw("def")?;
+        self.keyword("def")?;
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
@@ -290,7 +290,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     }
 
     fn stmt_type_decl(&mut self, s: &StmtTraitType) -> std::fmt::Result {
-        self.kw("type")?;
+        self.keyword("type")?;
         self.space()?;
         self.name(&s.name)?;
         self.generics(&s.generics)?;
@@ -303,7 +303,7 @@ impl<'a, 'b> Printer<'a, 'b> {
         })
     }
 
-    fn type_args(&mut self, ts: &[Type]) -> std::fmt::Result {
+    pub(crate) fn type_args(&mut self, ts: &[Type]) -> std::fmt::Result {
         self.if_nonempty(ts, |this, ts| {
             this.brack(|this| this.comma_sep(ts, Self::ty))
         })
@@ -328,7 +328,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.lit(v)?;
             }
             Expr::String(_, _, s) => {
-                self.str(s)?;
+                self.string(s)?;
             }
             Expr::Field(_, _, e, x) => {
                 self.expr(e)?;
@@ -365,11 +365,11 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.block(b)?;
             }
             Expr::Query(_, _, l, e, qs) => {
-                self.kw("from")?;
+                self.keyword("from")?;
                 self.space()?;
                 self.local(l)?;
                 self.space()?;
-                self.kw("in")?;
+                self.keyword("in")?;
                 self.space()?;
                 self.expr(e)?;
                 if !qs.is_empty() {
@@ -378,11 +378,11 @@ impl<'a, 'b> Printer<'a, 'b> {
                 }
             }
             Expr::QueryInto(_, _, l, e, qs, x1, ts, es) => {
-                self.kw("from")?;
+                self.keyword("from")?;
                 self.space()?;
                 self.local(l)?;
                 self.space()?;
-                self.kw("in")?;
+                self.keyword("in")?;
                 self.space()?;
                 self.expr(e)?;
                 if !qs.is_empty() {
@@ -390,7 +390,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                     self.newline_sep(qs, Self::query_clause)?;
                 }
                 self.newline()?;
-                self.kw("into")?;
+                self.keyword("into")?;
                 self.space()?;
                 self.name(x1)?;
                 self.type_args(ts)?;
@@ -411,7 +411,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.brack(|this| this.comma_sep(es, Self::expr))?;
             }
             Expr::Err(_, _) => {
-                self.kw("<err>")?;
+                self.keyword("<err>")?;
             }
             Expr::Assign(_, _, e0, e1) => {
                 self.expr(e0)?;
@@ -421,16 +421,16 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.expr(e1)?;
             }
             Expr::Return(_, _, e) => {
-                self.kw("return")?;
+                self.keyword("return")?;
                 self.space()?;
                 self.expr(e)?;
             }
             Expr::Continue(_, _, l) => {
-                self.kw("continue")?;
+                self.keyword("continue")?;
                 self.optional_loop_jump_label(l)?;
             }
             Expr::Break(_, _, l) => {
-                self.kw("break")?;
+                self.keyword("break")?;
                 self.optional_loop_jump_label(l)?;
             }
             Expr::Lambda(_, _, ls, _, e) => {
@@ -449,14 +449,14 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.expr(e)?;
             }
             Expr::Match(_, _, e, arms) => {
-                self.kw("match")?;
+                self.keyword("match")?;
                 self.space()?;
                 self.expr(e)?;
                 self.space()?;
                 self.comma_scope(arms, Self::arm)?;
             }
             Expr::While(_, _, l, e, b) => {
-                self.kw("while")?;
+                self.keyword("while")?;
                 self.space()?;
                 self.optional_loop_header_label(l)?;
                 self.expr(e)?;
@@ -464,16 +464,16 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.block(b)?;
             }
             Expr::Record(_, _, xts) => {
-                self.kw("record")?;
+                self.keyword("record")?;
                 self.fields(xts.as_ref(), Self::field_expr)?;
             }
             Expr::For(_, _, l, x, e, b) => {
-                self.kw("for")?;
+                self.keyword("for")?;
                 self.space()?;
                 self.optional_loop_header_label(l)?;
                 self.local(x)?;
                 self.space()?;
-                self.kw("in")?;
+                self.keyword("in")?;
                 self.space()?;
                 self.expr(e)?;
                 self.space()?;
@@ -514,13 +514,13 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.paren(|this| this.comma_sep(es, Self::expr))?;
             }
             Expr::IfElse(_, _, e, b0, b1) => {
-                self.kw("if")?;
+                self.keyword("if")?;
                 self.space()?;
                 self.expr(e)?;
                 self.space()?;
                 self.block(b0)?;
                 self.space()?;
-                self.kw("else")?;
+                self.keyword("else")?;
                 self.space()?;
                 self.block(b1)?;
             }
@@ -566,7 +566,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.expr(e)?;
             }
             Expr::Loop(_, _, l, b) => {
-                self.kw("loop")?;
+                self.keyword("loop")?;
                 self.space()?;
                 self.optional_loop_header_label(l)?;
                 self.block(b)?;
@@ -602,7 +602,7 @@ impl<'a, 'b> Printer<'a, 'b> {
 
     fn optional_mutable(&mut self, m: &bool) -> std::fmt::Result {
         if *m {
-            self.kw("mut")?;
+            self.keyword("mut")?;
             self.space()?;
         }
         Ok(())
@@ -678,36 +678,36 @@ impl<'a, 'b> Printer<'a, 'b> {
     fn query_clause(&mut self, q: &QueryOp) -> std::fmt::Result {
         match q {
             QueryOp::From(_, l, e) => {
-                self.kw("from")?;
+                self.keyword("from")?;
                 self.space()?;
                 self.local(l)?;
                 self.space()?;
-                self.kw("in")?;
+                self.keyword("in")?;
                 self.space()?;
                 self.expr(e)?;
             }
             QueryOp::Union(_, e) => {
-                self.kw("union")?;
+                self.keyword("union")?;
                 self.space()?;
                 self.expr(e)?;
             }
             QueryOp::Limit(_, e) => {
-                self.kw("limit")?;
+                self.keyword("limit")?;
                 self.space()?;
                 self.expr(e)?;
             }
             QueryOp::Where(_, e) => {
-                self.kw("where")?;
+                self.keyword("where")?;
                 self.space()?;
                 self.expr(e)?;
             }
             QueryOp::Select(_, les) => {
-                self.kw("select")?;
+                self.keyword("select")?;
                 self.space()?;
                 self.comma_scope(les.as_ref(), Self::local_expr)?;
             }
             QueryOp::GroupOverCompute(_, l, e0, e1, aggrs) => {
-                self.kw("group")?;
+                self.keyword("group")?;
                 self.space()?;
                 self.local(l)?;
                 self.space()?;
@@ -717,25 +717,25 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.newline()?;
                 self.indented(|this| {
                     this.tab()?;
-                    this.kw("over")?;
+                    this.keyword("over")?;
                     this.space()?;
                     this.expr(e1)?;
                     this.newline()?;
-                    this.kw("compute")?;
+                    this.keyword("compute")?;
                     this.indented(|this| this.newline_comma_sep(aggrs, Self::aggr))
                 })?;
             }
             QueryOp::OverCompute(_, e, aggrs) => {
-                self.kw("over")?;
+                self.keyword("over")?;
                 self.space()?;
                 self.expr(e)?;
                 self.indented(|this| {
-                    this.kw("compute")?;
+                    this.keyword("compute")?;
                     this.newline_comma_sep(aggrs, Self::aggr)
                 })?;
             }
             QueryOp::Local(_, l, e) => {
-                self.kw("var")?;
+                self.keyword("var")?;
                 self.space()?;
                 self.local(l)?;
                 self.space()?;
@@ -744,42 +744,45 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.expr(e)?;
             }
             QueryOp::JoinOn(_, l, e0, e1) => {
-                self.kw("join")?;
+                self.keyword("join")?;
                 self.space()?;
                 self.local(l)?;
                 self.space()?;
-                self.kw("in")?;
+                self.keyword("in")?;
                 self.space()?;
                 self.expr(e0)?;
                 self.space()?;
-                self.kw("on")?;
+                self.keyword("on")?;
                 self.space()?;
                 self.expr(e1)?;
             }
             QueryOp::JoinOverOn(_, l, e0, e1, e2) => {
-                self.kw("join")?;
+                self.keyword("join")?;
                 self.space()?;
                 self.local(l)?;
                 self.space()?;
-                self.kw("in")?;
+                self.keyword("in")?;
                 self.space()?;
                 self.expr(e0)?;
                 self.space()?;
-                self.kw("over")?;
+                self.keyword("over")?;
                 self.space()?;
                 self.expr(e1)?;
                 self.space()?;
-                self.kw("on")?;
+                self.keyword("on")?;
                 self.space()?;
                 self.expr(e2)?;
             }
             QueryOp::Err(_) => {
-                self.kw("<err>")?;
+                self.keyword("<err>")?;
             }
             QueryOp::Drop(_, x) => {
-                self.kw("drop")?;
+                self.keyword("drop")?;
                 self.space()?;
                 self.name(x)?;
+            }
+            QueryOp::Distinct(_) => {
+                self.keyword("distinct")?;
             }
         }
         Ok(())
@@ -790,12 +793,12 @@ impl<'a, 'b> Printer<'a, 'b> {
         self.punct("=")?;
         self.name(&a.name)?;
         self.space()?;
-        self.kw("of")?;
+        self.keyword("of")?;
         self.space()?;
         self.expr(&a.reduce_expr)?;
         if let Some(e2) = &a.filter_expr {
             self.space()?;
-            self.kw("if")?;
+            self.keyword("if")?;
             self.space()?;
             self.expr(e2)?;
         }
@@ -822,18 +825,18 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.ty(t)?;
             }
             Impl::Err => {
-                self.kw("<err>")?;
+                self.keyword("<err>")?;
             }
             Impl::Var(x) => {
                 self.punct("?")?;
                 self.lit(x)?;
             }
-            Impl::Unknown => self.kw("_")?,
+            Impl::Unknown => self.keyword("_")?,
         }
         Ok(())
     }
 
-    fn ty(&mut self, t: &Type) -> std::fmt::Result {
+    pub(crate) fn ty(&mut self, t: &Type) -> std::fmt::Result {
         match t {
             Type::Struct(x, ts) | Type::Enum(x, ts) | Type::Builtin(x, ts) | Type::Alias(x, ts) => {
                 self.name(x)?;
@@ -853,7 +856,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.punct("_")?;
             }
             Type::Err => {
-                self.kw("<err>")?;
+                self.keyword("<err>")?;
             }
             Type::Generic(x) => {
                 self.name(x)?;
@@ -877,7 +880,7 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.paren(|this| this.comma_sep_trailing(ts, Self::ty))?;
             }
             Type::Record(xts) => {
-                self.kw("record")?;
+                self.keyword("record")?;
                 self.fields(xts.as_ref(), Self::field)?;
             }
             Type::Path(path) => {
@@ -917,12 +920,11 @@ impl<'a, 'b> Printer<'a, 'b> {
             Effect::Cons(name, effect) => self.brace(|this| {
                 this.name(name)?;
                 this.punct("|")?;
-                this.space()?;
                 this.effect(effect)
             }),
-            Effect::Nil => self.kw("nil"),
-            Effect::Err => self.kw("<err>"),
-            Effect::Unknown => self.kw("_"),
+            Effect::Nil => self.punct("{}"),
+            Effect::Err => self.punct("<err>"),
+            Effect::Unknown => self.punct("_"),
         }
     }
 
@@ -931,7 +933,7 @@ impl<'a, 'b> Printer<'a, 'b> {
         self.place(&loan.place)
     }
 
-    fn place(&mut self, place: &Place) -> std::fmt::Result {
+    pub(crate) fn place(&mut self, place: &Place) -> std::fmt::Result {
         self.local(&place.local)?;
         for elem in &place.elems {
             self.place_elem(elem)?;
@@ -1008,10 +1010,10 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.paren(|this| this.pat(p))?;
             }
             Pat::Err(_, _) => {
-                self.kw("<err>")?;
+                self.keyword("<err>")?;
             }
             Pat::Record(_, _, xps) => {
-                self.kw("record")?;
+                self.keyword("record")?;
                 self.fields(xps, Self::field_pat)?;
             }
             Pat::Or(_, _, p0, p1) => {

@@ -1,0 +1,22 @@
+# Calculate the total quantity and average EUR price of items every
+# six hours for orders that have been shipped in the last day.
+
+struct Item(id:u64, priceUsd:f64, quantity:u64);
+struct Order(id:u64, items:Vec[Item], status:String, timestamp:Time);
+
+var reader = Reader::file(Path::new("localhost:9092/orders"), true);
+var writer = Writer::file(Path::new("localhost:9092/items"));
+var format = Format::json();
+
+var query =
+  from order:Order in Stream::source(reader, format, (x,t) => x.timestamp, 10s, 10s)
+  where order.status == "shipped"
+  from item:Item in order.items
+  group itemId = item.id
+    over Window::sliding(1d, 6h)
+    compute avgPriceUsd = avg of item.priceUsd,
+            totalQuantity = sum of item.quantity
+  select itemId, avgPriceEur = avgPriceUsd * 0.85, totalQuantity
+  into sink(writer, format);
+
+query.run(Backend::flink());

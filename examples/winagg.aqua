@@ -1,0 +1,33 @@
+# Calculate the total quantity and average EUR price of items every
+# six hours for orders that have been shipped in the last day.
+
+struct Item(id:i32, priceUsd:f64, quantity:i32, timestamp:Time);
+
+var reader = Reader::file(Path::new("items.csv"), true);
+var writer = Writer::file(Path::new("prices.csv"));
+var format = Format::csv(',');
+
+Stream[Item]::source(reader, format, (x, t) => x.timestamp, 10s, 10s)
+  .filter(x => x.quantity > 10)
+  .map[_](x => x);
+  # .keyby[_](x => x.id);
+
+  # .keyby[_](_.id)
+  # .window[_](
+  #   Window::sliding(1d, 6h),
+  #   (x, w) => record(
+  #     avgPriceUsd = 1,
+  #     totalQuantity = 2
+  #   )
+  # );
+  # .map[_](x => x);
+
+# s.sink(writer, format);
+
+#     over Window::sliding(1d, 6h)
+#     compute avgPriceUsd = avg of item.priceUsd,
+#             totalQuantity = sum of item.quantity
+#   select itemId, avgPriceEur = avgPriceUsd * 0.85, totalQuantity
+#   into sink(writer, format);
+#
+# query.run(Backend::flink());

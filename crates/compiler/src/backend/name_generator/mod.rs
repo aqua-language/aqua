@@ -1,30 +1,22 @@
-use std::sync::LazyLock;
-use std::sync::Mutex;
-
 use adjectives::ADJECTIVES;
 use nouns::NOUNS;
-use rand::rngs::OsRng;
-use rand::Rng;
+use std::collections::hash_map::RandomState;
+use std::hash::BuildHasher;
+use std::hash::Hasher;
+
 mod adjectives;
 mod nouns;
 
-pub static NAME_GENERATOR: LazyLock<Mutex<NameGenerator>> =
-    LazyLock::new(|| Mutex::new(NameGenerator::new()));
+fn rng() -> u64 {
+    RandomState::new().build_hasher().finish()
+}
 
-pub struct NameGenerator(OsRng);
-
-impl NameGenerator {
-    pub fn new() -> NameGenerator {
-        NameGenerator(OsRng::default())
-    }
-
-    pub fn generate(&mut self) -> String {
-        let adjective = ADJECTIVES[self.0.gen_range(0..ADJECTIVES.len())];
-        let noun = NOUNS[self.0.gen_range(0..NOUNS.len())];
-        let time = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
-        format!("{}-{}-{}", adjective, noun, time)
-    }
+pub fn generate_name() -> String {
+    let time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs();
+    let adjective = ADJECTIVES[rng() as usize % ADJECTIVES.len()];
+    let noun = NOUNS[rng() as usize % NOUNS.len()];
+    format!("{}-{}-{}", adjective, noun, time)
 }

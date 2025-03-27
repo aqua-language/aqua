@@ -1,29 +1,29 @@
 use std::rc::Rc;
 
+use ast::parse::lexer::Lexer;
+use ast::parse::parser::Parser;
 use ast::passes::Pass;
 use ast::Ast;
 use config::CompilerConfig;
+use report::span::Span;
 use report::Report;
-use syntax::lexer::Lexer;
-use syntax::parser::Parser;
-use syntax::span::Span;
 
 pub mod analysis;
 pub mod ast;
 pub mod backend;
-pub mod report;
 // pub mod ffi;
 pub mod builtins;
 pub mod collections;
 pub mod interpret;
 pub mod mir;
 pub mod print;
-pub mod syntax;
+pub mod report;
 pub mod transforms;
 pub mod traversal;
 
 #[cfg(feature = "optimiser")]
 pub mod opt;
+pub mod parser;
 
 #[macro_export]
 macro_rules! aqua {
@@ -34,7 +34,7 @@ macro_rules! aqua {
 
 #[derive(Debug)]
 pub struct Compiler {
-    pub sources: syntax::source::Cache,
+    pub sources: report::source::Cache,
     desugar: ast::passes::desugar::Context,
     query_desugar: ast::passes::query_desugar::Context,
     resolve: ast::passes::resolve::Context,
@@ -59,7 +59,7 @@ impl Default for Compiler {
 impl Compiler {
     pub fn new(config: CompilerConfig) -> Self {
         Compiler {
-            sources: syntax::source::Cache::new(),
+            sources: report::source::Cache::new(),
             desugar: ast::passes::desugar::Context::new(),
             query_desugar: ast::passes::query_desugar::Context::new(),
             resolve: ast::passes::resolve::Context::new(),
@@ -82,7 +82,10 @@ impl Compiler {
         let id = self.sources.add(name, input.clone());
         let mut lexer = Lexer::new(id, input.as_ref());
         let mut parser = Parser::new(&input, &mut lexer);
-        parser.parse(Parser::program).unwrap().v
+        let r = parser.parse(Parser::program).unwrap();
+        self.report.append(&mut parser.report);
+        self.report.append(&mut lexer.report);
+        r.v
     }
 
     pub fn init(&mut self) -> &mut Self {

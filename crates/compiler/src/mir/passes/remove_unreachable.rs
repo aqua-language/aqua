@@ -22,7 +22,7 @@ impl mir::Function {
             block.id = block_map[block.id];
             match &mut block.terminator {
                 Some(Terminator::Goto(b)) => *b = block_map[*b],
-                Some(Terminator::ConditionalGoto(_, b0, b1)) => {
+                Some(Terminator::IfElse(_, b0, b1)) => {
                     *b0 = block_map[*b0];
                     *b1 = block_map[*b1];
                 }
@@ -44,7 +44,7 @@ impl mir::Function {
             &Some(Terminator::Goto(b)) => {
                 self.dfs(visited, b);
             }
-            &Some(Terminator::ConditionalGoto(_, b0, b1)) => {
+            &Some(Terminator::IfElse(_, b0, b1)) => {
                 self.dfs(visited, b0);
                 self.dfs(visited, b1);
             }

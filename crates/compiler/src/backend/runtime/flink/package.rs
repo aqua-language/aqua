@@ -8,10 +8,12 @@ use std::process::Command;
 use std::process::Stdio;
 use std::sync::LazyLock;
 
+use crate::backend::name_generator::generate_name;
 use crate::builtins::types::instance::Instance;
-use crate::backend::name_generator::NAME_GENERATOR;
 
 const POM_TEMPLATE: &str = include_str!("pom-template.xml");
+
+const CACHE_DIR: &str = concat!(env!("HOME"), "/.cache/aqua");
 
 pub static FLINK_WORKSPACE: LazyLock<Workspace> = LazyLock::new(Workspace::new);
 
@@ -28,8 +30,7 @@ impl Default for Workspace {
 
 impl Workspace {
     pub fn new() -> Self {
-        let dir = directories::ProjectDirs::from("org", "aqua", "rust").unwrap();
-        let cache = dir.cache_dir();
+        let cache = PathBuf::from(CACHE_DIR);
         tracing::info!("Cache directory: {}", cache.display());
         let root = cache.join("workspace");
         Self { root }
@@ -50,11 +51,7 @@ impl Workspace {
 
     pub fn new_package(&self, source: impl std::fmt::Display) -> Result<Package> {
         let workspace = self.root.clone();
-        let name = NAME_GENERATOR
-            .lock()
-            .expect("Should not be locked")
-            .generate()
-            .to_string();
+        let name = generate_name();
         let path = workspace.join(&name);
         let src = path.join("src").join("main").join("java").join(&name);
         let main = src.join("Main.java");

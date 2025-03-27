@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use compiler::syntax::span::Span;
+use compiler::report::span::Span;
 use compiler::Compiler;
 use lsp_types::notification::DidSaveTextDocument;
 use lsp_types::notification::Notification;

@@ -1,13 +1,14 @@
-use crate::ast::Local;
-use crate::ast::Name;
-use crate::ast::Type;
 use crate::collections::set::Set;
 use crate::mir::BasicBlock;
 use crate::mir::BlockId;
 use crate::mir::Function;
+use crate::mir::Local;
+use crate::mir::Name;
 use crate::mir::Operation;
 use crate::mir::Stmt;
 use crate::mir::Terminator;
+use crate::mir::Type;
+use crate::report::span::Span;
 
 impl Stmt {
     pub fn new(op: Operation) -> Stmt {
@@ -21,6 +22,7 @@ impl Stmt {
 
 impl Function {
     pub fn new(
+        span: Span,
         name: Name,
         params: Vec<Local>,
         locals: Vec<Local>,
@@ -28,6 +30,7 @@ impl Function {
         blocks: Vec<BasicBlock>,
     ) -> Self {
         Self {
+            span,
             name,
             params,
             locals,

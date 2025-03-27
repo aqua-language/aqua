@@ -63,7 +63,7 @@ struct Printer<'a, 'b> {
 }
 
 impl<'a, 'b> Print<'b> for Printer<'a, 'b> {
-    fn fmt(&mut self) -> &mut std::fmt::Formatter<'b> {
+    fn formatter_mut(&mut self) -> &mut std::fmt::Formatter<'b> {
         self.f
     }
 
@@ -82,7 +82,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             Dataflow::Collocate(_, _) => todo!(),
             Dataflow::Sink(s, w, e) => {
                 self.stream_stmt(s)?;
-                self.kw("let")?;
+                self.keyword("let")?;
                 self.space()?;
                 self.lit("_")?;
                 self.space()?;
@@ -185,7 +185,7 @@ impl<'a, 'b> Printer<'a, 'b> {
     fn stream_stmt(&mut self, s0: &Stream) -> std::fmt::Result {
         match s0.kind() {
             Operator::Source(r, e, f, slack, winterval) => {
-                self.kw("let")?;
+                self.keyword("let")?;
                 self.space()?;
                 self.stream_id(s0)?;
                 self.space()?;
@@ -215,7 +215,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             }
             Operator::Map(s1, f) => {
                 self.stream_stmt(s1)?;
-                self.kw("let")?;
+                self.keyword("let")?;
                 self.space()?;
                 self.stream_id(s0)?;
                 self.space()?;
@@ -236,7 +236,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             }
             Operator::Filter(s1, f) => {
                 self.stream_stmt(s1)?;
-                self.kw("let")?;
+                self.keyword("let")?;
                 self.space()?;
                 self.stream_id(s0)?;
                 self.space()?;
@@ -260,7 +260,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             Operator::Keyby(_, _) => todo!(),
             Operator::Window(s1, a, f) => {
                 self.stream_stmt(s1)?;
-                self.kw("let")?;
+                self.keyword("let")?;
                 self.space()?;
                 self.stream_id(s0)?;
                 self.space()?;
@@ -285,7 +285,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             Operator::Merge(s1, s2) => {
                 self.stream_stmt(s1)?;
                 self.stream_stmt(s2)?;
-                self.kw("let")?;
+                self.keyword("let")?;
                 self.space()?;
                 self.stream_id(s0)?;
                 self.space()?;
@@ -304,7 +304,7 @@ impl<'a, 'b> Printer<'a, 'b> {
             Operator::IncrWindow(_, _, _, _, _) => todo!(),
             Operator::Take(s1, i) => {
                 self.stream_stmt(s1)?;
-                self.kw("let")?;
+                self.keyword("let")?;
                 self.space()?;
                 self.stream_id(s0)?;
                 self.space()?;

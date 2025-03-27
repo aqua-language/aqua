@@ -1,8 +1,8 @@
 //! Replace type variables with types in the AST.
 use std::rc::Rc;
 
-use crate::ast::Impl;
 use crate::ast::Ast;
+use crate::ast::Impl;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
 use crate::ast::Type;
@@ -25,7 +25,7 @@ impl Apply<'_> {
 impl Mapper for Apply<'_> {
     fn map_type(&mut self, t: &Type) -> Type {
         match t {
-            Type::Var(x) => match self.0.get_type_value(*x) {
+            Type::Var(x) => match self.0.get_type_value(*x).clone() {
                 TypeVarValue::Unknown(_) => t.clone(),
                 TypeVarValue::Known(t) => self.map_type(&t),
             },
@@ -35,7 +35,7 @@ impl Mapper for Apply<'_> {
 
     fn map_impl(&mut self, i: &Impl) -> Impl {
         match i {
-            Impl::Var(x) => match self.0.get_impl_value(*x) {
+            Impl::Var(x) => match self.0.get_impl_value(*x).clone() {
                 ImplVarValue::Unknown => i.clone(),
                 ImplVarValue::Known(i1) => self.map_impl(&i1),
             },

@@ -32,7 +32,7 @@ use compiler::ast::Type;
 use compiler::ast::TypeBody;
 
 use compiler::ast::TypeVar;
-use compiler::syntax::span::Span;
+use compiler::report::span::Span;
 
 pub fn program<const N: usize>(ss: [Stmt; N]) -> Ast {
     Ast::new(span(), vec(ss))
@@ -176,9 +176,8 @@ pub fn ty_fun_effect<const N: usize>(ts: [Type; N], t: Type, e: Effect) -> Type 
 }
 
 pub fn effects<const N: usize>(xs: [&'static str; N]) -> Effect {
-    xs.into_iter().fold(Effect::Unknown, |acc, x| {
-        Effect::Cons(name(x), Rc::new(acc))
-    })
+    xs.into_iter()
+        .fold(Effect::Nil, |acc, x| Effect::Cons(name(x), Rc::new(acc)))
 }
 
 pub fn ty_var(id: u32) -> Type {
@@ -217,7 +216,7 @@ pub mod sugared {
     use compiler::ast::Expr;
     use compiler::ast::Pat;
     use compiler::ast::Type;
-    use compiler::syntax::token::Token;
+    use compiler::ast::parse::token::Token;
 
     use super::span;
 
@@ -754,6 +753,28 @@ pub fn stmt_def<const N: usize, const M: usize, const K: usize>(
     .into()
 }
 
+pub fn stmt_def_effect<const N: usize, const M: usize, const K: usize>(
+    x: impl Into<Name>,
+    gs: [&'static str; N],
+    ps: [(&'static str, Type); K],
+    t: Type,
+    e: Effect,
+    qs: [Impl; M],
+    b: impl Into<ExprBody>,
+) -> Stmt {
+    StmtDef::new(
+        span(),
+        name(x),
+        app(gs, name),
+        params(ps),
+        t,
+        e,
+        vec(qs),
+        b.into(),
+    )
+    .into()
+}
+
 pub fn dummy_body() -> ExprBody {
     ExprBody::Builtin(BuiltinDef {
         fun: |_, _| todo!(),
@@ -1099,6 +1120,14 @@ pub fn query_over_compute<const N: usize>(e: Expr, aggs: [Aggr; N]) -> QueryOp {
     QueryOp::OverCompute(span(), Rc::new(e), vec(aggs))
 }
 
+pub fn query_drop(x: &'static str) -> QueryOp {
+    QueryOp::Drop(span(), name(x))
+}
+
+pub fn query_distinct() -> QueryOp {
+    QueryOp::Distinct(span())
+}
+
 pub fn aggr(x0: &'static str, x1: &'static str, e: Expr) -> Aggr {
     Aggr::new(local_name(x0), name(x1), e, None)
 }
@@ -1299,5 +1328,32 @@ pub mod traits {
 
     pub fn ty_into_iterator_into_iter(t0: Type) -> Type {
         ty_assoc("IntoIterator", [t0], [], "IntoIter", [])
+    }
+}
+
+pub mod mir {
+    use compiler::ast;
+    use compiler::mir;
+
+    use super::app;
+    use super::local;
+    use super::name;
+    use super::span;
+
+    pub fn mir_function<const N: usize, const M: usize>(
+        x: &'static str,
+        ps: [(&'static str, ast::Type); N],
+        ls: [(&'static str, ast::Type); M],
+        t: ast::Type,
+        bbs: Vec<mir::BasicBlock>,
+    ) -> mir::Function {
+        mir::Function::new(
+            span(),
+            name(x),
+            app(ps, |(x, t)| local((x, t))),
+            app(ls, |(x, t)| local((x, t))),
+            t,
+            bbs,
+        )
     }
 }

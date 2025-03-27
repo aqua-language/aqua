@@ -42,7 +42,7 @@ impl Function {
                                 }
                             }
                         }
-                        Operation::StorageLive(_) | Operation::StorageDead(_) => {}
+                        Operation::Live(_) | Operation::Dead(_) => {}
                         Operation::Noop => {}
                     }
                 }
@@ -55,8 +55,8 @@ impl Function {
         for block in &mut self.blocks {
             block.stmts.retain(|stmt| match &stmt.op {
                 Operation::Assign(dest, _) => used.contains(dest),
-                Operation::StorageLive(local) => used.contains(&Place::from(local.clone())),
-                Operation::StorageDead(local) => used.contains(&Place::from(local.clone())),
+                Operation::Live(local) => used.contains(&Place::from(local.clone())),
+                Operation::Dead(local) => used.contains(&Place::from(local.clone())),
                 Operation::Call { dest, .. } => used.contains(dest),
                 _ => true,
             });

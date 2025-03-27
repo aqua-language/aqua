@@ -5,7 +5,7 @@ use crate::ast::Trait;
 use crate::ast::Type;
 use crate::collections::set::Set;
 use crate::report::Diagnostic;
-use crate::syntax::span::Span;
+use crate::report::span::Span;
 
 use super::Context;
 
@@ -591,18 +591,18 @@ impl Context {
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<bool, Error>,
     ) -> Result<(), Error> {
-        let type_snapshot = self.type_ctx().type_union_find.snapshot();
+        self.type_ctx().type_union_find.snapshot();
         match f(self) {
             Ok(satisfied) => {
                 if satisfied && !self.rollback {
-                    self.type_ctx().type_union_find.commit(type_snapshot);
+                    self.type_ctx().type_union_find.commit();
                 } else {
-                    self.type_ctx().type_union_find.rollback_to(type_snapshot);
+                    self.type_ctx().type_union_find.rollback();
                 }
                 Ok(())
             }
             Err(e) => {
-                self.type_ctx().type_union_find.rollback_to(type_snapshot);
+                self.type_ctx().type_union_find.rollback();
                 Err(e)
             }
         }

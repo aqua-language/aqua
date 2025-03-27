@@ -2,6 +2,9 @@ use std::rc::Rc;
 
 use smol_str::format_smolstr;
 
+use crate::ast::parse::splice::Splice;
+use crate::ast::parse::splice::SpliceIterator;
+use crate::ast::parse::token::Token;
 use crate::ast::passes::Pass;
 use crate::ast::Ast;
 use crate::ast::Expr;
@@ -12,10 +15,7 @@ use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Type;
 use crate::report::Report;
-use crate::syntax::span::Span;
-use crate::syntax::splice::Splice;
-use crate::syntax::splice::SpliceIterator;
-use crate::syntax::token::Token;
+use crate::report::span::Span;
 use crate::traversal::mapper::Mapper;
 
 use self::util::infix;
@@ -227,8 +227,8 @@ impl Context {
                 // Only lex the part of the file that is the splice.
                 // let source = &self.sources.fetch(&file).unwrap().text()[..end as usize];
                 // let lexer = crate::lexer::Lexer::new_from(file, source, start as usize);
-                let lexer = crate::syntax::lexer::Lexer::new_from(file, s, start as usize);
-                let mut parser = crate::syntax::parser::Parser::new(s, lexer);
+                let lexer = crate::ast::parse::lexer::Lexer::new_from(file, s, start as usize);
+                let mut parser = crate::ast::parse::parser::Parser::new(s, lexer);
                 if let Ok(e) = parser.parse(|p, follow| p.expr(follow)) {
                     let e = self.map_expr(&e.v);
                     unop(span, Type::Unknown, "Display", "toString", e)
@@ -253,7 +253,7 @@ mod util {
     use crate::ast::Path;
     use crate::ast::Segment;
     use crate::ast::Type;
-    use crate::syntax::span::Span;
+    use crate::report::span::Span;
 
     pub(super) fn unop(s: Span, t: Type, x0: &'static str, x1: &'static str, e: Expr) -> Expr {
         let s0 = Segment::new_name(Name::new(s, x0));

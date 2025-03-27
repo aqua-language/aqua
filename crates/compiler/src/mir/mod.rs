@@ -1,10 +1,16 @@
-use crate::ast::Local;
-use crate::ast::Name;
-use crate::ast::Place;
-use crate::ast::Type;
-use crate::collections::set::Set;
-use crate::syntax::symbol::Symbol;
+use runtime::HashMap;
 
+pub use crate::ast::Local;
+pub use crate::ast::Name;
+pub use crate::ast::Place;
+pub use crate::ast::Type;
+pub use crate::ast::Index;
+pub use crate::ast::PlaceElem;
+use crate::collections::set::Set;
+use crate::report::span::Span;
+use crate::report::symbol::Symbol;
+
+pub mod display;
 pub mod passes;
 pub mod utils;
 
@@ -12,14 +18,29 @@ pub type BlockId = usize;
 
 #[derive(Debug, Clone)]
 pub struct Mir {
+    pub enums: HashMap<Name, Type>,
+    pub structs: HashMap<Name, Type>,
     pub locals: Vec<Local>,
     pub blocks: Vec<BasicBlock>,
     pub functions: Vec<Function>,
 }
 
+impl Mir {
+    pub fn new(locals: Vec<Local>, blocks: Vec<BasicBlock>, functions: Vec<Function>) -> Mir {
+        Mir {
+            enums: HashMap::default(),
+            structs: HashMap::default(),
+            locals,
+            blocks,
+            functions,
+        }
+    }
+}
+
 /// A MIR function. The control-flow in a MIR function is represented by a control-flow graph.
 #[derive(Debug, Clone)]
 pub struct Function {
+    pub span: Span,
     pub name: Name,
     pub params: Vec<Local>,
     pub locals: Vec<Local>,
@@ -66,10 +87,10 @@ pub enum Operation {
     // Marks a place as live. This is necessary since the MIR can contain mutable variables.
     // With only Assign, we cannot distinguish between a place that is initialized and a place that
     // is mutated.
-    StorageLive(Local),
+    Live(Local),
     // Marks a place as dead. This is necessary since the MIR must know when variables go out of
     // scope.
-    StorageDead(Local),
+    Dead(Local),
     Call {
         dest: Place,
         func: Operand,
@@ -82,7 +103,7 @@ pub enum Operation {
 pub enum Terminator {
     Return,
     Goto(BlockId),
-    ConditionalGoto(Operand, BlockId, BlockId),
+    IfElse(Operand, BlockId, BlockId),
 }
 
 #[derive(Debug, Clone)]

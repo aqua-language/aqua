@@ -1,0 +1,23 @@
+struct Data(time:Time, key:String, value:i32);
+
+var v: Vec[record(x:Data)] =
+    _::collect(
+        _::take(
+            _::filter(
+                _::map[_](
+                    Stream[Data]::source(
+                        Reader::file(
+                            Path::new("data.csv"), false
+                        ),
+                        Encoding::csv(','),
+                        (x: Data, t: Time) => x.time,
+                        _::postfix_min(1),
+                        _::postfix_s(1)
+                    ),
+                    (x: Data) => record(x = x)
+                ),
+                r => PartialOrd::lt(r.x.value, 50)
+            ),
+            100
+        )
+    );

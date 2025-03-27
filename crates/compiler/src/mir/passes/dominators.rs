@@ -75,7 +75,7 @@ impl Function {
                     Terminator::Goto(b1) => {
                         preds[*b1].push(b0);
                     }
-                    Terminator::ConditionalGoto(_, b1, b2) => {
+                    Terminator::IfElse(_, b1, b2) => {
                         preds[*b1].push(b0);
                         preds[*b2].push(b0);
                     }
@@ -95,7 +95,7 @@ impl Function {
                     Terminator::Goto(b1) => {
                         succs[b0].push(*b1);
                     }
-                    Terminator::ConditionalGoto(_, b1, b2) => {
+                    Terminator::IfElse(_, b1, b2) => {
                         succs[b0].push(*b1);
                         succs[b0].push(*b2);
                     }

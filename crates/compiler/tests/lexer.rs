@@ -1,6 +1,6 @@
-use compiler::syntax::lexer::Lexer;
-use compiler::syntax::source::Cache;
-use compiler::syntax::token::Token;
+use compiler::ast::parse::lexer::Lexer;
+use compiler::ast::parse::token::Token;
+use compiler::report::source::Cache;
 
 struct TestLexer {
     cache: Cache,

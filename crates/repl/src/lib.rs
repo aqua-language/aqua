@@ -1,7 +1,7 @@
 #![allow(unused)]
 
+use compiler::ast::parse::parser::Parser;
 use compiler::ast::Ast;
-use compiler::syntax::parser::Parser;
 use compiler::Compiler;
 use config::ReplConfig;
 use helper::validator::StmtIterator;

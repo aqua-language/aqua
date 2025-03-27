@@ -11,10 +11,12 @@ use std::process::Stdio;
 use std::rc::Rc;
 use std::sync::LazyLock;
 
+use crate::backend::name_generator::generate_name;
 use crate::builtins::types::instance::Instance;
-use crate::backend::name_generator::NAME_GENERATOR;
 
 const RUNTIME: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../runtime");
+
+const CACHE_DIR: &str = concat!(env!("HOME"), "/.cache/aqua");
 
 pub static NATIVE_WORKSPACE: LazyLock<Workspace> = LazyLock::new(Workspace::new);
 
@@ -33,8 +35,7 @@ impl Default for Workspace {
 
 impl Workspace {
     pub fn new() -> Self {
-        let dir = directories::ProjectDirs::from("org", "aqua", "rust").unwrap();
-        let cache = dir.cache_dir();
+        let cache = PathBuf::from(CACHE_DIR);
         tracing::info!("Cache directory: {}", cache.display());
         let path = cache.join("workspace");
         let toml = path.join("Cargo.toml");
@@ -81,11 +82,7 @@ impl Workspace {
     pub fn new_package(&self, source: impl std::fmt::Display) -> Result<Package> {
         let workspace = self.path.clone();
         let target = self.target.clone();
-        let name = NAME_GENERATOR
-            .lock()
-            .expect("Should not be locked")
-            .generate()
-            .to_string();
+        let name = generate_name();
         let path = self.crates.join(&name);
         let src = path.join("src");
         let main = src.join("main.rs");

@@ -14,7 +14,7 @@ pub mod unify;
 
 use std::rc::Rc;
 
-use ena::unify::InPlaceUnificationTable;
+use crate::collections::unionfind::UnionFind;
 use impl_var::ImplVarValue;
 use solver::Constraint;
 
@@ -38,7 +38,7 @@ use crate::collections::map::Map;
 use crate::collections::set::Set;
 use crate::report::Diagnostic;
 use crate::report::Report;
-use crate::syntax::span::Span;
+use crate::report::span::Span;
 use crate::traversal::mappable::Mappable;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitable::Visitable;
@@ -81,8 +81,8 @@ impl Default for Context {
 
 #[derive(Debug)]
 pub struct TypeContext {
-    pub type_union_find: InPlaceUnificationTable<TypeVar>,
-    pub impl_union_find: InPlaceUnificationTable<ImplVar>,
+    pub type_union_find: UnionFind<TypeVar>,
+    pub impl_union_find: UnionFind<ImplVar>,
     constraints: Set<Constraint>,
     pub where_clause: Vec<Impl>,
 }
@@ -90,8 +90,8 @@ pub struct TypeContext {
 impl TypeContext {
     pub fn new(where_clause: Vec<Impl>) -> TypeContext {
         TypeContext {
-            type_union_find: InPlaceUnificationTable::new(),
-            impl_union_find: InPlaceUnificationTable::new(),
+            type_union_find: UnionFind::new(),
+            impl_union_find: UnionFind::new(),
             constraints: vec![].into(),
             where_clause,
         }
@@ -136,11 +136,11 @@ impl Context {
     }
 
     pub fn get_type_value(&mut self, a: TypeVar) -> TypeVarValue {
-        self.type_ctx().type_union_find.probe_value(a)
+        self.type_ctx().type_union_find.probe(a)
     }
 
     pub fn get_impl_value(&mut self, a: ImplVar) -> ImplVarValue {
-        self.type_ctx().impl_union_find.probe_value(a)
+        self.type_ctx().impl_union_find.probe(a)
     }
 
     pub fn union_impl_value(&mut self, a: ImplVar, b: Impl) {
@@ -163,7 +163,7 @@ impl Context {
         Type::Var(
             self.type_ctx()
                 .type_union_find
-                .new_key(TypeVarValue::Unknown(kind)),
+                .make(TypeVarValue::Unknown(kind)),
         )
     }
 
@@ -177,7 +177,7 @@ impl Context {
         Impl::Var(
             self.type_ctx()
                 .impl_union_find
-                .new_key(ImplVarValue::Unknown),
+                .make(ImplVarValue::Unknown),
         )
     }
 
@@ -186,11 +186,11 @@ impl Context {
         t1.gather_constraints(self);
         let t0 = &t0.expand();
         let t1 = &t1.expand();
-        let snapshot = self.type_ctx().type_union_find.snapshot();
+        self.type_ctx().type_union_find.snapshot();
         if self.try_unify(&t0, &t1).is_ok() {
-            self.type_ctx().type_union_find.commit(snapshot)
+            self.type_ctx().type_union_find.commit()
         } else {
-            self.type_ctx().type_union_find.rollback_to(snapshot);
+            self.type_ctx().type_union_find.rollback();
             let t0 = t0.apply(self);
             let t1 = t1.apply(self);
             self.report.add(Diagnostic::err2(
@@ -211,7 +211,7 @@ impl Context {
                     (TypeVarValue::Known(t3), TypeVarValue::Unknown(k1))
                         if k1.is_unifiable_with(&t3) =>
                     {
-                        self.union_type_value(*x1, t3);
+                        self.union_type_value(*x1, t3.clone());
                         Ok(())
                     }
                     (TypeVarValue::Unknown(k0), TypeVarValue::Known(t4))
@@ -325,23 +325,23 @@ impl Context {
     fn debug(&mut self, label: &str) {
         println!("Debug ({label})");
         println!("* Substitutions:");
-        for i in 0..self.type_ctx().type_union_find.len() as u32 {
-            let x = TypeVar(i);
-            let xr = self.type_ctx().type_union_find.find(x);
-            let t = self.type_ctx().type_union_find.probe_value(x);
-            if xr != x {
-                println!("    '{} -> '{}", x, xr);
-            } else {
-                match t {
-                    TypeVarValue::Known(t) => {
-                        println!("    '{} -> {}", x, t.verbose());
-                    }
-                    TypeVarValue::Unknown(k) => {
-                        println!("    '{} -> {}", x, k);
-                    }
-                }
-            }
-        }
+        // for i in 0..self.type_ctx().type_union_find.len() as u32 {
+        //     let x = TypeVar(i);
+        //     let xr = self.type_ctx().type_union_find.find(x);
+        //     let t = self.type_ctx().type_union_find.probe_value(x);
+        //     if xr != x {
+        //         println!("    '{} -> '{}", x, xr);
+        //     } else {
+        //         match t {
+        //             TypeVarValue::Known(t) => {
+        //                 println!("    '{} -> {}", x, t.verbose());
+        //             }
+        //             TypeVarValue::Unknown(k) => {
+        //                 println!("    '{} -> {}", x, k);
+        //             }
+        //         }
+        //     }
+        // }
         println!("* Constraints:");
         for constraint in self.type_ctx().constraints.iter() {
             println!("    {}", constraint);

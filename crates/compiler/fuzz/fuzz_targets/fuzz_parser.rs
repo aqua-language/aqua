@@ -2,9 +2,9 @@
 
 use std::rc::Rc;
 
-use compiler::syntax::lexer::Lexer;
-use compiler::syntax::parser::Parser;
-use compiler::syntax::source::Cache;
+use compiler::ast::parse::lexer::Lexer;
+use compiler::ast::parse::parser::Parser;
+use compiler::report::source::Cache;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {

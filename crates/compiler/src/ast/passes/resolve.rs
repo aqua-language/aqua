@@ -575,13 +575,9 @@ impl Context {
 
     #[track_caller]
     fn wrong_arity(&mut self, name: &Name, found: usize, expected: usize) {
-        #[cfg(not(feature = "explicit"))]
-        let file = "";
-        #[cfg(feature = "explicit")]
-        let file = format!("{}: ", std::panic::Location::caller());
         self.report.add(Diagnostic::err(
             name.span,
-            format!("{file}Wrong number of type arguments. Found {found}, expected {expected}",),
+            format!("Wrong number of type arguments. Found {found}, expected {expected}",),
             format!("Expected {} arguments.", expected),
         ));
     }

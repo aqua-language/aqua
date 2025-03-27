@@ -2,7 +2,6 @@ mod constructors;
 mod downcasts;
 mod get_span;
 mod get_type;
-pub mod key;
 mod upcasts;
 mod utils;
 mod with_span;

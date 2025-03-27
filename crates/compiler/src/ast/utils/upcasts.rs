@@ -13,8 +13,8 @@ use crate::ast::StmtTrait;
 use crate::ast::StmtType;
 use crate::ast::Type;
 use crate::ast::TypeBody;
-use crate::syntax::span::Span;
-use crate::syntax::symbol::Symbol;
+use crate::report::span::Span;
+use crate::report::symbol::Symbol;
 
 impl From<StmtLocal> for Stmt {
     fn from(v: StmtLocal) -> Stmt {

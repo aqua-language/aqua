@@ -20,7 +20,7 @@ use crate::ast::Path;
 use crate::ast::QueryOp;
 use crate::ast::Type;
 use crate::report::Report;
-use crate::syntax::span::Span;
+use crate::report::span::Span;
 use crate::traversal::mapper::Mapper;
 
 use self::util::call;
@@ -93,6 +93,7 @@ impl Context {
             QueryOp::JoinOverOn(_, _, _, _, _) => todo!(),
             QueryOp::Err(s) => Expr::Err(*s, Type::Unknown),
             QueryOp::Drop(s, x) => self.drop_clause(e0, *s, *x),
+            QueryOp::Distinct(_) => todo!(),
         }
     }
 
@@ -381,7 +382,7 @@ mod util {
     use crate::ast::Name;
     use crate::ast::Path;
     use crate::ast::Type;
-    use crate::syntax::span::Span;
+    use crate::report::span::Span;
 
     pub(super) fn relation(s: Span) -> Name {
         Name::new(s, "r")

@@ -1,4 +1,4 @@
-use crate::syntax::span::Span;
+use crate::report::span::Span;
 
 use crate::ast::Expr;
 use crate::ast::Pat;
@@ -101,6 +101,7 @@ impl QueryOp {
             QueryOp::Err(_) => QueryOp::Err(s),
             QueryOp::JoinOverOn(_, x, e0, e1, e2) => QueryOp::JoinOverOn(s, x, e0, e1, e2),
             QueryOp::Drop(_, x) => QueryOp::Drop(s, x),
+            QueryOp::Distinct(s) => QueryOp::Distinct(s),
         }
     }
 }

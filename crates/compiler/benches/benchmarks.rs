@@ -3,10 +3,10 @@ use std::rc::Rc;
 
 use compiler::analysis;
 use compiler::aqua;
+use compiler::ast::parse::lexer::Lexer;
+use compiler::ast::parse::parser::Parser;
 use compiler::ast::passes::Pass as _;
-use compiler::syntax::lexer::Lexer;
-use compiler::syntax::parser::Parser;
-use compiler::syntax::source::Cache;
+use compiler::report::source::Cache;
 use compiler::Compiler;
 use divan::Bencher;
 

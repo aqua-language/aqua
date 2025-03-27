@@ -58,6 +58,7 @@ use common::dsl::query_select;
 use common::dsl::query_var;
 use common::dsl::query_where;
 use common::dsl::stmt_def;
+use common::dsl::stmt_def_effect;
 use common::dsl::stmt_enum;
 use common::dsl::stmt_err;
 use common::dsl::stmt_expr;
@@ -1136,6 +1137,14 @@ fn test_parser_stmt_enum2() {
 }
 
 #[test]
+#[ignore]
+fn test_parser_stmt_enum3() {
+    let a = parse_stmt(aqua!("enum E { A(i32, i32) }")).unwrap();
+    let b = stmt_enum("E", [], [("A", ty("i32")), ("B", ty("i32"))]);
+    check!(a, b);
+}
+
+#[test]
 fn test_parser_expr_enum0() {
     let a = parse_expr(aqua!("E::A")).unwrap();
     let b = expr_unit_variant("E", [], "A");
@@ -1989,7 +1998,7 @@ fn test_parser_recover3() {
             │
           1 │ def f(x: +): i32 = 1;
             │          ┬
-            │          ╰── Expected one of `&`, `[`, `(`, `!`, `_`, `struct`, ...
+            │          ╰── Expected one of `&`, `[`, `(`, `!`, `_`, `record`, ...
          ───╯"
     );
 }
@@ -2034,7 +2043,7 @@ fn test_parse_effect_fun2() {
 
 #[test]
 fn test_parse_effect_fun3() {
-    let a = parse_type(aqua!("fun(A, B) => C ~ {D}")).unwrap();
+    let a = parse_type(aqua!("(A, B) => C ~ {D}")).unwrap();
     let b = ty_fun_effect([ty("A"), ty("B")], ty("C"), effects(["D"]));
     check!(a, b);
 }
@@ -2058,4 +2067,127 @@ fn test_parser_depth1() {
 fn test_parser_depth2() {
     let r = format!("{}1", "1+".repeat(10000));
     let _ = parse_expr(&r).unwrap();
+}
+
+#[test]
+fn test_parser_expr_nested_if_else() {
+    let a = parse_expr(aqua!("if x { if y { 1 } else { 2 } } else { 3 }")).unwrap();
+    let b = expr_if_else(
+        expr_var("x"),
+        block(
+            [],
+            expr_if_else(
+                expr_var("y"),
+                block([], expr_int("1")),
+                block([], expr_int("2")),
+            ),
+        ),
+        block([], expr_int("3")),
+    );
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_complex_tuple0() {
+    let a = parse_expr(aqua!("(1 + 2, true and false, 'a')")).unwrap();
+    let b = expr_tuple([
+        expr_add(expr_int("1"), expr_int("2")),
+        expr_and(expr_bool(true), expr_bool(false)),
+        expr_char('a'),
+    ]);
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_deref_assign0() {
+    let a = parse_expr(aqua!("*p = 42")).unwrap();
+    let b = expr_assign(expr_deref(expr_var("p")), expr_int("42"));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_complex_call0() {
+    let a = parse_expr(aqua!("foo(bar(1, 2), baz)")).unwrap();
+    let b = expr_call_direct(
+        "foo",
+        [],
+        [
+            expr_call_direct("bar", [], [expr_int("1"), expr_int("2")]),
+            expr_var("baz"),
+        ],
+    );
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_complex_match0() {
+    let a = parse_expr(aqua!("match t { (1, 2) => 0, (3, x) => x, _ => 99 }")).unwrap();
+    let b = expr_match(
+        expr_var("t"),
+        [
+            (pat_tuple([pat_int("1"), pat_int("2")]), expr_int("0")),
+            (pat_tuple([pat_int("3"), pat_var("x")]), expr_var("x")),
+            (pat_wild(), expr_int("99")),
+        ],
+    );
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_expr_nested_query_join_aggregation() {
+    let a = parse_expr(aqua!(
+        "from x in foo()
+         join y in bar() over window on x.id == y.id
+         group k = (x, y) over tumbling(30)
+             compute total = sum of x.data, count = count of y
+         select result = total + count
+         into sink()"
+    ))
+    .unwrap();
+
+    let b = expr_query_into(
+        "x",
+        Type::Unknown,
+        expr_call_direct("foo", [], []),
+        [
+            query_join_over_on(
+                "y",
+                expr_call_direct("bar", [], []),
+                expr_var("window"),
+                expr_eq(
+                    expr_field(expr_var("x"), "id"),
+                    expr_field(expr_var("y"), "id"),
+                ),
+            ),
+            query_group_over_compute(
+                "k",
+                expr_tuple([expr_var("x"), expr_var("y")]),
+                expr_call_direct("tumbling", [], [expr_int("30")]),
+                [
+                    aggr("total", "sum", expr_field(expr_var("x"), "data")),
+                    aggr("count", "count", expr_var("y")),
+                ],
+            ),
+            query_select([("result", expr_add(expr_var("total"), expr_var("count")))]),
+        ],
+        "sink",
+        [],
+        [],
+    );
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_def_advanced_generics_effects() {
+    let a = parse_stmt(aqua!("def f[T](x: T): T ~ {io} where Trait[T] = x;")).unwrap();
+    let b = stmt_def_effect(
+        "f",
+        ["T"],
+        [("x", ty("T"))],
+        ty("T"),
+        effects(["io"]),
+        [bound("Trait", [ty("T")], [])],
+        expr_var("x"),
+    );
+    check!(a, b);
 }

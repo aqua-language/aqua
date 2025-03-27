@@ -14,7 +14,7 @@ use crate::mir::Operand;
 use crate::mir::Operation;
 use crate::mir::Rvalue;
 use crate::mir::Terminator;
-use crate::syntax::span::Span;
+use crate::report::span::Span;
 
 impl Function {
     fn do_tree(&self, b: BlockId, loops: &mut Vec<BlockId>) -> Block {
@@ -84,7 +84,7 @@ impl Function {
                             Rc::new(rhs_expr),
                         ))));
                     }
-                    Operation::StorageLive(_l) => {
+                    Operation::Live(_l) => {
                         todo!()
                         //     stmts.push(Stmt::Local(StmtLocal::new(
                         //         Span::Generated,
@@ -92,7 +92,7 @@ impl Function {
                         //         None,
                         //     )));
                     }
-                    Operation::StorageDead(_) => {}
+                    Operation::Dead(_) => {}
                     Operation::Call {
                         dest: _,
                         func,
@@ -128,7 +128,7 @@ impl Function {
                 Terminator::Goto(l) => {
                     stmts.extend(self.do_branch(b, l, loops).stmts);
                 }
-                Terminator::ConditionalGoto(cond, t, f) => {
+                Terminator::IfElse(cond, t, f) => {
                     let cond_expr = self.operand_to_expr(&cond);
                     let then_block = self.do_branch(b, t, loops);
                     let else_block = self.do_branch(b, f, loops);

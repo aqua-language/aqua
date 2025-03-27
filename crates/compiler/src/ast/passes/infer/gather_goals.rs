@@ -2,7 +2,7 @@ use crate::ast::Expr;
 use crate::ast::Ast;
 use crate::ast::Stmt;
 use crate::ast::Type;
-use crate::syntax::span::Span;
+use crate::report::span::Span;
 use crate::traversal::visitable::Visitable;
 use crate::traversal::visitor::Visitor;
 

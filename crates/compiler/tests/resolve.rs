@@ -861,3 +861,141 @@ fn test_resolve_shadow0() {
          ───╯"
     );
 }
+
+#[test]
+fn test_resolve_trait_unimplemented_method() {
+    let a = resolve(aqua!(
+        "trait Foo {
+             def bar(): i32;
+         }
+         impl Foo {
+             def baz(): i32 = 0;
+         }"
+    ))
+    .unwrap_err();
+    let b = program([
+        stmt_trait("Foo", [], [], [tr_def("bar", [], [], ty("i32"), [])], []),
+        stmt_impl(
+            [],
+            bound_err(),
+            [],
+            [stmt_def("baz", [], [], ty("i32"), [], expr_int("0"))],
+            [],
+        ),
+    ]);
+    check!(
+        a,
+        b,
+        "Error: Wrong defs implemented for Foo. Found { baz }, expected { bar }
+            ╭─[test:4:6]
+            │
+          4 │ impl Foo {
+            │      ─┬─
+            │       ╰─── Expected { bar }.
+         ───╯"
+    );
+}
+
+#[test]
+fn test_resolve_nested_scopes_shadow() {
+    let a = resolve(aqua!(
+        "def outer(): i32 = {
+             var x = 10;
+             {
+                 var x = 20;
+                 x
+             }
+         }"
+    ))
+    .unwrap();
+    let b = program([stmt_def(
+        "outer",
+        [],
+        [],
+        ty("i32"),
+        [],
+        expr_block(
+            [stmt_var("x", Type::Unknown, expr_int("10"))],
+            expr_block(
+                [stmt_var("x", Type::Unknown, expr_int("20"))],
+                expr_var("x"),
+            ),
+        ),
+    )]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_forward_type_alias() {
+    let a = resolve(aqua!(
+        "var p: P = P;
+         type P = ();
+        "
+    ))
+    .unwrap();
+    let b = program([
+        stmt_var("p", ty_alias("P", []), expr_struct("P", [], [])),
+        stmt_type("P", [], Type::Unit),
+    ]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_recursive_enum() {
+    let a = resolve(aqua!(
+        "enum List {
+             Nil,
+             Cons(i32, List)
+         }
+         var x = List::Cons(0, List::Nil);"
+    ))
+    .unwrap();
+    let b = program([
+        stmt_enum(
+            "List",
+            [],
+            [
+                ("Nil", Type::Unit),
+                ("Cons", ty_tuple([ty("i32"), ty("List")])),
+            ],
+        ),
+        stmt_var(
+            "x",
+            Type::Unknown,
+            expr_enum(
+                "List",
+                [],
+                "Cons",
+                expr_tuple([expr_int("0"), expr_enum("List", [], "Nil", expr_unit())]),
+            ),
+        ),
+    ]);
+    check!(a, b);
+}
+
+#[test]
+fn test_resolve_param_shadow_in_block() {
+    let a = resolve(aqua!(
+        "def f(x: i32): i32 = {
+             var x = x + 1;
+             x
+         }"
+    ))
+    .unwrap();
+    let b = program([stmt_def(
+        "f",
+        [],
+        [("x", ty("i32"))],
+        ty("i32"),
+        [],
+        expr_block(
+            [stmt_var(
+                "x",
+                Type::Unknown,
+                expr_call(expr_unresolved("+", []), [expr_val("x"), expr_int("1")]),
+            )],
+            expr_var("x"),
+        ),
+    )]);
+    check!(a, b);
+}

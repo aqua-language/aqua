@@ -46,7 +46,7 @@ use crate::builtins::value::Stream;
 use crate::builtins::value::Tuple;
 use crate::builtins::value::Value;
 use crate::builtins::value::Variant;
-use crate::syntax::span::Span;
+use crate::report::span::Span;
 
 pub(crate) trait Visitor {
     fn visit_program(&mut self, program: &Ast) {
@@ -602,6 +602,7 @@ pub(crate) trait Visitor {
             QueryOp::Drop(_, x) => {
                 self.visit_name(x);
             }
+            QueryOp::Distinct(_) => {}
         }
     }
 

@@ -1,0 +1,17 @@
+struct Data(time:Time, key:String, value:i32);
+
+var v: Vec[record(a:i32,b:i32)] =
+  from x:Data in Stream::source(
+      Reader::file(Path::new("data.csv"), false),
+      Encoding::csv(','),
+      (x:Data, t:Time) => x.time,
+      1min,
+      1s
+  )
+  where x.value < 50
+  select a = x.value * 5,
+         b = x.value * 10
+  limit 100
+  into collect();
+
+print(v);

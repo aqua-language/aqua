@@ -1,26 +1,43 @@
-use ena::unify::NoError;
-use ena::unify::UnifyKey;
-use ena::unify::UnifyValue;
-
 use crate::ast::Type;
 use crate::ast::TypeVar;
+use crate::collections::unionfind::Union;
 
 use super::primitives::floats;
 use super::primitives::ints;
 
-impl UnifyKey for TypeVar {
+impl From<TypeVar> for u32 {
+    fn from(t: TypeVar) -> u32 {
+        t.0
+    }
+}
+
+impl From<u32> for TypeVar {
+    fn from(t: u32) -> TypeVar {
+        TypeVar(t)
+    }
+}
+
+impl Union for TypeVar {
     type Value = TypeVarValue;
 
-    fn index(&self) -> u32 {
-        self.0
+    fn into_u32(self) -> u32 {
+        self.0 as u32
     }
 
-    fn from_index(i: u32) -> Self {
-        TypeVar(i)
+    fn from_u32(i: u32) -> TypeVar {
+        TypeVar(i as u32)
     }
 
-    fn tag() -> &'static str {
-        "TypeVar"
+    fn union(a: &Self::Value, b: &Self::Value) -> Self::Value {
+        use TypeVarValue::*;
+        match (a, b) {
+            (Unknown(k1), Unknown(k2)) => {
+                let k = k1.merge(*k2).expect("Type variables should be unifiable");
+                Unknown(k)
+            }
+            (Unknown(_), t) | (t, Unknown(_)) => t.clone(),
+            (Known(_), Known(_)) => unreachable!(),
+        }
     }
 }
 
@@ -116,18 +133,3 @@ impl std::fmt::Display for TypeVarValue {
     }
 }
 
-impl UnifyValue for TypeVarValue {
-    type Error = NoError;
-
-    fn unify_values(t0: &TypeVarValue, t1: &TypeVarValue) -> Result<TypeVarValue, NoError> {
-        use TypeVarValue::*;
-        match (t0, t1) {
-            (Unknown(k1), Unknown(k2)) => {
-                let k = k1.merge(*k2).expect("Type variables should be unifiable");
-                Ok(Unknown(k))
-            }
-            (Unknown(_), t) | (t, Unknown(_)) => Ok(t.clone()),
-            (Known(_), Known(_)) => unreachable!(),
-        }
-    }
-}

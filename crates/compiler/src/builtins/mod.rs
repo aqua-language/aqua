@@ -1,16 +1,16 @@
 use std::rc::Rc;
 
+use crate::ast::parse::lexer::Lexer;
+use crate::ast::parse::parser::Parser;
+use crate::ast::parse::token::Token;
 use crate::ast::BuiltinDef;
 use crate::ast::BuiltinType;
 use crate::ast::Codegen;
 use crate::ast::Stmt;
 use crate::report::Report;
-use crate::syntax::lexer::Lexer;
-use crate::syntax::parser::Parser;
-use crate::syntax::source::Cache;
-use crate::syntax::span::Span;
-use crate::syntax::spanned::Spanned;
-use crate::syntax::token::Token;
+use crate::report::source::Cache;
+use crate::report::span::Span;
+use crate::report::spanned::Spanned;
 use linkme::distributed_slice;
 use value::Value;
 
@@ -86,13 +86,13 @@ pub mod types {
     pub mod u32;
     pub mod u64;
     pub mod u8;
+    pub mod unit;
     pub mod url;
     pub mod usize;
     pub mod variant;
     pub mod vec;
     pub mod window;
     pub mod writer;
-    pub mod unit;
 }
 mod functions {
     mod io;

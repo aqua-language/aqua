@@ -1,0 +1,14 @@
+struct Data(time:Time, key:String, value:i32);
+
+Stream::source(
+        Reader::file(Path::new("data.csv"), false),
+        Encoding::csv(','),
+        (x: Data, t: Time) => x.time,
+        Duration::postfix_min(1),
+        Duration::postfix_s(1)
+    )
+    .map[_](x => record(x = x))
+    .filter(r => PartialOrd::lt(r.x.value, 50))
+    .map[_](r => record(y = Add::add(r.x.value, 1)))
+    .take(100)
+    .collect();

@@ -3,8 +3,6 @@ pub mod mangle;
 use std::collections::HashSet;
 use std::rc::Rc;
 
-use ena::unify::InPlaceUnificationTable;
-
 use crate::analysis::declare;
 use crate::ast::passes::infer::type_var::TypeVarKind;
 use crate::ast::passes::infer::type_var::TypeVarValue;
@@ -21,8 +19,9 @@ use crate::ast::StmtStruct;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeVar;
+use crate::collections::unionfind::UnionFind;
 use crate::report::Report;
-use crate::syntax::span::Span;
+use crate::report::span::Span;
 use crate::traversal::mappable::Mappable;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitable::Visitable;
@@ -38,7 +37,7 @@ pub struct Context {
     unique: HashSet<Name>,
     decls: declare::Context,
     stmts: Vec<Stmt>,
-    type_table: InPlaceUnificationTable<TypeVar>,
+    type_table: UnionFind<TypeVar>,
     report: Report,
 }
 
@@ -66,7 +65,7 @@ impl Context {
     }
 
     pub fn fresh_tv(&mut self, kind: TypeVarKind) -> Type {
-        Type::Var(self.type_table.new_key(TypeVarValue::Unknown(kind)))
+        Type::Var(self.type_table.make(TypeVarValue::Unknown(kind)))
     }
 
     pub fn fresh_tvs(&mut self, n: usize) -> Vec<Type> {
@@ -195,7 +194,7 @@ impl Context {
             if def_stmt.generics.len() != def_type_args.len() {
                 continue;
             }
-            let snapshot = self.type_table.snapshot();
+            self.type_table.snapshot();
             let ts = self.fresh_tvs(impl_stmt.generics.len());
             let impl_stmt = impl_stmt.instantiate(&ts);
             let def_stmt = impl_stmt
@@ -209,10 +208,10 @@ impl Context {
                 && self.try_unify(def_type0, &def_type1).is_ok()
                 && self.solve_where_clauses(&def_stmt.where_clause)
             {
-                self.type_table.commit(snapshot);
+                self.type_table.commit();
                 return Some(impl_stmt);
             } else {
-                self.type_table.rollback_to(snapshot);
+                self.type_table.rollback();
             }
         }
         None
@@ -223,7 +222,7 @@ impl Context {
             for stmt in impls {
                 let ts = self.fresh_tvs(stmt.generics.len());
                 let stmt = stmt.instantiate(&ts);
-                let snapshot = self.type_table.snapshot();
+                self.type_table.snapshot();
                 let tr1 = stmt.head.as_trait().unwrap();
                 if self.traits_match(tr0, tr1)
                     && stmt
@@ -231,10 +230,10 @@ impl Context {
                         .iter()
                         .all(|i| self.solve_trait_impl(i.as_trait().unwrap()).is_some())
                 {
-                    self.type_table.commit(snapshot);
+                    self.type_table.commit();
                     return Some(stmt);
                 } else {
-                    self.type_table.rollback_to(snapshot);
+                    self.type_table.rollback();
                 }
             }
         }
@@ -260,10 +259,10 @@ impl Context {
 
     pub fn try_unify(&mut self, t0: &Type, t1: &Type) -> Result<(), (Type, Type)> {
         match (t0, t1) {
-            (Type::Var(x0), t) | (t, Type::Var(x0)) => match self.type_table.probe_value(*x0) {
+            (Type::Var(x0), t) | (t, Type::Var(x0)) => match self.type_table.probe(*x0) {
                 TypeVarValue::Known(t0) => return self.try_unify(&t0, t),
                 TypeVarValue::Unknown(k0) => match t {
-                    Type::Var(x1) => match self.type_table.probe_value(*x1) {
+                    Type::Var(x1) => match self.type_table.probe(*x1) {
                         TypeVarValue::Known(t1) => return self.try_unify(t0, &t1),
                         TypeVarValue::Unknown(k1) => {
                             if k0.merge(k1).is_some() {
@@ -407,7 +406,7 @@ impl Mapper for Context {
                 let x = self.monomorphise_stmt_struct(&stmt, &[]);
                 Type::Builtin(x, vec![])
             }
-            Type::Var(x) => match self.type_table.probe_value(*x) {
+            Type::Var(x) => match self.type_table.probe(*x) {
                 TypeVarValue::Known(t) => self.map_type(&t),
                 TypeVarValue::Unknown(_) => t.clone(),
             },

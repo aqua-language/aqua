@@ -31,7 +31,7 @@ use crate::ast::StmtType;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
-use crate::syntax::span::Span;
+use crate::report::span::Span;
 
 pub(crate) trait Mapper {
     #[inline(always)]
@@ -685,6 +685,7 @@ pub(crate) trait Mapper {
                 let x = self.map_name(x);
                 QueryOp::Drop(s, x)
             }
+            QueryOp::Distinct(_) => QueryOp::Distinct(s),
         }
     }
 

@@ -25,8 +25,8 @@ impl Operation {
                 .into_iter()
                 .chain(args.iter().flat_map(|arg| arg.used().into_iter()))
                 .collect(),
-            Operation::StorageLive(_) => vec![],
-            Operation::StorageDead(_) => vec![],
+            Operation::Live(_) => vec![],
+            Operation::Dead(_) => vec![],
             Operation::Noop => vec![],
         }
     }
@@ -48,8 +48,8 @@ impl Operation {
                 .into_iter()
                 .chain(args.iter().flat_map(|arg| arg.moved()))
                 .collect(),
-            Operation::StorageLive(_) => vec![],
-            Operation::StorageDead(_) => vec![],
+            Operation::Live(_) => vec![],
+            Operation::Dead(_) => vec![],
             Operation::Noop => vec![],
         }
     }
@@ -58,8 +58,8 @@ impl Operation {
         match self {
             Operation::Assign(p, _) => vec![p.clone()],
             Operation::Call { dest, .. } => vec![dest.clone()],
-            Operation::StorageLive(_) => vec![],
-            Operation::StorageDead(_) => vec![],
+            Operation::Live(_) => vec![],
+            Operation::Dead(_) => vec![],
             Operation::Noop => vec![],
         }
     }
@@ -68,8 +68,8 @@ impl Operation {
         match self {
             Operation::Assign(..) => vec![],
             Operation::Call { .. } => vec![],
-            Operation::StorageLive(l) => vec![l.clone()],
-            Operation::StorageDead(_) => vec![],
+            Operation::Live(l) => vec![l.clone()],
+            Operation::Dead(_) => vec![],
             Operation::Noop => vec![],
         }
     }
@@ -78,8 +78,8 @@ impl Operation {
         match self {
             Operation::Assign(_, _) => vec![],
             Operation::Call { .. } => vec![],
-            Operation::StorageLive(_) => vec![],
-            Operation::StorageDead(l) => vec![l.clone()],
+            Operation::Live(_) => vec![],
+            Operation::Dead(l) => vec![l.clone()],
             Operation::Noop => vec![],
         }
     }
@@ -121,7 +121,7 @@ impl Function {
                 if let Some(terminator) = &block.terminator {
                     // A block's live-out is the union of its successor's live-in
                     match terminator {
-                        Terminator::Goto(b) | Terminator::ConditionalGoto(_, b, _) => {
+                        Terminator::Goto(b) | Terminator::IfElse(_, b, _) => {
                             live_out.extend(old_blocks[*b].live_in.iter().cloned());
                         }
                         Terminator::Return => {}

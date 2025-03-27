@@ -4,7 +4,7 @@ use crate::ast::Expr;
 use crate::ast::Pat;
 use crate::ast::QueryOp;
 use crate::ast::Stmt;
-use crate::syntax::span::Span;
+use crate::report::span::Span;
 
 impl Expr {
     pub fn span(&self) -> Span {
@@ -96,6 +96,7 @@ impl QueryOp {
             QueryOp::JoinOverOn(s, ..) => *s,
             QueryOp::Err(s) => *s,
             QueryOp::Drop(s, ..) => *s,
+            QueryOp::Distinct(s) => *s,
         }
     }
 }

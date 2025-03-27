@@ -1,23 +1,27 @@
-use ena::unify::NoError;
-use ena::unify::UnifyKey;
-use ena::unify::UnifyValue;
+use crate::collections::unionfind::Union;
 
 use crate::ast::Impl;
+
 use crate::ast::ImplVar;
 
-impl UnifyKey for ImplVar {
+impl Union for ImplVar {
     type Value = ImplVarValue;
 
-    fn index(&self) -> u32 {
-        self.0
+    fn into_u32(self) -> u32 {
+        self.0 as u32
     }
 
-    fn from_index(i: u32) -> Self {
-        ImplVar(i)
+    fn from_u32(i: u32) -> ImplVar {
+        ImplVar(i as u32)
     }
 
-    fn tag() -> &'static str {
-        "ImplVar"
+    fn union(a: &Self::Value, b: &Self::Value) -> Self::Value {
+        use ImplVarValue::*;
+        match (a, b) {
+            (Unknown, Unknown) => Unknown,
+            (Unknown, t) | (t, Unknown) => t.clone(),
+            (Known(_), Known(_)) => unreachable!("Cannot merge two known types"),
+        }
     }
 }
 
@@ -35,7 +39,7 @@ impl ImplVarValue {
         }
     }
 
-    pub fn is_unknown(self) -> bool {
+    pub fn is_unknown(&self) -> bool {
         match self {
             ImplVarValue::Known(_) => false,
             ImplVarValue::Unknown => true,
@@ -48,19 +52,6 @@ impl std::fmt::Display for ImplVarValue {
         match self {
             ImplVarValue::Known(t) => write!(f, "{}", t),
             ImplVarValue::Unknown => write!(f, "<unknown>"),
-        }
-    }
-}
-
-impl UnifyValue for ImplVarValue {
-    type Error = NoError;
-
-    fn unify_values(t0: &ImplVarValue, t1: &ImplVarValue) -> Result<ImplVarValue, NoError> {
-        use ImplVarValue::*;
-        match (t0, t1) {
-            (Unknown, Unknown) => Ok(Unknown),
-            (Unknown, t) | (t, Unknown) => Ok(t.clone()),
-            (Known(_), Known(_)) => unreachable!(),
         }
     }
 }

@@ -70,7 +70,7 @@ impl<'a> std::fmt::Display for Wrapper<&'a Function> {
 }
 
 impl<'a, 'b> Print<'b> for Printer<'a, 'b> {
-    fn fmt(&mut self) -> &mut std::fmt::Formatter<'b> {
+    fn formatter_mut(&mut self) -> &mut std::fmt::Formatter<'b> {
         self.f
     }
 
@@ -97,7 +97,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
 
     fn local(&mut self, l: &Local) -> std::fmt::Result {
         if l.mutable {
-            self.kw("mut")?;
+            self.keyword("mut")?;
             self.space()?;
         }
         self.name(&l.name)?;
@@ -121,7 +121,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
     }
 
     fn stmt_var(&mut self, s: &StmtLocal) -> std::fmt::Result {
-        self.kw("let")?;
+        self.keyword("let")?;
         self.space()?;
         self.local(&s.local)?;
         if let Some(e) = &s.expr {
@@ -136,7 +136,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
     fn stmt_def(&mut self, s: &StmtDef) -> std::fmt::Result {
         match &s.body {
             ExprBody::UserDefined(e) => {
-                self.kw("fn")?;
+                self.keyword("fn")?;
                 self.space()?;
                 self.name(&s.name)?;
                 self.paren(|this| this.comma_sep(&s.params, Self::local))?;
@@ -152,13 +152,13 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 })?;
             }
             ExprBody::Builtin(b) => {
-                self.kw("const")?;
+                self.keyword("const")?;
                 self.space()?;
                 self.name(&s.name)?;
                 self.space()?;
                 self.punct(":")?;
                 self.space()?;
-                self.kw("fn")?;
+                self.keyword("fn")?;
                 self.paren(|this| this.comma_sep(s.params.iter().map(|v| &v.ty), Self::ty))?;
                 self.space()?;
                 self.punct("->")?;
@@ -182,7 +182,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
     fn stmt_struct(&mut self, s: &StmtStruct) -> std::fmt::Result {
         self.lit("#[data]")?;
         self.newline()?;
-        self.kw("struct")?;
+        self.keyword("struct")?;
         self.space()?;
         self.name(&s.name)?;
         self.space()?;
@@ -190,7 +190,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
     }
 
     fn stmt_enum(&mut self, s: &StmtEnum) -> std::fmt::Result {
-        self.kw("enum")?;
+        self.keyword("enum")?;
         self.space()?;
         self.name(&s.name)?;
         self.space()?;
@@ -201,7 +201,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
     }
 
     fn stmt_type(&mut self, s: &StmtType) -> std::fmt::Result {
-        self.kw("type")?;
+        self.keyword("type")?;
         self.space()?;
         self.name(&s.name)?;
         self.space()?;
@@ -227,7 +227,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.char(*v)?;
             }
             Expr::String(_, _, s) => {
-                self.str(s)?;
+                self.string(s)?;
             }
             Expr::Field(_, _, e, x) => {
                 self.expr(e)?;
@@ -281,16 +281,16 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.expr(e1)?;
             }
             Expr::Return(_, _, e) => {
-                self.kw("return")?;
+                self.keyword("return")?;
                 self.space()?;
                 self.expr(e)?;
             }
             Expr::Continue(_, _, l) => {
-                self.kw("continue")?;
+                self.keyword("continue")?;
                 self.label(l)?;
             }
             Expr::Break(_, _, l) => {
-                self.kw("break")?;
+                self.keyword("break")?;
                 self.space()?;
                 self.label(l)?;
             }
@@ -308,7 +308,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             }
             Expr::Match(..) => unreachable!(),
             Expr::While(_, _, _, e, b) => {
-                self.kw("while")?;
+                self.keyword("while")?;
                 self.space()?;
                 self.expr(e)?;
                 self.space()?;
@@ -325,13 +325,13 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Expr::Paren(_, _, _) => unreachable!(),
             Expr::Dot(_, _, _, _, _, _) => unreachable!(),
             Expr::IfElse(_, _, e, b0, b1) => {
-                self.kw("if")?;
+                self.keyword("if")?;
                 self.space()?;
                 self.expr(e)?;
                 self.space()?;
                 self.block(b0)?;
                 self.space()?;
-                self.kw("else")?;
+                self.keyword("else")?;
                 self.space()?;
                 self.block(b1)?;
             }
@@ -346,7 +346,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Expr::Deref(_, _, _) => todo!(),
             Expr::Loop(_, _, _, _) => todo!(),
             Expr::Unit(_, _) => {
-                self.kw("()")?;
+                self.keyword("()")?;
             }
         }
         Ok(())
@@ -401,7 +401,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Type::Err => unreachable!(),
             Type::Generic(_) => unreachable!(),
             Type::Function(ts, t, _es) => {
-                self.kw("fn")?;
+                self.keyword("fn")?;
                 self.paren(|this| this.comma_sep(ts, Self::ty))?;
                 self.space()?;
                 self.punct("->")?;
@@ -412,7 +412,7 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
                 self.paren(|this| this.comma_sep_trailing(ts, Self::ty))?;
             }
             Type::Unit => {
-                self.kw("()")?;
+                self.keyword("()")?;
             }
             Type::Record(xts) => {
                 self.fields(xts.as_ref(), Self::field)?;

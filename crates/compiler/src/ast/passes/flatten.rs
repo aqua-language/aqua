@@ -12,8 +12,8 @@ use crate::ast::PlaceElem;
 use crate::ast::Stmt;
 use crate::ast::StmtLocal;
 use crate::ast::Type;
+use crate::report::span::Span;
 use crate::report::Report;
-use crate::syntax::span::Span;
 use crate::traversal::mapper::Mapper;
 
 use super::Pass;

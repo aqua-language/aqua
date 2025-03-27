@@ -2,17 +2,18 @@
 
 use std::rc::Rc;
 
+use compiler::ast::parse::lexer::Lexer;
+use compiler::ast::parse::parser::Parser;
+use compiler::ast::parse::token::Token;
 use compiler::ast::Ast;
 use compiler::ast::Expr;
 use compiler::ast::Pat;
 use compiler::ast::Stmt;
 use compiler::ast::Type;
 use compiler::builtins::value::Value;
-use compiler::syntax::lexer::Lexer;
-use compiler::syntax::parser::Parser;
-use compiler::syntax::span::Span;
-use compiler::syntax::spanned::Spanned;
-use compiler::syntax::token::Token;
+use compiler::mir;
+use compiler::report::span::Span;
+use compiler::report::spanned::Spanned;
 use compiler::Compiler;
 
 pub struct Recovered<T> {

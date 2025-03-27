@@ -1,0 +1,22 @@
+struct Item(id:u64, priceUsd:f64, quantity:u64);
+struct Order(id:u64, items:Vec[Item], status:String, timestamp:Time);
+var reader = Reader::file(Path::new("localhost:9092/orders"), true);
+var writer = Writer::file(Path::new("localhost:9092/items"));
+var format = Format::json();
+
+Stream::source(reader, format, (x: _, t: _) => x.timestamp, _::postfix_s(10), _::postfix_s(10))
+  .map[_]((order: Order) => record(order = order))
+  .filter(r => PartialEq::eq(r.order.status, "shipped"))
+  .flatMap[_](r => r.order.items.map[_]((item: Item) => record(item = item, order = r.order)))
+  .keyBy[_](r => r.item.id)
+  .window[_](
+    Window::sliding(
+      _::postfix_d(1),
+      _::postfix_h(6)
+    ),
+    (itemId: _, r: _) => record(itemId = itemId, avgPriceUsd = _::avg[_](_::map[_](r, r => r.item.priceUsd)), totalQuantity = _::sum[_](_::map[_](r, r => r.item.quantity)))
+  )
+  .map[_](r => record(itemId = r.itemId, avgPriceEur = Mul::mul(r.avgPriceUsd, 0.85), totalQuantity = r.totalQuantity))
+  .sink(writer, format)
+  .run(Backend::flink());
+

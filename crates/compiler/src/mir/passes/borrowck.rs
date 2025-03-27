@@ -38,8 +38,8 @@ impl<'a> Context<'a> {
                             }
                         }
                     }
-                    Operation::StorageLive(..) => {}
-                    Operation::StorageDead(..) => {}
+                    Operation::Live(..) => {}
+                    Operation::Dead(..) => {}
                     Operation::Call { dest, .. } => {
                         let loan = Loan {
                             place: dest.clone(),

@@ -1,0 +1,21 @@
+struct Data(time:Time, key:String, value:i32);
+
+var v =
+    _::collect(
+        _::take(
+            _::filter(
+                _::map[_](
+                    _::source(
+                        Reader::file(Path::new("data.csv"), false),
+                        Encoding::csv(','),
+                        (x: Data, t: Time) => x.time,
+                        Duration::postfix_min(1),
+                        Duration::postfix_s(1)
+                    ),
+                    x => record(x = x)
+                ),
+                (r:record(x:Data)) => PartialOrd::lt(r.x.value, 50)
+            ),
+            100
+        )
+    );

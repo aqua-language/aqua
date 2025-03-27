@@ -1,4 +1,5 @@
 pub mod display;
+pub mod parse;
 pub mod passes;
 pub mod utils;
 
@@ -11,9 +12,9 @@ use crate::builtins::value::Value;
 
 pub use crate::collections::map::Map;
 use crate::interpret::Context;
-use crate::syntax::span::Span;
-use crate::syntax::symbol::Symbol;
-use crate::syntax::token::Token;
+use crate::report::span::Span;
+use crate::report::symbol::Symbol;
+use parse::token::Token;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Ast {
@@ -408,6 +409,7 @@ pub enum Pat {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum QueryOp {
     From(Span, Local, Rc<Expr>),
+    Distinct(Span),
     Local(Span, Local, Rc<Expr>),
     Drop(Span, Name),
     Union(Span, Rc<Expr>),
