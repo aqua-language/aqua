@@ -92,6 +92,14 @@ impl Span {
             unreachable!("Should not call `trim` on a generated span")
         }
     }
+
+    pub fn shift(&self, offset: u32) -> Span {
+        if let Span::Source(file, start, end) = self {
+            Span::Source(*file, start + offset, end + offset)
+        } else {
+            unreachable!("Should not call `shift` on a generated span")
+        }
+    }
 }
 
 impl std::ops::Add<Span> for Span {

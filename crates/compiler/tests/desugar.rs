@@ -183,7 +183,7 @@ fn test_desugar_range1() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Range syntax is not yet implemented"]
 fn test_desugar_range2() {
     let a = desugar(aqua!("1..;")).unwrap();
     let b = parse(aqua!("Range::range_from(1);")).unwrap();
@@ -260,7 +260,7 @@ fn test_desugar_anon2() {
 }
 
 #[test]
-#[ignore]
+// #[ignore = "Desugaring of splices is not yet implemented"]
 fn test_desugar_splice0() {
     let a = desugar(aqua!(r#""my name is ${name}";"#)).unwrap();
     let b = parse(aqua!(
@@ -274,7 +274,7 @@ fn test_desugar_splice0() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Desugaring of splices is not yet implemented"]
 fn test_desugar_splice1() {
     let a = desugar(aqua!(r#""I am ${age + 1} years old";"#)).unwrap();
     let b = parse(aqua!(

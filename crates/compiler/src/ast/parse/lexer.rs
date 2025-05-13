@@ -122,7 +122,6 @@ impl<'a> Lexer<'a> {
                             "loop" => Token::Loop,
                             "from" => Token::From,
                             "group" => Token::Group,
-                            "distinct" => Token::Distinct,
                             "skip" => Token::Skip,
                             "order" => Token::Order,
                             "if" => Token::If,

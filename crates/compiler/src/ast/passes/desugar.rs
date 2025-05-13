@@ -14,8 +14,8 @@ use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Type;
-use crate::report::Report;
 use crate::report::span::Span;
+use crate::report::Report;
 use crate::traversal::mapper::Mapper;
 
 use self::util::infix;
@@ -129,7 +129,7 @@ impl Mapper for Context {
                 let efun = Expr::Assoc(*s, Type::Unknown, Impl::Unknown, *x, ts.clone());
                 Expr::Call(*s, t, Rc::new(efun), es)
             }
-            // e(...,_+_,...) => foo(x => x.f)
+            // f(...,_+_,...) => f(...,(x,y) => x+y,...)
             Expr::Call(s, _, e, es) => {
                 let e = self.map_expr(e);
                 let es = self.map_iter(es, Self::arg);
@@ -146,7 +146,7 @@ impl Mapper for Context {
                     Expr::Err(*s, t.clone())
                 }
             }
-            // -a => Neg(a)
+            // -a => Neg::neg(a)
             Expr::PrefixUnaryOp(s, _, op, e) => {
                 let e = self.map_expr(e);
                 match *op {
@@ -224,10 +224,10 @@ impl Context {
         match splice {
             Splice::Text(s, _) => Expr::String(span, Type::Unknown, s.into()),
             Splice::Delim(s, _) => {
-                // Only lex the part of the file that is the splice.
-                // let source = &self.sources.fetch(&file).unwrap().text()[..end as usize];
-                // let lexer = crate::lexer::Lexer::new_from(file, source, start as usize);
-                let lexer = crate::ast::parse::lexer::Lexer::new_from(file, s, start as usize);
+                let lexer = crate::ast::parse::lexer::Lexer::new(file, s).map(|mut r| {
+                    r.s = r.s.shift(start);
+                    r
+                });
                 let mut parser = crate::ast::parse::parser::Parser::new(s, lexer);
                 if let Ok(e) = parser.parse(|p, follow| p.expr(follow)) {
                     let e = self.map_expr(&e.v);
