@@ -1,11 +1,14 @@
 use std::rc::Rc;
 
+use util::call_drop;
 use util::call_filter;
 use util::call_flatmap;
 use util::call_keyby;
 use util::call_map;
 use util::call_merge;
+use util::call_sortby;
 use util::call_take;
+use util::call_uniqueby;
 use util::call_window;
 use util::relation;
 use util::typed_lambda;
@@ -19,8 +22,8 @@ use crate::ast::Name;
 use crate::ast::Path;
 use crate::ast::QueryOp;
 use crate::ast::Type;
-use crate::report::Report;
 use crate::report::span::Span;
+use crate::report::Report;
 use crate::traversal::mapper::Mapper;
 
 use self::util::call;
@@ -90,16 +93,23 @@ impl Context {
             QueryOp::JoinOn(s, l, e1, e2) => self.join_on_clause(e0, *s, l, e1, e2),
             QueryOp::Local(s, l, e) => self.var_clause(e0, *s, l, e),
             QueryOp::OverCompute(s, e, aggs) => self.over_compute_clause(e0, *s, e, aggs),
-            QueryOp::JoinOverOn(_, _, _, _, _) => todo!(),
-            QueryOp::Err(s) => Expr::Err(*s, Type::Unknown),
+            QueryOp::JoinOverOn(s, l, e1, e2, e3) => {
+                self.join_over_on_clause(e0, *s, l, e1, e2, e3)
+            }
             QueryOp::Drop(s, x) => self.drop_clause(e0, *s, *x),
-            QueryOp::Distinct(_) => todo!(),
+            QueryOp::Cross(s, l, e) => self.cross_clause(e0, *s, l, e),
+            QueryOp::Order(s, e) => self.order_clause(e0, *s, e),
+            QueryOp::Distinct(s, e) => self.distinct_clause(e0, *s, e),
+            QueryOp::Compute(s, aggs) => self.compute_clause(e0, *s, aggs),
+            QueryOp::GroupCompute(s, l, e, aggs) => self.group_compute_clause(e0, *s, l, e, aggs),
+            QueryOp::Err(s) => Expr::Err(*s, Type::Unknown),
+            QueryOp::Skip(s, e) => self.skip_clause(e0, *s, e),
         }
     }
 
-    /// from x in e
-    /// =>
-    /// map(e, x => record(x=x))
+    // from x in e
+    // =>
+    // map(e, x => record(x=x))
     fn first_from_clause(&mut self, s: Span, l: &Local, e: &Expr) -> Expr {
         let e = self.map_expr(e);
         self.bind_relational_var(l.clone());
@@ -114,34 +124,40 @@ impl Context {
         call_map(s, e, elam)
     }
 
-    /// [e0] where e1
-    /// =>
-    /// filter(e0, r => e1)
+    // e0 where e1
+    // =>
+    // filter(e0, r => e1)
     fn where_clause(&mut self, e0: Expr, s: Span, e1: &Expr) -> Expr {
         let e = self.map_expr(e1);
         let elam = lambda(s, [relation_local(s)], e);
         call_filter(s, e0, elam)
     }
 
-    /// [e0] union e1
-    /// =>
-    /// merge(e0, e1)
+    // e0 union e1
+    // =>
+    // merge(e0, e1)
     fn union_clause(&mut self, e0: Expr, s: Span, e1: &Expr) -> Expr {
         let e1 = self.map_expr(e1);
         call_merge(s, e0, e1)
     }
 
-    /// [e0] limit e1
-    /// =>
-    /// take(e0, r => e1)
+    // e0 limit e1
+    // =>
+    // take(e0, r => e1)
     fn limit_clause(&mut self, e0: Expr, s: Span, e1: &Expr) -> Expr {
         let e1 = self.map_expr(e1);
         call_take(s, e0, e1)
     }
 
-    /// [e0] from x in e
-    /// =>
-    /// flatMap(e0, r => e.map(x => record(x=x, x1=r.x1, ..., xn=r.xn)))
+    // e0 skip e1
+    fn skip_clause(&mut self, e0: Expr, s: Span, e1: &Expr) -> Expr {
+        let e1 = self.map_expr(e1);
+        call_drop(s, e0, e1)
+    }
+
+    // e0 from x in e
+    // =>
+    // flatMap(e0, r => e.map(x => record(x=x, x1=r.x1, ..., xn=r.xn)))
     fn from_clause(&mut self, e0: Expr, s: Span, l: &Local, e1: &Expr) -> Expr {
         let e = self.map_expr(e1);
         // record(x=x, x1=r.x1, ..., xn=r.xn)
@@ -162,7 +178,7 @@ impl Context {
         call_flatmap(s, e0, elam)
     }
 
-    // [e0] select x1=e1,...,xn=en
+    // e0 select x1=e1,...,xn=en
     // =>
     // map(e0, r => record(x1=r.x1, ..., xn=r.xn))
     fn select_clause(&mut self, e0: Expr, s: Span, xes: &[(Local, Expr)]) -> Expr {
@@ -178,7 +194,7 @@ impl Context {
         call_map(s, e0, lambda(s, [relation_local(s)], record))
     }
 
-    // [e0] drop x
+    // e0 drop x
     // =>
     // map(e0, r => record(x1=r.x1, ..., xn=r.xn)) where x is not in {x1, ..., xn}
     fn drop_clause(&mut self, e0: Expr, s: Span, x: Name) -> Expr {
@@ -192,7 +208,7 @@ impl Context {
         call_map(s, e0, lambda(s, [relation_local(s)], record))
     }
 
-    // [e0] group xkey = ekey
+    // e0 group xkey = ekey
     //       over ewin
     //       compute xagg1=efun1 of eattr1,...,xaggn=efunn of eattrn
     // =>
@@ -263,7 +279,7 @@ impl Context {
             .collect::<Vec<_>>()
     }
 
-    // [e0] over e1 compute x1=efun1 of eattr1,...,xn=efunn of eattrn
+    // e0 over e1 compute x1=efun1 of eattr1,...,xn=efunn of eattrn
     // =>
     // e0.window[_](e1,
     //    r =>
@@ -282,7 +298,7 @@ impl Context {
         call_window(s, e0, e, elam)
     }
 
-    // [e0] join x in e1 on e2 == e3
+    // e0 join x in e1 on e2 == e3
     // =>
     // e0.flatMap[_](r => e1.filter(x => e2 == e3)
     //                   .map[_](x => record(x=x, x1=r.x1, ..., xn=r.xn)))
@@ -308,7 +324,7 @@ impl Context {
         call_flatmap(s, e0, lambda(s, [relation_local(s)], emap))
     }
 
-    // [e0] var x = e1
+    // e0 var x = e1
     // =>
     // e0.map(r => record(x=e1, x1=r.x1, ..., xn=r.xn))
     fn var_clause(&mut self, e0: Expr, s: Span, l: &Local, e1: &Expr) -> Expr {
@@ -325,6 +341,134 @@ impl Context {
                 .into(),
         );
         call_map(s, e0, lambda(s, [relation_local(s)], record))
+    }
+
+    // e0 distinct e1
+    // =>
+    // e0.distinct(r => e1)
+    //
+    // e0 distinct
+    // =>
+    // e0.distinct(r => r)
+    fn distinct_clause(&mut self, e0: Expr, s: Span, e1: &Option<Rc<Expr>>) -> Expr {
+        let e1 = match e1 {
+            Some(e) => self.map_expr(e),
+            None => relation_expr(s),
+        };
+        let elam = lambda(s, [relation_local(s)], e1);
+        call_uniqueby(s, e0, elam)
+    }
+
+    // e0 cross x in e1
+    // =>
+    // e0.flatMap[_](r => e1.map[_](x => record(x=x, x1=r.x1, ..., xn=r.xn)))
+    fn cross_clause(&mut self, e0: Expr, s: Span, l: &Local, e1: &Expr) -> Expr {
+        let e1 = self.map_expr(e1);
+        let r = Rc::new(relation_expr(s));
+        let les = self
+            .relational_vars()
+            .map(|l| (l.clone(), expr_field(r.clone(), l.name)))
+            .collect::<Vec<_>>();
+        self.bind_relational_var(l.clone());
+        let record = record(
+            s,
+            std::iter::once((l.clone(), expr_var(l.clone())))
+                .chain(les)
+                .collect::<Vec<_>>()
+                .into(),
+        );
+        let emap = call_map(s, e1, typed_lambda(s, [l.clone()], record));
+        call_flatmap(s, e0, lambda(s, [relation_local(s)], emap))
+    }
+
+    // e0 order e1
+    // =>
+    // e0.sortBy(r => e1)
+    //
+    // e0 order
+    // =>
+    // e0.sortBy(r => r)
+    fn order_clause(&mut self, e0: Expr, s: Span, e1: &Option<Rc<Expr>>) -> Expr {
+        let e1 = match e1 {
+            Some(e) => self.map_expr(e),
+            None => relation_expr(s),
+        };
+        let elam = lambda(s, [relation_local(s)], e1);
+        call_sortby(s, e0, elam)
+    }
+
+    // e0 compute x1=efun1 of eattr1,...,xn=efunn of eattrn
+    // =>
+    // e0.map[_](r => record(x1=efun1(r.map[_](r => eattr1)), ..., xn=efunn(r.map[_](r => eattrn))))
+    fn compute_clause(&mut self, e0: Expr, s: Span, aggs: &[Aggr]) -> Expr {
+        let les = self.aggs(s, aggs);
+        self.unbind_relational_vars();
+        for (l, _) in les.iter() {
+            self.bind_relational_var(l.clone());
+        }
+        let record = record(s, les);
+        call_map(s, e0, lambda(s, [relation_local(s)], record))
+    }
+
+    // e0 group x = e1 compute x1=efun1 of eattr1,...,xn=efunn of eattrn
+    // =>
+    // e0.keyBy[_](r => e1)
+    //   .map[_]((x, r) => record(x=x, x1=efun1(r.map[_](r => eattr1)), ..., xn=efunn(r.map[_](r => eattrn))))
+    fn group_compute_clause(
+        &mut self,
+        e0: Expr,
+        s: Span,
+        l: &Local,
+        e1: &Expr,
+        aggs: &[Aggr],
+    ) -> Expr {
+        let e1 = self.map_expr(e1);
+        let ekeyby = call_keyby(s, e0, lambda(s, [relation_local(s)], e1));
+        let les = self.aggs(s, aggs);
+        let les = std::iter::once((l.clone(), expr_var(l.clone())))
+            .chain(les)
+            .collect::<Vec<_>>();
+        self.unbind_relational_vars();
+        for (l, _) in les.iter() {
+            self.bind_relational_var(l.clone());
+        }
+        let record = record(s, les);
+        let efun = lambda(s, [l.clone(), relation_local(s)], record);
+        call_map(s, ekeyby, efun)
+    }
+
+    // e0 join x in e1 over e2 on e3
+    // =>
+    // e0.flatMap[_](r => e1.window[_](e2, x => e3)
+    //                   .map[_](x => record(x=x, x1=r.x1, ..., xn=r.xn)))
+    fn join_over_on_clause(
+        &mut self,
+        e0: Expr,
+        s: Span,
+        l: &Local,
+        e1: &Expr,
+        e2: &Expr,
+        e3: &Expr,
+    ) -> Expr {
+        let e1 = self.map_expr(e1);
+        let e2 = self.map_expr(e2);
+        let e3 = self.map_expr(e3);
+        let r = Rc::new(relation_expr(s));
+        let les = self
+            .relational_vars()
+            .map(|l| (l.clone(), expr_field(r.clone(), l.name)))
+            .collect::<Vec<_>>();
+        self.bind_relational_var(l.clone());
+        let record = record(
+            s,
+            std::iter::once((l.clone(), expr_var(l.clone())))
+                .chain(les)
+                .collect::<Vec<_>>()
+                .into(),
+        );
+        let ewindow = call_window(s, e1, e2, lambda(s, [l.clone()], e3));
+        let emap = call_map(s, ewindow, typed_lambda(s, [l.clone()], record));
+        call_flatmap(s, e0, lambda(s, [relation_local(s)], emap))
     }
 }
 
@@ -404,7 +548,7 @@ mod util {
         Expr::Field(e.span() + x.span, Type::Unknown, e, x)
     }
 
-    /// Direct call
+    // Direct call
     pub(super) fn call(s: Span, x: Name, ts: Vec<Type>, es: Vec<Expr>) -> Expr {
         Expr::Call(
             s,
@@ -435,10 +579,32 @@ mod util {
         call(s, Name::new(s, "take"), vec![], vec![stream, udf])
     }
 
+    pub(super) fn call_drop(s: Span, stream: Expr, udf: Expr) -> Expr {
+        call(s, Name::new(s, "drop"), vec![], vec![stream, udf])
+    }
+
     pub(super) fn call_flatmap(s: Span, stream: Expr, udf: Expr) -> Expr {
         call(
             s,
             Name::new(s, "flatMap"),
+            vec![Type::Unknown],
+            vec![stream, udf],
+        )
+    }
+
+    pub(super) fn call_sortby(s: Span, stream: Expr, udf: Expr) -> Expr {
+        call(
+            s,
+            Name::new(s, "sortBy"),
+            vec![Type::Unknown],
+            vec![stream, udf],
+        )
+    }
+
+    pub(super) fn call_uniqueby(s: Span, stream: Expr, udf: Expr) -> Expr {
+        call(
+            s,
+            Name::new(s, "uniqueBy"),
             vec![Type::Unknown],
             vec![stream, udf],
         )

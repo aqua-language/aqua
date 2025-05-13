@@ -685,7 +685,29 @@ pub(crate) trait Mapper {
                 let x = self.map_name(x);
                 QueryOp::Drop(s, x)
             }
-            QueryOp::Distinct(_) => QueryOp::Distinct(s),
+            QueryOp::Distinct(_, e) => {
+                let e = e.as_ref().map(|e| Rc::new(self.map_expr(e)));
+                QueryOp::Distinct(s, e)
+            }
+            QueryOp::Cross(_, l, e) => {
+                let l = self.map_local(l);
+                let e = self.map_expr(e);
+                QueryOp::Cross(s, l, Rc::new(e))
+            }
+            QueryOp::Order(_, e) => {
+                let e = e.as_ref().map(|e| Rc::new(self.map_expr(e)));
+                QueryOp::Order(s, e)
+            }
+            QueryOp::Compute(_, aggs) => QueryOp::Compute(s, aggs.clone()),
+            QueryOp::GroupCompute(_, l, e, aggs) => {
+                let l = self.map_local(l);
+                let e = self.map_expr(e);
+                QueryOp::GroupCompute(s, l, Rc::new(e), aggs.clone())
+            }
+            QueryOp::Skip(s, e) => {
+                let e = self.map_expr(e);
+                QueryOp::Skip(*s, Rc::new(e))
+            }
         }
     }
 

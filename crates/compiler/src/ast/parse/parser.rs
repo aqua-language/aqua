@@ -1664,6 +1664,40 @@ where
                 let s = t.s + x.s;
                 Ok(Spanned::new(s, QueryOp::Drop(s, x.v)))
             }
+            Token::Cross => {
+                let t = self.next();
+                let l = self.local(follow, false)?;
+                self.expect(Token::In, follow)?;
+                let e = self.expr(follow)?;
+                let s = t.s + e.s;
+                Ok(Spanned::new(s, QueryOp::Cross(s, l.v, Rc::new(e.v))))
+            }
+            Token::Distinct => {
+                let t = self.next();
+                if let Some(e) = self.optional(Self::expr, Expr::FIRST, follow)? {
+                    let s = t.s + e.s;
+                    Ok(Spanned::new(s, QueryOp::Distinct(s, Some(Rc::new(e.v)))))
+                } else {
+                    let s = t.s;
+                    Ok(Spanned::new(s, QueryOp::Distinct(s, None)))
+                }
+            }
+            Token::Skip => {
+                let t = self.next();
+                let e = self.expr(follow)?;
+                let s = t.s + e.s;
+                Ok(Spanned::new(s, QueryOp::Skip(s, Rc::new(e.v))))
+            }
+            Token::Order => {
+                let t = self.next();
+                if let Some(e) = self.optional(Self::expr, Expr::FIRST, follow)? {
+                    let s = t.s + e.s;
+                    Ok(Spanned::new(s, QueryOp::Order(s, Some(Rc::new(e.v)))))
+                } else {
+                    let s = t.s;
+                    Ok(Spanned::new(s, QueryOp::Order(s, None)))
+                }
+            }
             Token::Join => {
                 let t = self.next();
                 let l = self.local(follow | Token::In, false)?;
@@ -1699,7 +1733,7 @@ where
                     _ => unreachable!(),
                 }
             }
-            t => unreachable!("{:?}", t),
+            t => unreachable!("{t}"),
         }
     }
 

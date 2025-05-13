@@ -43,13 +43,15 @@ pub enum Token {
     Compute,
     Continue,
     Def,
-    Desc,
+    Distinct,
     Drop,
     Else,
     Enum,
     False,
     For,
     From,
+    Order,
+    Cross,
     Group,
     If,
     Impl,
@@ -57,6 +59,7 @@ pub enum Token {
     Into,
     Join,
     Limit,
+    Skip,
     Loop,
     Match,
     Mut,
@@ -184,13 +187,14 @@ impl Token {
             Token::Break => "break",
             Token::Continue => "continue",
             Token::Def => "def",
-            Token::Desc => "desc",
+            Token::Distinct => "distinct",
             Token::Else => "else",
             Token::Enum => "enum",
             Token::False => "false",
             Token::For => "for",
             Token::Loop => "loop",
             Token::From => "from",
+            Token::Cross => "cross",
             Token::Group => "group",
             Token::If => "if",
             Token::Impl => "impl",
@@ -215,6 +219,11 @@ impl Token {
             Token::With => "with",
             Token::Union => "union",
             Token::Limit => "limit",
+            Token::Skip => "skip",
+            Token::Of => "of",
+            Token::As => "as",
+            Token::Compute => "compute",
+            Token::Trait => "trait",
             // Literals
             Token::Label => "<label>",
             Token::Code => "<code>",
@@ -227,10 +236,6 @@ impl Token {
             Token::Char => "<char>",
             Token::Err => "<err>",
             Token::Eof => "<eof>",
-            Token::Of => "of",
-            Token::As => "as",
-            Token::Compute => "compute",
-            Token::Trait => "trait",
             _ => "<unknown>",
         }
     }
@@ -243,10 +248,10 @@ impl std::fmt::Display for Token {
 }
 
 impl Spanned<Token> {
+    // Extracts the text of a token from the input string
     pub fn text(self, input: &str) -> &str {
-        let span = self.s;
-        let start = span.start().expect("Should not be generated") as usize;
-        let end = span.end().expect("Should not be generated") as usize;
+        let start = self.s.start().expect("Should not be generated") as usize;
+        let end = self.s.end().expect("Should not be generated") as usize;
         match self.v {
             Token::Code => &input[start + 3..end - 3],
             Token::String => &input[start + 1..end - 1],

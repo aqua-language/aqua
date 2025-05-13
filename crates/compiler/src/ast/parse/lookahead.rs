@@ -112,6 +112,11 @@ impl Lookahead for QueryOp {
         .or(Token::Var)
         .or(Token::Select)
         .or(Token::Join)
-        .or(Token::Limit);
+        .or(Token::Limit)
+        .or(Token::Distinct)
+        .or(Token::Limit)
+        .or(Token::Skip)
+        .or(Token::Compute)
+        .or(Token::Order);
     const FOLLOW: Token = Expr::FOLLOW.or(QueryOp::FIRST).or(Token::Into);
 }

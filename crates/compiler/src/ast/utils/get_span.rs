@@ -96,7 +96,12 @@ impl QueryOp {
             QueryOp::JoinOverOn(s, ..) => *s,
             QueryOp::Err(s) => *s,
             QueryOp::Drop(s, ..) => *s,
-            QueryOp::Distinct(s) => *s,
+            QueryOp::Distinct(s, ..) => *s,
+            QueryOp::Cross(s, ..) => *s,
+            QueryOp::Order(s, ..) => *s,
+            QueryOp::Compute(s, ..) => *s,
+            QueryOp::GroupCompute(s, ..) => *s,
+            QueryOp::Skip(s, ..) => *s,
         }
     }
 }

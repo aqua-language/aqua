@@ -1,9 +1,9 @@
 use crate::ast::parse::token::Token;
-use crate::report::Diagnostic;
-use crate::report::Report;
 use crate::report::source::SourceId;
 use crate::report::span::Span;
 use crate::report::spanned::Spanned;
+use crate::report::Diagnostic;
+use crate::report::Report;
 
 pub struct Lexer<'a> {
     pub input: &'a str,
@@ -122,6 +122,9 @@ impl<'a> Lexer<'a> {
                             "loop" => Token::Loop,
                             "from" => Token::From,
                             "group" => Token::Group,
+                            "distinct" => Token::Distinct,
+                            "skip" => Token::Skip,
+                            "order" => Token::Order,
                             "if" => Token::If,
                             "impl" => Token::Impl,
                             "in" => Token::In,

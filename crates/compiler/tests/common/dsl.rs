@@ -213,10 +213,10 @@ pub fn pat_record<const N: usize>(xps: [(&'static str, Pat); N]) -> Pat {
 pub mod sugared {
     use std::rc::Rc;
 
+    use compiler::ast::parse::token::Token;
     use compiler::ast::Expr;
     use compiler::ast::Pat;
     use compiler::ast::Type;
-    use compiler::ast::parse::token::Token;
 
     use super::span;
 
@@ -860,6 +860,18 @@ pub fn expr_val(x: &'static str) -> Expr {
     Expr::Local(span(), Type::Unknown, name(x), false)
 }
 
+pub fn expr_var_place(x: &'static str) -> Expr {
+    Expr::Place(
+        span(),
+        Type::Unknown,
+        Place::new(
+            span(),
+            Local::new(span(), name(x), Type::Unknown, true),
+            vec![],
+        ),
+    )
+}
+
 pub fn expr_val_place(x: &'static str) -> Expr {
     Expr::Place(
         span(),
@@ -1124,8 +1136,28 @@ pub fn query_drop(x: &'static str) -> QueryOp {
     QueryOp::Drop(span(), name(x))
 }
 
-pub fn query_distinct() -> QueryOp {
-    QueryOp::Distinct(span())
+pub fn query_distinct(e: Option<Expr>) -> QueryOp {
+    QueryOp::Distinct(span(), e.map(Rc::new))
+}
+
+pub fn query_limit(e: Expr) -> QueryOp {
+    QueryOp::Limit(span(), Rc::new(e))
+}
+
+pub fn query_skip(e: Expr) -> QueryOp {
+    QueryOp::Skip(span(), Rc::new(e))
+}
+
+pub fn query_order(e: Option<Expr>) -> QueryOp {
+    QueryOp::Order(span(), e.map(Rc::new))
+}
+
+pub fn query_compute<const N: usize>(aggs: [Aggr; N]) -> QueryOp {
+    QueryOp::Compute(span(), vec(aggs))
+}
+
+pub fn query_group_compute<const N: usize>(x: &'static str, e: Expr, aggs: [Aggr; N]) -> QueryOp {
+    QueryOp::GroupCompute(span(), local_name(x), Rc::new(e), vec(aggs))
 }
 
 pub fn aggr(x0: &'static str, x1: &'static str, e: Expr) -> Aggr {

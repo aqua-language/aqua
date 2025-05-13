@@ -49,12 +49,16 @@ use common::dsl::pat_tuple;
 use common::dsl::pat_unit;
 use common::dsl::pat_wild;
 use common::dsl::program;
+use common::dsl::query_distinct;
 use common::dsl::query_from;
 use common::dsl::query_group_over_compute;
 use common::dsl::query_join_on;
 use common::dsl::query_join_over_on;
+use common::dsl::query_limit;
+use common::dsl::query_order;
 use common::dsl::query_over_compute;
 use common::dsl::query_select;
+use common::dsl::query_skip;
 use common::dsl::query_var;
 use common::dsl::query_where;
 use common::dsl::stmt_def;
@@ -1632,6 +1636,78 @@ fn test_parser_stmt_query_select_sugar() {
         "sink",
         [],
         [],
+    ));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_stmt_query_skip() {
+    let a = parse_stmt(aqua!("from x in [1, 2, 3] skip 1;")).unwrap();
+    let b = stmt_expr(expr_query(
+        "x",
+        Type::Unknown,
+        expr_array([expr_int("1"), expr_int("2"), expr_int("3")]),
+        [query_skip(expr_int("1"))],
+    ));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_stmt_query_limit() {
+    let a = parse_stmt(aqua!("from x in [1, 2, 3] limit 1;")).unwrap();
+    let b = stmt_expr(expr_query(
+        "x",
+        Type::Unknown,
+        expr_array([expr_int("1"), expr_int("2"), expr_int("3")]),
+        [query_limit(expr_int("1"))],
+    ));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_stmt_query_order1() {
+    let a = parse_stmt(aqua!("from x in [1, 2, 3] order x;")).unwrap();
+    let b = stmt_expr(expr_query(
+        "x",
+        Type::Unknown,
+        expr_array([expr_int("1"), expr_int("2"), expr_int("3")]),
+        [query_order(Some(expr_var("x")))],
+    ));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_stmt_query_order2() {
+    let a = parse_stmt(aqua!("from x in [1, 2, 3] order;")).unwrap();
+    let b = stmt_expr(expr_query(
+        "x",
+        Type::Unknown,
+        expr_array([expr_int("1"), expr_int("2"), expr_int("3")]),
+        [query_order(None)],
+    ));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_stmt_query_distinct1() {
+    let a = parse_stmt(aqua!("from x in [1, 2, 3] distinct x;")).unwrap();
+    let b = stmt_expr(expr_query(
+        "x",
+        Type::Unknown,
+        expr_array([expr_int("1"), expr_int("2"), expr_int("3")]),
+        [query_distinct(Some(expr_var("x")))],
+    ));
+    check!(a, b);
+}
+
+#[test]
+fn test_parser_stmt_query_distinct2() {
+    let a = parse_stmt(aqua!("from x in [1, 2, 3] distinct;")).unwrap();
+    let b = stmt_expr(expr_query(
+        "x",
+        Type::Unknown,
+        expr_array([expr_int("1"), expr_int("2"), expr_int("3")]),
+        [query_distinct(None)],
     ));
     check!(a, b);
 }

@@ -101,7 +101,12 @@ impl QueryOp {
             QueryOp::Err(_) => QueryOp::Err(s),
             QueryOp::JoinOverOn(_, x, e0, e1, e2) => QueryOp::JoinOverOn(s, x, e0, e1, e2),
             QueryOp::Drop(_, x) => QueryOp::Drop(s, x),
-            QueryOp::Distinct(s) => QueryOp::Distinct(s),
+            QueryOp::Distinct(_, e) => QueryOp::Distinct(s, e),
+            QueryOp::Cross(_, l, e) => QueryOp::Cross(s, l, e),
+            QueryOp::Order(_, e) => QueryOp::Order(s, e),
+            QueryOp::Compute(_, aggs) => QueryOp::Compute(s, aggs),
+            QueryOp::GroupCompute(_, l, e, aggs) => QueryOp::GroupCompute(s, l, e, aggs),
+            QueryOp::Skip(_, e) => QueryOp::Skip(s, e),
         }
     }
 }

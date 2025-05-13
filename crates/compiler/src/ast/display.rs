@@ -781,8 +781,55 @@ impl<'a, 'b> Printer<'a, 'b> {
                 self.space()?;
                 self.name(x)?;
             }
-            QueryOp::Distinct(_) => {
+            QueryOp::Distinct(_, e) => {
                 self.keyword("distinct")?;
+                if let Some(e) = e {
+                    self.space()?;
+                    self.expr(e)?;
+                }
+            }
+            QueryOp::Order(_, e) => {
+                self.keyword("order")?;
+                if let Some(e) = e {
+                    self.space()?;
+                    self.expr(e)?;
+                }
+            }
+            QueryOp::Cross(_, l, e) => {
+                self.keyword("cross")?;
+                self.space()?;
+                self.local(l)?;
+                self.space()?;
+                self.keyword("in")?;
+                self.space()?;
+                self.expr(e)?;
+            }
+            QueryOp::Compute(_, aggrs) => {
+                self.keyword("compute")?;
+                self.indented(|this| {
+                    this.newline()?;
+                    this.keyword("compute")?;
+                    this.newline_comma_sep(aggrs, Self::aggr)
+                })?;
+            }
+            QueryOp::GroupCompute(_, l, e, aggrs) => {
+                self.keyword("group")?;
+                self.space()?;
+                self.local(l)?;
+                self.space()?;
+                self.punct("=")?;
+                self.space()?;
+                self.expr(e)?;
+                self.newline()?;
+                self.indented(|this| {
+                    this.keyword("compute")?;
+                    this.newline_comma_sep(aggrs, Self::aggr)
+                })?;
+            }
+            QueryOp::Skip(_, e) => {
+                self.keyword("skip")?;
+                self.space()?;
+                self.expr(e)?;
             }
         }
         Ok(())

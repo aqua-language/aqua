@@ -409,18 +409,22 @@ pub enum Pat {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum QueryOp {
     From(Span, Local, Rc<Expr>),
-    Distinct(Span),
     Local(Span, Local, Rc<Expr>),
     Drop(Span, Name),
     Union(Span, Rc<Expr>),
     Where(Span, Rc<Expr>),
     Select(Span, Vec<(Local, Expr)>),
     Limit(Span, Rc<Expr>),
+    Skip(Span, Rc<Expr>),
     OverCompute(Span, Rc<Expr>, Vec<Aggr>),
     GroupOverCompute(Span, Local, Rc<Expr>, Rc<Expr>, Vec<Aggr>),
     JoinOn(Span, Local, Rc<Expr>, Rc<Expr>),
     JoinOverOn(Span, Local, Rc<Expr>, Rc<Expr>, Rc<Expr>),
-    // Compute(Span, Name, Rc<Expr>, Rc<Expr>),
+    Cross(Span, Local, Rc<Expr>),
+    Order(Span, Option<Rc<Expr>>),
+    Distinct(Span, Option<Rc<Expr>>),
+    Compute(Span, Vec<Aggr>),
+    GroupCompute(Span, Local, Rc<Expr>, Vec<Aggr>),
     Err(Span),
 }
 

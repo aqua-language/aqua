@@ -602,7 +602,31 @@ pub(crate) trait Visitor {
             QueryOp::Drop(_, x) => {
                 self.visit_name(x);
             }
-            QueryOp::Distinct(_) => {}
+            QueryOp::Distinct(_, e) => {
+                if let Some(e) = e {
+                    self.visit_expr(e);
+                }
+            }
+            QueryOp::Cross(_, l, e) => {
+                self.visit_local(l);
+                self.visit_expr(e);
+            }
+            QueryOp::Order(_, e) => {
+                if let Some(e) = e {
+                    self.visit_expr(e);
+                }
+            }
+            QueryOp::Compute(_, aggs) => {
+                self.visit_aggs(aggs);
+            }
+            QueryOp::GroupCompute(_, l, e, aggs) => {
+                self.visit_local(l);
+                self.visit_expr(e);
+                self.visit_aggs(aggs);
+            }
+            QueryOp::Skip(_, e) => {
+                self.visit_expr(e);
+            }
         }
     }
 
