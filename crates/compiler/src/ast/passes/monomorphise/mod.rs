@@ -20,6 +20,7 @@ use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeVar;
 use crate::collections::unionfind::UnionFind;
+use crate::report::source::Cache;
 use crate::report::Report;
 use crate::report::span::Span;
 use crate::traversal::mappable::Mappable;
@@ -42,7 +43,7 @@ pub struct Context {
 }
 
 impl Pass for Context {
-    fn run(&mut self, p: &Ast) -> Ast {
+    fn run(&mut self, p: &Ast, _: &mut Cache) -> Ast {
         p.visit(&mut self.decls);
         let stmts1 = p
             .stmts

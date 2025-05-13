@@ -22,6 +22,7 @@ use crate::ast::Name;
 use crate::ast::Path;
 use crate::ast::QueryOp;
 use crate::ast::Type;
+use crate::report::source::Cache;
 use crate::report::span::Span;
 use crate::report::Report;
 use crate::traversal::mapper::Mapper;
@@ -43,7 +44,7 @@ pub struct Context {
 }
 
 impl Pass for Context {
-    fn run(&mut self, program: &Ast) -> Ast {
+    fn run(&mut self, program: &Ast, _: &mut Cache) -> Ast {
         self.map_program(program)
     }
 

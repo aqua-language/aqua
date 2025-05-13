@@ -15,6 +15,7 @@ pub mod unify;
 use std::rc::Rc;
 
 use crate::collections::unionfind::UnionFind;
+use crate::report::source::Cache;
 use impl_var::ImplVarValue;
 use solver::Constraint;
 
@@ -63,7 +64,7 @@ pub struct Context {
 }
 
 impl Pass for Context {
-    fn run(&mut self, program: &Ast) -> Ast {
+    fn run(&mut self, program: &Ast, _: &mut Cache) -> Ast {
         program.visit(&mut self.decls);
         program.map(self)
     }

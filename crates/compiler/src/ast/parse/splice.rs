@@ -1,74 +1,71 @@
-use std::ops::Range;
+use crate::report::span::Span;
 
-#[derive(Debug, PartialEq)]
-pub enum Splice<'a> {
-    Text(&'a str, Range<usize>),
-    Delim(&'a str, Range<usize>),
-    Err(&'a str, Range<usize>),
-}
-
-impl<'a> Splice<'a> {
-    pub fn range(&self) -> &Range<usize> {
-        match self {
-            Splice::Text(_, range) => range,
-            Splice::Delim(_, range) => range,
-            Splice::Err(_, range) => range,
-        }
-    }
-
-    pub fn as_str(&self) -> &str {
-        match self {
-            Splice::Text(s, _) => s,
-            Splice::Delim(s, _) => s,
-            Splice::Err(s, _) => s,
-        }
-    }
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Splice {
+    Text,
+    Delim,
+    Err,
 }
 
 pub struct SpliceIterator<'a> {
     string: &'a str,
     pos: usize,
+    span: Span,
 }
 
 impl<'a> SpliceIterator<'a> {
-    pub fn new(string: &'a str) -> Self {
-        Self { string, pos: 0 }
+    pub fn new(string: &'a str, span: Span) -> Self {
+        Self {
+            string,
+            pos: 0,
+            span,
+        }
     }
 }
 
 impl<'a> Iterator for SpliceIterator<'a> {
-    type Item = Splice<'a>;
+    type Item = (Splice, &'a str, Span);
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.pos >= self.string.len() {
             return None;
         }
 
+        let file = self.span.file().unwrap();
+
         if self.string[self.pos..].starts_with("${") {
             let start = self.pos + 1;
             if let Some(i) = self.string[start..].find('}') {
                 let end = start + 1 + i;
-                let range = start..end;
                 self.pos = end;
-                Some(Splice::Delim(&self.string[range.clone()], range))
+                let splice = Splice::Delim;
+                let text = &self.string[start..end];
+                let span = Span::new(file, start as u32..end as u32);
+                Some((splice, text, span))
             } else {
                 let end = self.string.len();
-                let range = start..end;
                 self.pos = end;
-                Some(Splice::Err(&self.string[range.clone()], range))
+                let splice = Splice::Err;
+                let text = &self.string[start..end];
+                let span = Span::new(file, start as u32..end as u32);
+                Some((splice, text, span))
             }
         } else if let Some(i) = self.string[self.pos..].find("${") {
             let start = self.pos;
             let end = self.pos + i;
-            let range = start..end;
             self.pos = end;
-            Some(Splice::Text(&self.string[range.clone()], range))
+            let splice = Splice::Text;
+            let text = &self.string[start..end];
+            let span = Span::new(file, start as u32..end as u32);
+            Some((splice, text, span))
         } else {
             let start = self.pos;
             let end = self.string.len();
-            let range = start..end;
             self.pos = end;
-            Some(Splice::Text(&self.string[range.clone()], range))
+            let splice = Splice::Text;
+            let text = &self.string[start..end];
+            let span = Span::new(file, start as u32..end as u32);
+            Some((splice, text, span))
         }
     }
 }

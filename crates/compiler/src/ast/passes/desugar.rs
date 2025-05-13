@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use ariadne::Cache as _;
 use smol_str::format_smolstr;
 
 use crate::ast::parse::splice::Splice;
@@ -14,6 +15,7 @@ use crate::ast::Name;
 use crate::ast::Pat;
 use crate::ast::Path;
 use crate::ast::Type;
+use crate::report::source::Cache;
 use crate::report::span::Span;
 use crate::report::Report;
 use crate::traversal::mapper::Mapper;
@@ -27,9 +29,14 @@ pub struct Context {
     pub report: Report,
 }
 
+pub struct Desugar<'a> {
+    ctx: &'a mut Context,
+    sources: &'a mut Cache,
+}
+
 impl Pass for Context {
-    fn run(&mut self, program: &Ast) -> Ast {
-        self.map_program(program)
+    fn run(&mut self, program: &Ast, sources: &mut Cache) -> Ast {
+        Desugar { ctx: self, sources }.map_program(program)
     }
 
     fn report(&mut self) -> &mut Report {
@@ -49,15 +56,17 @@ impl Context {
             report: Report::new(),
         }
     }
+}
 
+impl<'a> Desugar<'a> {
     pub fn arg(&mut self, e: &Expr) -> Expr {
         if let Expr::Anonymous(..) = e {
             // Partially applied function
             self.map_expr(e)
         } else {
-            self.anons.scopes.push(vec![]);
+            self.ctx.anons.scopes.push(vec![]);
             let e = self.map_expr(e);
-            let xs = self.anons.scopes.pop().unwrap();
+            let xs = self.ctx.anons.scopes.pop().unwrap();
             if xs.is_empty() {
                 e
             } else {
@@ -71,7 +80,7 @@ impl Context {
     }
 }
 
-impl Mapper for Context {
+impl<'a> Mapper for Desugar<'a> {
     fn map_expr(&mut self, e: &Expr) -> Expr {
         let t = self.map_type(e.ty());
         match e {
@@ -136,7 +145,7 @@ impl Mapper for Context {
                 Expr::Call(*s, t, Rc::new(e), es)
             }
             Expr::Anonymous(s, t) => {
-                if let Some(xs) = self.anons.scopes.last_mut() {
+                if let Some(xs) = self.ctx.anons.scopes.last_mut() {
                     let n = xs.len();
                     let x = Name::new(*s, format_smolstr!("_{}", n));
                     xs.push(x);
@@ -173,12 +182,12 @@ impl Mapper for Context {
             Expr::Paren(_, _, e) => self.map_expr(e),
             // "a ${b} c" => "a ".concat(b.toString()).concat(" c")
             Expr::String(s, _, l) => {
-                let mut iter = SpliceIterator::new(l.as_str());
                 let s = s.trim(1);
-                if let Some(splice) = iter.next() {
-                    let e = self.map_splice(splice, s);
-                    iter.fold(e, |e0, splice| {
-                        let e1 = self.map_splice(splice, s);
+                let mut iter = SpliceIterator::new(l.as_str(), s);
+                if let Some((splice, text, span)) = iter.next() {
+                    let e = self.map_splice(splice, text, span);
+                    iter.fold(e, |e0, (splice, text, span)| {
+                        let e1 = self.map_splice(splice, text, span);
                         infix(s, Type::Unknown, "String", "concat", e0, e1)
                     })
                 } else {
@@ -213,22 +222,22 @@ impl Mapper for Context {
     }
 }
 
-impl Context {
-    fn map_splice(&mut self, splice: Splice, span: Span) -> Expr {
-        let range = splice.range();
-        let file = span.file().unwrap();
-        let start = span.start().unwrap() + range.start as u32;
-        let end = span.start().unwrap() + range.end as u32;
-        let span = Span::new(file, start..end);
-
+impl<'a> Desugar<'a> {
+    fn map_splice(&mut self, splice: Splice, text: &str, span: Span) -> Expr {
         match splice {
-            Splice::Text(s, _) => Expr::String(span, Type::Unknown, s.into()),
-            Splice::Delim(s, _) => {
-                let lexer = crate::ast::parse::lexer::Lexer::new(file, s).map(|mut r| {
-                    r.s = r.s.shift(start);
-                    r
-                });
-                let mut parser = crate::ast::parse::parser::Parser::new(s, lexer);
+            Splice::Text => Expr::String(span, Type::Unknown, text.into()),
+            Splice::Delim => {
+                let file = span.file().unwrap();
+                let start = span.start().unwrap() as usize;
+                let end = span.end().unwrap() as usize;
+                let source = self.sources.fetch(&file).unwrap().text();
+                println!("text: {}", text);
+                println!("source: {}", source);
+                println!("source: {}", &source[start..end]);
+                let source = &source[..end];
+                println!("source: {}", source);
+                let lexer = crate::ast::parse::lexer::Lexer::new_from(file, source, start);
+                let mut parser = crate::ast::parse::parser::Parser::new(text, lexer);
                 if let Ok(e) = parser.parse(|p, follow| p.expr(follow)) {
                     let e = self.map_expr(&e.v);
                     unop(span, Type::Unknown, "Display", "toString", e)
@@ -237,7 +246,7 @@ impl Context {
                     Expr::Err(span, Type::Unknown)
                 }
             }
-            Splice::Err(_, _) => {
+            Splice::Err => {
                 // TODO: Report error
                 Expr::Err(span, Type::Unknown)
             }

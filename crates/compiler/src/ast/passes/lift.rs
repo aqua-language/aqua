@@ -17,6 +17,7 @@ use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtType;
 use crate::ast::Type;
+use crate::report::source::Cache;
 use crate::report::Report;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
@@ -32,7 +33,7 @@ pub struct Context {
 }
 
 impl Pass for Context {
-    fn run(&mut self, program: &Ast) -> Ast {
+    fn run(&mut self, program: &Ast, _: &mut Cache) -> Ast {
         self.map_program(program)
     }
 

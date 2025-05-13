@@ -8,6 +8,7 @@ use crate::ast::Local;
 use crate::ast::Name;
 use crate::ast::Place;
 use crate::ast::StmtLocal;
+use crate::report::source::Cache;
 use crate::report::Report;
 use crate::traversal::mapper::Mapper;
 
@@ -29,7 +30,7 @@ pub struct ClosureScope {
 }
 
 impl Pass for Context {
-    fn run(&mut self, program: &Ast) -> Ast {
+    fn run(&mut self, program: &Ast, _: &mut Cache) -> Ast {
         self.map_program(program)
     }
 

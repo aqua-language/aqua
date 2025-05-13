@@ -23,6 +23,7 @@ use crate::ast::Trait;
 use crate::ast::Type;
 use crate::ast::TypeBody;
 use crate::collections::map::Map;
+use crate::report::source::Cache;
 use crate::report::Diagnostic;
 use crate::report::Report;
 use crate::traversal::mapper::Mapper;
@@ -85,7 +86,7 @@ pub struct Context {
 }
 
 impl Pass for Context {
-    fn run(&mut self, program: &Ast) -> Ast {
+    fn run(&mut self, program: &Ast, _: &mut Cache) -> Ast {
         self.map_program(program)
     }
 

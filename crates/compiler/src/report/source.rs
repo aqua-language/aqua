@@ -12,6 +12,12 @@ impl SourceId {
     }
 }
 
+impl Default for SourceId {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
 impl std::fmt::Display for SourceId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)

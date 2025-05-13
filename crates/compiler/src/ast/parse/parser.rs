@@ -59,6 +59,7 @@ use crate::ast::StmtTraitType;
 use crate::ast::StmtType;
 use crate::ast::Type;
 use crate::ast::TypeBody;
+use crate::collections::either::Either;
 use crate::collections::map::Map;
 use crate::parser::lookahead::Lookahead;
 use crate::report::span::Span;
@@ -74,11 +75,6 @@ where
     iter: std::iter::Peekable<I>,
     openers: Vec<Spanned<Token>>,
     pub report: Report,
-}
-
-enum Either<A, B> {
-    A(A),
-    B(B),
 }
 
 impl<'a, I> Parser<'a, I>
@@ -106,9 +102,9 @@ where
         self.iter.next().unwrap()
     }
 
-    /// Skip the next token
+    /// Get the next token and discard it
     fn advance(&mut self) {
-        self.iter.next();
+        self.next();
     }
 
     /// Get the text of a token
