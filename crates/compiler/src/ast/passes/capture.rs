@@ -121,7 +121,7 @@ impl Mapper for Context {
                     .chain(es.iter())
                     .map(|e| self.map_expr(e))
                     .collect();
-                let x_fn = Name::new(*s, "Call");
+                let x_fn = Name::new(*s, "call");
                 let e_fn = Expr::Assoc(*s, t.clone(), Impl::Unknown, x_fn, vec![]);
                 Expr::Call(*s, t.clone(), Rc::new(e_fn), es)
             }

@@ -1,6 +1,7 @@
 #[macro_use]
 mod common;
 
+use common::passes::flatten;
 use compiler::aqua;
 use compiler::ast::Type;
 
@@ -66,8 +67,8 @@ fn test_infer_literal_float1() {
 
 #[test]
 fn test_infer_literal_string() {
-    let a = infer(aqua!("\"foo\";")).unwrap();
-    let b = infer(aqua!("\"foo\":String;")).unwrap();
+    let a = infer(aqua!(r#""foo";"#)).unwrap();
+    let b = infer(aqua!(r#""foo":String;"#)).unwrap();
     check!(a, b);
 }
 
@@ -103,7 +104,7 @@ fn test_infer_def2() {
 #[test]
 fn test_infer_def3() {
     let a = infer(aqua!("def f(x: i32): f32 = x;")).unwrap_err();
-    let b = resolve(aqua!("def f(x: i32): f32 = x:i32;")).unwrap();
+    let b = flatten(aqua!("def f(x: i32): f32 = x:i32;")).unwrap();
     check!(
         a,
         b,
@@ -705,42 +706,42 @@ fn test_infer_impl_i32_assoc() {
 }
 
 #[test]
-fn test_infer_i32_add() {
+fn test_infer_i32_add1() {
     let a = infer(aqua!("1 + 2;")).unwrap();
     let b = infer(aqua!("Add[i32,i32]::add(1:i32, 2:i32):i32;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_i32_sub() {
+fn test_infer_i32_sub1() {
     let a = infer(aqua!("1 - 1;")).unwrap();
     let b = infer(aqua!("Sub[i32,i32]::sub(1:i32, 1:i32):i32;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_i32_mul() {
+fn test_infer_i32_mul1() {
     let a = infer(aqua!("1 * 1;")).unwrap();
     let b = infer(aqua!("Mul[i32,i32]::mul(1:i32, 1:i32):i32;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_i32_div() {
+fn test_infer_i32_div1() {
     let a = infer(aqua!("1 / 1;")).unwrap();
     let b = infer(aqua!("Div[i32,i32]::div(1:i32, 1:i32):i32;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_f64_add() {
+fn test_infer_f64_add1() {
     let a = infer(aqua!("1.0 + 1.0;")).unwrap();
     let b = infer(aqua!("Add[f64,f64]::add(1.0:f64, 1.0:f64):f64;")).unwrap();
     check!(a, b);
 }
 
 #[test]
-fn test_infer_f64_sub() {
+fn test_infer_f64_sub1() {
     let a = infer(aqua!("1.0 - 1.0;")).unwrap();
     let b = infer(aqua!("Sub[f64,f64]::sub(1.0:f64, 1.0:f64):f64;")).unwrap();
     check!(a, b);

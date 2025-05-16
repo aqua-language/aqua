@@ -78,6 +78,8 @@ impl Mapper for Context {
                 let p = Expr::Place(*s, t.clone(), Place::new(*s, l.clone(), vec![]));
                 Expr::Ref(*s, t.clone(), Rc::new(p), *m)
             }
+            // Convert a nested place expression into a single-node place expression:
+            // a.deref.1.b[2] => a + [.deref, .1, .b, [2]]
             _ if e.is_place() => {
                 let mut elems = vec![];
                 let mut current = e;

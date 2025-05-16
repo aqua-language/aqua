@@ -30,11 +30,9 @@ use crate::traversal::mapper::Mapper;
 use crate::traversal::visitor::Visitor;
 
 #[derive(Debug)]
-pub struct Stack(Vec<Scope>);
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Scope {
-    bindings: Vec<(Name, Binding)>,
+pub struct Context {
+    stack: Vec<Vec<(Name, Binding)>>,
+    pub report: Report,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,9 +48,9 @@ enum Binding {
 
 impl Context {
     fn bind(&mut self, name: Name, binding: Binding) {
-        let last = self.stack.0.last_mut().unwrap();
+        let last = self.stack.last_mut().unwrap();
 
-        for (name2, _) in last.bindings.iter() {
+        for (name2, _) in last.iter() {
             if name2 == &name {
                 self.report.add(Diagnostic::err2(
                     name2.span,
@@ -65,24 +63,16 @@ impl Context {
             }
         }
 
-        last.bindings.push((name, binding));
+        last.push((name, binding));
     }
 
     fn get(&self, x: &Name) -> Option<Binding> {
         self.stack
-            .0
             .iter()
             .rev()
-            .find_map(|scope| scope.bindings.iter().find(|(n, _)| n == x))
+            .find_map(|scope| scope.iter().find(|(n, _)| n == x))
             .map(|(_, b)| b.clone())
     }
-}
-
-#[derive(Debug)]
-pub struct Context {
-    stack: Stack,
-    // Used to track the number of type alias expansions.
-    pub report: Report,
 }
 
 impl Pass for Context {
@@ -119,10 +109,10 @@ impl Visitor for Context {
 
 impl Mapper for Context {
     fn enter_scope(&mut self) {
-        self.stack.0.push(Scope::default());
+        self.stack.push(Vec::new());
     }
     fn exit_scope(&mut self) {
-        self.stack.0.pop();
+        self.stack.pop();
     }
 
     fn map_generic(&mut self, g: &Name) -> Name {
@@ -553,7 +543,7 @@ impl Mapper for Context {
 impl Context {
     pub fn new() -> Context {
         Context {
-            stack: Stack(vec![Scope::default()]),
+            stack: vec![Vec::new()],
             report: Report::new(),
         }
     }
