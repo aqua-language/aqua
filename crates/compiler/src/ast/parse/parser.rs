@@ -513,15 +513,15 @@ where
     }
 
     pub fn stmt_def(&mut self, follow: Token) -> Result<Spanned<StmtDef>, Span> {
-        let t0 = self.expect(Token::Def, follow)?;
-        let x = self.name(follow)?;
+        let t0 = self.expect(Token::Def, follow | Token::Name)?;
+        let x = self.name(follow | Token::LBrack | Token::LParen)?;
         let gs = self.generics(follow | Token::LParen)?;
-        let ls = self.params(follow, true)?;
-        self.expect(Token::Colon, follow)?;
+        let ls = self.params(follow | Token::Colon, true)?;
+        self.expect(Token::Colon, follow | Type::FIRST)?;
         let t = self.ty(follow | Token::LBrace | Token::Where | Token::Eq)?;
-        let effect = self.effect(follow | Token::Where | Token::Eq)?;
+        let ef = self.effect(follow | Token::Where | Token::Eq)?;
         let where_clause = self.where_clause(follow | Token::Eq)?;
-        self.expect(Token::Eq, follow)?;
+        self.expect(Token::Eq, follow | Expr::FIRST)?;
         let e = self.stmt_expr(follow)?;
         let s = t0.s + e.s;
         Ok(Spanned::new(
@@ -532,7 +532,7 @@ where
                 gs,
                 ls.v,
                 t.v,
-                effect,
+                ef,
                 where_clause,
                 ExprBody::UserDefined(Rc::new(e.v)),
             ),
@@ -540,15 +540,11 @@ where
     }
 
     fn stmt_struct(&mut self, follow: Token) -> Result<Spanned<StmtStruct>, Span> {
-        let t0 = self.expect(Token::Struct, follow)?;
-        let x = self.name(follow)?;
+        let t0 = self.expect(Token::Struct, follow | Token::Name)?;
+        let x = self.name(follow | Token::LBrack | Token::LParen | Token::SemiColon)?;
         let gs = self.generics(follow | Token::LParen | Token::SemiColon)?;
         let xts = self
-            .optional(
-                |p, follow| p.fields(follow | Token::SemiColon),
-                Token::LParen,
-                follow | Token::SemiColon,
-            )?
+            .optional(Parser::fields, Token::LParen, follow | Token::SemiColon)?
             .map(|x| x.v)
             .unwrap_or_default();
         self.expect(Token::SemiColon, follow)?;
@@ -557,8 +553,8 @@ where
     }
 
     fn stmt_enum(&mut self, follow: Token) -> Result<Spanned<StmtEnum>, Span> {
-        let t0 = self.expect(Token::Enum, follow)?;
-        let x = self.name(follow)?;
+        let t0 = self.expect(Token::Enum, follow | Token::Name | Token::LBrace)?;
+        let x = self.name(follow | Token::LBrace)?;
         let gs = self.generics(follow | Token::LBrace)?;
         let xts = self.variants(follow)?;
         let s = t0.s + xts.s;
@@ -566,10 +562,10 @@ where
     }
 
     fn stmt_type(&mut self, follow: Token) -> Result<Spanned<StmtType>, Span> {
-        let t0 = self.expect(Token::Type, follow)?;
-        let x = self.name(follow)?;
+        let t0 = self.expect(Token::Type, follow | Token::Name)?;
+        let x = self.name(follow | Token::Eq)?;
         let gs = self.generics(follow | Token::Eq)?;
-        self.expect(Token::Eq, follow)?;
+        self.expect(Token::Eq, follow | Type::FIRST)?;
         let t = self.ty(follow | Token::SemiColon)?;
         let s = t0.s + t.s;
         self.expect(Token::SemiColon, follow)?;
@@ -598,8 +594,8 @@ where
     }
 
     pub fn stmt_trait(&mut self, follow: Token) -> Result<Spanned<StmtTrait>, Span> {
-        let t0 = self.expect(Token::Trait, follow)?;
-        let x = self.name(follow)?;
+        let t0 = self.expect(Token::Trait, follow | Token::Name)?;
+        let x = self.name(follow | Token::LBrack | Token::LBrace)?;
         let gs = self.generics(follow | Token::LBrace)?;
         let bs = self.where_clause(follow | Token::LBrace)?;
         self.expect(Token::LBrace, follow)?;
@@ -608,8 +604,8 @@ where
         loop {
             let t = self.start(Token::RBrace | Token::Def | Token::Type, follow)?;
             match t.v {
-                Token::Def => defs.push(Rc::new(self.stmt_def_decl(follow)?.v)),
-                Token::Type => tys.push(Rc::new(self.stmt_type_decl(follow)?.v)),
+                Token::Def => defs.push(Rc::new(self.stmt_trait_def(follow)?.v)),
+                Token::Type => tys.push(Rc::new(self.stmt_trait_type(follow)?.v)),
                 _ => break,
             }
         }
@@ -618,12 +614,12 @@ where
         Ok(Spanned::new(s, StmtTrait::new(s, x.v, gs, bs, defs, tys)))
     }
 
-    fn stmt_def_decl(&mut self, follow: Token) -> Result<Spanned<StmtTraitDef>, Span> {
-        let t0 = self.expect(Token::Def, follow)?;
-        let x = self.name(follow)?;
+    fn stmt_trait_def(&mut self, follow: Token) -> Result<Spanned<StmtTraitDef>, Span> {
+        let t0 = self.expect(Token::Def, follow | Token::Name)?;
+        let x = self.name(follow | Token::Name)?;
         let gs = self.generics(follow | Token::LParen)?;
         let ls = self.params(follow | Token::Colon, true)?;
-        self.expect(Token::Colon, follow)?;
+        self.expect(Token::Colon, follow | Type::FIRST)?;
         let t = self.ty(follow | Token::Where | Token::SemiColon)?;
         let e = self.effect(follow | Token::Where | Token::SemiColon)?;
         let bs = self.where_clause(follow | Token::SemiColon)?;
@@ -654,7 +650,7 @@ where
         }
     }
 
-    fn stmt_type_decl(&mut self, follow: Token) -> Result<Spanned<StmtTraitType>, Span> {
+    fn stmt_trait_type(&mut self, follow: Token) -> Result<Spanned<StmtTraitType>, Span> {
         let t0 = self.expect(Token::Type, follow)?;
         let x = self.name(follow)?;
         let gs = self.generics(follow | Token::Eq | Token::SemiColon)?;
@@ -664,7 +660,7 @@ where
     }
 
     pub fn stmt_impl(&mut self, follow: Token) -> Result<Spanned<StmtImpl>, Span> {
-        let t0 = self.expect(Token::Impl, follow)?;
+        let t0 = self.expect(Token::Impl, follow | Token::LBrack | Token::Name)?;
         let gs = self.generics(follow | Token::Name)?;
         let b = self.bound(follow | Token::Where | Token::LBrace)?;
         let bs = self.where_clause(follow | Token::LBrace)?;

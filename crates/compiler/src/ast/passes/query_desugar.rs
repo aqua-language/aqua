@@ -260,8 +260,8 @@ impl Context {
         aggs.iter()
             .map(|agg| {
                 let l = relation_local(s);
+                let v0 = relation_expr(s);
                 if let Some(e2) = &agg.filter_expr {
-                    let v0 = relation_expr(s);
                     let v1 = call_filter(s, v0, lambda(s, [l.clone()], self.map_expr(e2)));
                     let v2 = call_map(
                         s,
@@ -271,7 +271,6 @@ impl Context {
                     let v3 = call(s, agg.name, vec![], vec![v2]);
                     (agg.local.clone(), v3)
                 } else {
-                    let v0 = relation_expr(s);
                     let v1 = call_map(s, v0, lambda(s, [l], self.map_expr(&agg.reduce_expr)));
                     let v2 = call(s, agg.name, vec![], vec![v1]);
                     (agg.local.clone(), v2)

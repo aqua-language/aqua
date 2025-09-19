@@ -305,6 +305,15 @@ impl Local {
             mutable,
         }
     }
+
+    pub fn new_simple(span: Span, name: Name) -> Local {
+        Local {
+            span,
+            name,
+            ty: Type::Unknown,
+            mutable: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -359,7 +368,7 @@ pub enum Expr {
     Break(Span, Type, Option<Name>),
     While(Span, Type, Option<Name>, Rc<Expr>, Rc<Block>),
     Lambda(Span, Type, Vec<Local>, Type, Rc<Expr>),
-    Closure(Span, Type, usize, Vec<Local>, Vec<Place>, Type, Rc<Expr>),
+    Closure(Span, Type, Name, Vec<Local>, Vec<Place>, Type, Rc<Expr>),
     For(Span, Type, Option<Name>, Local, Rc<Expr>, Rc<Block>),
     Loop(Span, Type, Option<Name>, Rc<Block>),
     Err(Span, Type),

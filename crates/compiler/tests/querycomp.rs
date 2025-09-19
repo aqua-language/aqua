@@ -189,6 +189,6 @@ fn test_desugar_query_limit() {
 #[test]
 fn test_desugar_query_skip() {
     let a = querycomp(aqua!("from x in e skip 10;")).unwrap();
-    let b = querycomp(aqua!("e.map[_](x => record(x = x)).drop(10);")).unwrap();
+    let b = querycomp(aqua!("e.map[_](x => record(x = x)).offset(10);")).unwrap();
     check!(a, b);
 }

@@ -123,7 +123,10 @@ impl Impl {
 
 impl Path {
     pub fn as_name(&self) -> Option<&Name> {
-        if self.segments.len() == 1 && self.segments[0].ts.is_empty() {
+        if self.segments.len() == 1
+            && self.segments[0].ts.is_empty()
+            && self.segments[0].xts.is_empty()
+        {
             Some(&self.segments[0].x)
         } else {
             None

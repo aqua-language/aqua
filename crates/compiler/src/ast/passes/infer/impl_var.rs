@@ -20,7 +20,7 @@ impl Union for ImplVar {
         match (a, b) {
             (Unknown, Unknown) => Unknown,
             (Unknown, t) | (t, Unknown) => t.clone(),
-            (Known(_), Known(_)) => unreachable!("Cannot merge two known types"),
+            (Known(_), Known(_)) => unreachable!("Cannot merge two known impls"),
         }
     }
 }

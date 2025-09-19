@@ -22,6 +22,7 @@ pub mod report;
 pub mod transforms;
 pub mod traversal;
 
+pub mod hir;
 #[cfg(feature = "optimiser")]
 pub mod opt;
 pub mod parser;
@@ -33,17 +34,17 @@ macro_rules! aqua {
     };
 }
 
-// TODO: Add a global context which contains sources, report, config, and possibly symbol table.
 #[derive(Debug)]
 pub struct Compiler {
     pub sources: report::source::Cache,
     desugar: ast::passes::desugar::Context,
     query_desugar: ast::passes::query_desugar::Context,
-    resolve: ast::passes::resolve::Context,
-    lift: ast::passes::lift::Context,
-    flatten: ast::passes::flatten::Context,
-    expand: ast::passes::expand::Context,
-    capture: ast::passes::capture::Context,
+    resolve: ast::passes::resolve::Context, // Resolve names to their definitions
+    lift: ast::passes::lift::Context,       // Lift non-expression statements to the top level
+    flatten: ast::passes::flatten::Context, // Flatten nested place-expressions
+    expand: ast::passes::expand::Context,   // Expand type aliases
+    #[allow(unused)]
+    capture: ast::passes::capture::Context, // Capture variables in closures
     infer: ast::passes::infer::Context,
     // ast_to_mir: passes::ast_to_mir::Context,
     monomorphise: ast::passes::monomorphise::Context,
@@ -178,7 +179,7 @@ impl Compiler {
     }
 
     pub fn run_infer(&mut self, program: &Ast) -> Ast {
-        let program = self.run_capture(program);
+        let program = self.run_expand(program);
         Self::run_pass(
             &program,
             &mut self.infer,

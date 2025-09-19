@@ -53,6 +53,17 @@ impl StmtImpl {
             defs,
         }
     }
+
+    pub fn new_simple(span: Span, head: Impl, defs: Vec<Rc<StmtDef>>) -> StmtImpl {
+        StmtImpl {
+            span,
+            generics: Vec::new(),
+            where_clause: Vec::new(),
+            types: Vec::new(),
+            head,
+            defs,
+        }
+    }
 }
 
 impl StmtType {
@@ -132,6 +143,19 @@ impl StmtDef {
             effect,
             where_clause,
             body,
+        }
+    }
+
+    pub fn new_simple(span: Span, name: Name, params: Vec<Local>, ty: Type, expr: Expr) -> StmtDef {
+        StmtDef {
+            span,
+            name,
+            generics: Vec::new(),
+            params,
+            ty,
+            effect: Effect::Unknown,
+            where_clause: Vec::new(),
+            body: ExprBody::UserDefined(Rc::new(expr)),
         }
     }
 }

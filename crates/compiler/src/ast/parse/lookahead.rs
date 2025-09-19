@@ -55,7 +55,10 @@ impl Lookahead for Expr {
         .or(Token::LParen)
         .or(Token::Colon)
         .or(Token::SemiColon)
-        .or(Token::FatArrow);
+        .or(Token::FatArrow)
+        .or(Token::RBrace)
+        .or(Token::RBrack)
+        .or(Token::RParen);
 }
 
 impl Lookahead for Stmt {

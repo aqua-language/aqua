@@ -10,7 +10,6 @@ pub mod local;
 pub mod primitives;
 pub mod solver;
 pub mod type_var;
-pub mod unify;
 
 use std::rc::Rc;
 
@@ -37,9 +36,9 @@ use crate::ast::Type;
 use crate::ast::TypeVar;
 use crate::collections::map::Map;
 use crate::collections::set::Set;
+use crate::report::span::Span;
 use crate::report::Diagnostic;
 use crate::report::Report;
-use crate::report::span::Span;
 use crate::traversal::mappable::Mappable;
 use crate::traversal::mapper::Mapper;
 use crate::traversal::visitable::Visitable;
@@ -175,11 +174,7 @@ impl Context {
     }
 
     pub fn fresh_iv(&mut self) -> Impl {
-        Impl::Var(
-            self.type_ctx()
-                .impl_union_find
-                .make(ImplVarValue::Unknown),
-        )
+        Impl::Var(self.type_ctx().impl_union_find.make(ImplVarValue::Unknown))
     }
 
     pub fn unify(&mut self, s0: Span, s1: Span, t0: &Type, t1: &Type) {
@@ -635,7 +630,8 @@ impl Visitor for Context {
             Expr::Err(s, t) => {
                 self.unify(*s, *s, t, &Type::Never);
             }
-            // TODO: Desugar all in previous pass.
+            Expr::Closure(_, _, _x, _xts0, _xts1, _t, _e) => todo!(), // Will be needed to support unboxed closures.
+            // These are remobed in previous passes.
             Expr::Path(..) => unreachable!(),
             Expr::Field(..) => unreachable!(),
             Expr::Index(..) => unreachable!(),
@@ -651,9 +647,6 @@ impl Visitor for Context {
             Expr::IntSuffix(..) => unreachable!(),
             Expr::FloatSuffix(..) => unreachable!(),
             Expr::Anonymous(..) => unreachable!(),
-            Expr::Closure(_, _, _, _xts0, _xts1, _t, _e) => {
-                todo!()
-            }
             Expr::Deref(..) => unreachable!(),
         }
     }

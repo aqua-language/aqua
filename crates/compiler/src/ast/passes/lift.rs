@@ -28,8 +28,8 @@ use super::Pass;
 pub struct Context {
     unique: HashMap<Name, usize>,
     stack: Vec<Map<Name, Name>>,
-    pub stmts: Vec<Stmt>,
-    pub report: Report,
+    stmts: Vec<Stmt>,
+    report: Report,
 }
 
 impl Pass for Context {

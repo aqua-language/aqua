@@ -4,8 +4,8 @@ use crate::ast::PlaceElem;
 use crate::ast::Trait;
 use crate::ast::Type;
 use crate::collections::set::Set;
-use crate::report::Diagnostic;
 use crate::report::span::Span;
+use crate::report::Diagnostic;
 
 use super::Context;
 
@@ -337,7 +337,8 @@ impl Context {
             impls = vec![]
         }
 
-        for (trait_name, trait_stmt) in self.decls.traits.clone() {
+        // TODO: Avoid clone
+        for (trait_name, trait_stmt) in self.decls.traits.clone().iter() {
             let Some(def_stmt) = trait_stmt.find_def(def_name) else {
                 continue;
             };

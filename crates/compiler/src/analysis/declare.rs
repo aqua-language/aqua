@@ -4,7 +4,6 @@ use runtime::prelude::Send;
 use runtime::prelude::Sync;
 
 use crate::ast::Impl;
-use crate::ast::Map;
 use crate::ast::Name;
 use crate::ast::Stmt;
 use crate::ast::StmtDef;
@@ -13,16 +12,17 @@ use crate::ast::StmtImpl;
 use crate::ast::StmtStruct;
 use crate::ast::StmtTrait;
 use crate::ast::StmtType;
+use crate::collections::ordmap::OrdMap;
 use crate::traversal::visitor::Visitor;
 
 #[derive(Debug, Default, Clone, Send, Sync)]
 pub struct Context {
-    pub defs: Map<Name, Rc<StmtDef>>,
-    pub structs: Map<Name, Rc<StmtStruct>>,
-    pub enums: Map<Name, Rc<StmtEnum>>,
-    pub traits: Map<Name, Rc<StmtTrait>>,
-    pub types: Map<Name, Rc<StmtType>>,
-    pub trait_impls: Map<Name, Vec<Rc<StmtImpl>>>,
+    pub defs: OrdMap<Name, Rc<StmtDef>>,
+    pub structs: OrdMap<Name, Rc<StmtStruct>>,
+    pub enums: OrdMap<Name, Rc<StmtEnum>>,
+    pub traits: OrdMap<Name, Rc<StmtTrait>>,
+    pub types: OrdMap<Name, Rc<StmtType>>,
+    pub trait_impls: OrdMap<Name, Vec<Rc<StmtImpl>>>,
     pub type_impls: Vec<Rc<StmtImpl>>,
 }
 

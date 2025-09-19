@@ -1,11 +1,11 @@
 use crate::ast::Index;
 use crate::builtins::Context;
 
+use crate::builtins::value::Value;
+use crate::builtins::DECLS;
 use linkme::distributed_slice;
 use runtime::prelude::DeepClone;
 use serde::Serialize;
-use crate::builtins::value::Value;
-use crate::builtins::DECLS;
 
 #[distributed_slice(DECLS)]
 fn declare(_ctx: &mut Context) {}
@@ -37,6 +37,11 @@ impl std::ops::Add for Tuple {
     type Output = Tuple;
 
     fn add(self, other: Tuple) -> Tuple {
+        assert_eq!(
+            self.0.len(),
+            other.0.len(),
+            "Tuples should be the same length",
+        );
         Tuple(
             self.0
                 .into_iter()

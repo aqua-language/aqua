@@ -38,7 +38,7 @@ impl Expr {
 
     pub fn is_def(&self) -> bool {
         match self {
-            Expr::Def(..) => true,
+            Expr::Def(..) | Expr::Assoc(..) => true,
             _ => false,
         }
     }

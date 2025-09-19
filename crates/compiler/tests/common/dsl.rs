@@ -57,7 +57,7 @@ pub fn stmt_trait<const N: usize, const M: usize, const K: usize, const L: usize
 }
 
 fn vec<const N: usize, T: Clone>(xs: [T; N]) -> Vec<T> {
-    xs.into_iter().collect()
+    Vec::from(xs)
 }
 
 fn map<const N: usize, K, V>(kvs: [(K, V); N]) -> Map<K, V> {
@@ -660,6 +660,10 @@ pub fn stmt_var(x: &'static str, t: Type, e: Expr) -> Stmt {
     StmtLocal::new(span(), local_mut((x, t)), Some(e)).into()
 }
 
+pub fn stmt_val(x: &'static str, t: Type, e: Expr) -> Stmt {
+    StmtLocal::new(span(), local((x, t)), Some(e)).into()
+}
+
 pub fn type_body(t: Type) -> TypeBody {
     TypeBody::UserDefined(t)
 }
@@ -1030,6 +1034,7 @@ pub fn expr_lambda_typed<const N: usize>(ps: [(&'static str, Type); N], e: Expr)
 }
 
 pub fn expr_closure<const N: usize, const M: usize>(
+    id: &'static str,
     ls: [&'static str; N],
     ps: [&'static str; M],
     e: Expr,
@@ -1037,7 +1042,7 @@ pub fn expr_closure<const N: usize, const M: usize>(
     Expr::Closure(
         span(),
         Type::Unknown,
-        0,
+        name(id),
         app(ls, |s| local((s, Type::Unknown))),
         app(ps, |p| {
             Place::new(span(), local((p, Type::Unknown)), vec![])

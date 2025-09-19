@@ -11,7 +11,7 @@ use std::process::Stdio;
 use std::rc::Rc;
 use std::sync::LazyLock;
 
-use crate::backend::name_generator::generate_name;
+use crate::backend::namegen::generate_name;
 use crate::builtins::types::instance::Instance;
 
 const RUNTIME: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../runtime");

@@ -400,13 +400,27 @@ impl<'a, 'b> Codegen<'b> for Printer<'a, 'b> {
             Type::Unknown => unreachable!(),
             Type::Err => unreachable!(),
             Type::Generic(_) => unreachable!(),
+            // Box<dyn Fn(I1, I2, ..., In) -> O>
             Type::Function(ts, t, _es) => {
-                self.keyword("fn")?;
-                self.paren(|this| this.comma_sep(ts, Self::ty))?;
-                self.space()?;
-                self.punct("->")?;
-                self.space()?;
-                self.ty(t)?;
+                self.lit("Box")?;
+                self.angle(|this| {
+                    this.keyword("dyn")?;
+                    this.space()?;
+                    this.keyword("Fn")?;
+                    this.paren(|this| {
+                        this.comma_sep(ts, Self::ty)?;
+                        this.space()?;
+                        this.punct("->")?;
+                        this.space()?;
+                        this.ty(t)?;
+                        Ok(())
+                    })?;
+                    this.space()?;
+                    this.keyword("->")?;
+                    this.space()?;
+                    this.ty(t)?;
+                    Ok(())
+                })?;
             }
             Type::Tuple(ts) => {
                 self.paren(|this| this.comma_sep_trailing(ts, Self::ty))?;

@@ -1,6 +1,8 @@
 #[macro_use]
 mod common;
 
+use common::dsl::expr_val;
+use common::dsl::stmt_val;
 use common::passes::flatten;
 use compiler::aqua;
 use compiler::ast::Type;
@@ -261,7 +263,7 @@ fn test_infer_struct3() {
 }
 
 #[test]
-fn test_infer_lambda0() {
+fn test_infer_closure0() {
     let a = infer(aqua!(
         "var f = y => y;
          f('0');"
@@ -276,7 +278,7 @@ fn test_infer_lambda0() {
 }
 
 #[test]
-fn test_infer_lambda1() {
+fn test_infer_closure1() {
     let a = infer(aqua!(
         "var f = y => y;
          f(0);"
@@ -319,20 +321,21 @@ fn test_infer_record3() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "Need to update type checking for records"]
 fn test_infer_record4() {
     let a = infer(aqua!("record(x=0, y=1).z;")).unwrap_err();
-    let b = program([stmt_expr(
-        expr_field(
+    let b = program([
+        stmt_val(
+            "x0",
+            ty_record([("x", ty("i32")), ("y", ty("i32"))]),
             expr_record([
                 ("x", expr_int("0").with_type(ty("i32"))),
                 ("y", expr_int("1").with_type(ty("i32"))),
             ])
             .with_type(ty_record([("x", ty("i32")), ("y", ty("i32"))])),
-            "z",
-        )
-        .with_type(Type::Err),
-    )]);
+        ),
+        stmt_expr(expr_field(expr_val("x0"), "z").with_type(Type::Err)),
+    ]);
     check!(
         a,
         b,
@@ -964,14 +967,14 @@ fn test_infer_path() {
 fn test_infer_stream0() {
     let a = infer(aqua!(
         r#"struct Data(time:Time, key:String, value:i32);
-          
-           Stream::source(
+
+           Stream[Data]::source(
                Reader::file(Path::new("data.csv"), true),
                Format::csv(','),
-               (data:Data, t:Time) => data.time, 1s, 1s)
-             .filter((x:Data) => x.value > 100)
-             .map[_]((x:Data) => x.value)
-             .sink(Writer::file(Path::new("output.csv")), Format::csv(','));"#
+               (data, t) => data.time, 1s, 1s)
+             .filter((x:Data) => x.value > 100);
+             #.map[_]((x:Data) => x.value)
+             #.sink(Writer::file(Path::new("output.csv")), Format::csv(','));"#
     ))
     .unwrap();
 
@@ -982,9 +985,9 @@ fn test_infer_stream0() {
                Reader::file(Path::new("data.csv"), true),
                Format::csv(','),
                (data:Data, t:Time) => data.time, 1s, 1s)
-             .filter((x:Data) => x.value > 100)
-             .map[_]((x:Data) => x.value)
-             .sink(Writer::file(Path::new("output.csv")), Format::csv(','));"#
+             .filter((x:Data) => x.value > 100);
+             #.map[_]((x:Data) => x.value)
+             #.sink(Writer::file(Path::new("output.csv")), Format::csv(','));"#
     ))
     .unwrap();
     check!(a, b);
@@ -996,8 +999,10 @@ fn test_infer_stream1() {
         r#"struct Data(time:Time, key:String, value:i32);
            var reader = Reader::file(Path::new("items.csv"), true);
            var format = Format::csv(',');
-           Stream[Data]::source(reader, format, (x, t) => x.time, 10s, 10s);"#
-    }).unwrap();
+           def extractor(x:Data, t:Time):Time = x.time;
+           Stream[Data]::source(reader, format, extractor, 10s, 10s);"#
+    })
+    .unwrap();
 }
 
 #[test]
@@ -1005,6 +1010,7 @@ fn test_infer_stream2() {
     let _ = infer(aqua! {
         r#"var reader = Reader::file(Path::new("items.csv"), true);
            var format = Format::csv(',');
-           Stream[record(time:Time, key:String, value:i32)]::source(reader, format, (x, t) => x.time, 10s, 10s);"#
+           def extractor(x:record(time:Time, key:String, value:i32), t:Time):Time = x.time;
+           Stream[record(time:Time, key:String, value:i32)]::source(reader, format, extractor, 10s, 10s);"#
     }).unwrap();
 }

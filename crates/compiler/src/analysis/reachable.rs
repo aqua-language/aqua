@@ -23,7 +23,7 @@ impl declare::Context {
 impl Visitor for Context<'_> {
     fn visit_expr(&mut self, expr: &Expr) {
         if let Expr::Def(_, _, x, _) = expr {
-            if self.reachable.defs.contains_key(x) {
+            if self.reachable.defs.get(x).is_some() {
                 return;
             } else {
                 let stmt = self.decls.defs.get(x).unwrap();
@@ -37,7 +37,7 @@ impl Visitor for Context<'_> {
     fn visit_type(&mut self, ty: &Type) {
         if let Type::Builtin(x, _) = ty {
             if let Some(stmt) = self.decls.enums.get(x) {
-                if self.reachable.enums.contains_key(x) {
+                if self.reachable.enums.get(x).is_some() {
                     return;
                 } else {
                     self.reachable.enums.insert(*x, stmt.clone());
@@ -45,7 +45,7 @@ impl Visitor for Context<'_> {
                 }
             }
             if let Some(stmt) = self.decls.structs.get(x) {
-                if self.reachable.structs.contains_key(x) {
+                if self.reachable.structs.get(x).is_some() {
                     return;
                 } else {
                     self.reachable.structs.insert(*x, stmt.clone());

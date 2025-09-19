@@ -8,7 +8,7 @@ use std::process::Command;
 use std::process::Stdio;
 use std::sync::LazyLock;
 
-use crate::backend::name_generator::generate_name;
+use crate::backend::namegen::generate_name;
 use crate::builtins::types::instance::Instance;
 
 const POM_TEMPLATE: &str = include_str!("pom-template.xml");

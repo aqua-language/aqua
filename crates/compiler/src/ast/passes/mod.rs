@@ -11,6 +11,7 @@ pub mod lift;
 pub mod monomorphise;
 pub mod query_desugar;
 pub mod resolve;
+pub mod lower_closure;
 
 pub trait Pass: std::fmt::Debug {
     fn run(&mut self, program: &Ast, sources: &mut Cache) -> Ast;

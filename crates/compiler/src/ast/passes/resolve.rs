@@ -125,18 +125,6 @@ impl Mapper for Context {
         self._map_local(l)
     }
 
-    fn map_stmt_trait(&mut self, s: &StmtTrait) -> StmtTrait {
-        self.enter_scope();
-        let span = self.map_span(&s.span);
-        let name = self.map_name(&s.name);
-        let generics = self.map_generics(&s.generics);
-        let where_clause = self.map_impls(&s.where_clause);
-        let defs = self.map_trait_defs(&s.defs);
-        let types = self.map_trait_types(&s.types);
-        self.exit_scope();
-        StmtTrait::new(span, name, generics, where_clause, defs, types)
-    }
-
     fn map_stmt_impl(&mut self, s: &StmtImpl) -> StmtImpl {
         self.enter_scope();
         let span = s.span;
@@ -157,6 +145,7 @@ impl Mapper for Context {
                 let mut iter = path.segments.into_iter();
                 let seg0 = iter.next().unwrap();
                 match self.get(&seg0.x) {
+                    // Variable
                     Some(Binding::Local(m)) => {
                         if !seg0.ts.is_empty() {
                             self.wrong_arity(&seg0.x, seg0.ts.len(), 0);
@@ -168,6 +157,7 @@ impl Mapper for Context {
                         }
                         Expr::Local(*s, t, seg0.x, m)
                     }
+                    // Function value
                     Some(Binding::Def(stmt)) => {
                         if seg0.ts.len() != stmt.generics.len() && !seg0.ts.is_empty() {
                             self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
@@ -198,6 +188,7 @@ impl Mapper for Context {
                         let x0 = seg0.x;
                         Expr::Struct(*s, t, x0, ts0.clone(), Map::new())
                     }
+                    // Trait method value
                     Some(Binding::Trait(stmt)) => {
                         if !seg0.has_optional_arity(stmt.generics.len()) {
                             self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
@@ -224,6 +215,7 @@ impl Mapper for Context {
                         let b = Impl::Trait(Trait::new(seg0.x, ts0));
                         Expr::Assoc(*s, t, b, seg1.x, ts1)
                     }
+                    // Type method value
                     Some(Binding::Type(stmt)) => {
                         if !seg0.has_optional_arity(stmt.generics.len()) {
                             self.wrong_arity(&seg0.x, seg0.ts.len(), stmt.generics.len());
